@@ -1,0 +1,961 @@
+<project_specification>
+  <project_name>Sales Room (Proces OS)</project_name>
+
+  <overview>
+    An AI-powered sales enablement platform that replaces multiple SaaS subscriptions with one integrated ecosystem covering the entire IT sales cycle. The platform supports lead generation (Intent Scraper), meeting intelligence (Discovery Insight Extractor), personalized client portals (Stakeholder Sales Room), and objection handling (Battlecard Generator). Built on the "Nessencja/Proces" framework for enterprise IT sales.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>React (Vite) + TypeScript</framework>
+      <styling>Tailwind CSS</styling>
+      <components>shadcn/ui (Radix UI primitives)</components>
+      <icons>Lucide React</icons>
+      <state_management>React Context + Hooks (or Zustand for complex state)</state_management>
+    </frontend>
+    <backend>
+      <runtime>Node.js (Express)</runtime>
+      <ai_agents>Python (for LLM orchestration and agentic workflows)</ai_agents>
+      <database>SQLite (with option to upgrade to PostgreSQL)</database>
+      <ai_framework>LangChain for RAG, Claude API (Anthropic)</ai_framework>
+      <search_apis>Serper API / Tavily API for Intent Scraper</search_apis>
+    </backend>
+    <communication>
+      <api>REST API (JSON)</api>
+      <websockets>For real-time notifications (Sales Room analytics)</websockets>
+    </communication>
+    <cli>
+      <tool_name>proces-cli</tool_name>
+      <description>CLI for Discovery analysis (proces analyze ./transcript.txt)</description>
+      <implementation>Node.js with Commander.js</implementation>
+    </cli>
+  </technology_stack>
+
+  <prerequisites>
+    <environment_setup>
+      - Node.js 18+ and npm
+      - Python 3.10+ with pip
+      - Git for version control
+      - Claude API key (ANTHROPIC_API_KEY environment variable)
+      - Serper/Tavily API key for search functionality
+      - Slack webhook URL for notifications (optional but recommended)
+    </environment_setup>
+  </prerequisites>
+
+  <feature_count>258</feature_count>
+
+  <security_and_access_control>
+    <user_roles>
+      <role name="Sales Rep">
+        <permissions>
+          - Access all 4 modules (Intent Scraper, Discovery, Sales Room, Battlecard)
+          - Create and manage own deals only
+          - View only deals assigned to them
+          - Contribute to shared knowledge base (ICP templates, Battlecards, case studies)
+          - Receive deal transfers from SDRs or other reps
+          - Upload transcripts, create Sales Rooms, generate Battlecards
+        </permissions>
+        <protected_routes>
+          - /dashboard (authenticated users only)
+          - /deals/:id (owner or manager only)
+          - /intent-scraper (authenticated reps)
+          - /discovery (authenticated reps)
+          - /sales-room/create (authenticated reps)
+          - /battlecard (authenticated reps)
+        </protected_routes>
+      </role>
+      <role name="SDR (Sales Development Rep)">
+        <permissions>
+          - Same as Sales Rep (full module access)
+          - Specializes in Intent Scraper and Discovery
+          - Can transfer qualified deals to AEs
+          - No permission restrictions vs regular rep (organizational distinction only)
+        </permissions>
+      </role>
+      <role name="AE (Account Executive)">
+        <permissions>
+          - Same as Sales Rep (full module access)
+          - Receives deals from SDRs
+          - Focuses on Sales Room and Battlecard modules for closing
+          - No permission restrictions vs regular rep (organizational distinction only)
+        </permissions>
+      </role>
+      <role name="Sales Manager">
+        <permissions>
+          - All Sales Rep permissions PLUS:
+          - View all team deals (full pipeline visibility)
+          - Access all transcripts and Sales Rooms for coaching
+          - View team performance metrics and Health Scores
+          - Cannot edit other reps' deals (view-only for coaching)
+          - Access manager dashboard with team analytics
+        </permissions>
+        <protected_routes>
+          - /manager/dashboard (manager only)
+          - /manager/team-pipeline (manager only)
+          - /manager/analytics (manager only)
+        </protected_routes>
+      </role>
+      <role name="Admin">
+        <permissions>
+          - User management (create, edit, delete users)
+          - System settings configuration
+          - Knowledge base cleanup and moderation
+          - View all system data
+          - Manage integrations (Slack, meeting recorders, LinkedIn)
+          - No sales workflow permissions (admin is not a sales role)
+        </permissions>
+        <protected_routes>
+          - /admin/* (admin only)
+        </protected_routes>
+      </role>
+    </user_roles>
+    <authentication>
+      <method>Email/Password (traditional auth)</method>
+      <session_timeout>4 hours of inactivity</session_timeout>
+      <password_requirements>
+        - Minimum 8 characters
+        - Must include uppercase, lowercase, number, and special character
+        - No common passwords (use a blocklist)
+      </password_requirements>
+    </authentication>
+    <sensitive_operations>
+      - Delete deal: Requires confirmation dialog
+      - Transfer deal: Requires selecting new owner
+      - Hard delete client data (GDPR): Requires admin password re-entry
+      - Modify shared knowledge base items: Only creator or admin can delete
+    </sensitive_operations>
+  </security_and_access_control>
+
+  <core_features>
+    <authentication_and_user_management>
+      - User registration (admin creates accounts)
+      - Login with email/password
+      - Password reset flow (email link)
+      - Session management with 4-hour timeout
+      - Profile management (name, email, avatar)
+      - Role assignment (Rep/SDR/AE/Manager/Admin)
+      - User list (admin view)
+      - Deactivate/activate users (admin)
+    </authentication_and_user_management>
+
+    <intent_scraper_module>
+      - Natural Language "Mission Objective" input field (AI interprets search intent)
+      - ICP (Ideal Customer Profile) template creation and management
+      - Save search configurations as reusable templates
+      - Background search execution with job queue (handle API rate limits)
+      - Search status tracking (queued, running, completed, failed)
+      - Notification to Slack when search completes
+      - Browser notification when search completes (if user is online)
+      - Results table with columns: Company, Industry, Tech Stack, Identified Pain, Confidence Score, Source Link
+      - AI-generated Confidence Score (0-100%) per lead
+      - Filter results by confidence score, industry, tech stack
+      - Sort results by confidence, date found, company name
+      - Lead status management (New, Contacted, Qualified, Nurturing, Not Interested)
+      - Mark leads with status from results table
+      - Add notes to individual leads
+      - Competitor Displacement analysis (detect current tools used by company)
+      - Trigger Event Analysis (funding rounds, C-level changes, media mentions)
+      - Personalized Hook Generator (3 AI-generated icebreaker variants per lead)
+      - View hook suggestions in expandable row
+      - Export selected leads to CSV
+      - Import leads from CSV (with column mapping wizard)
+      - Create Deal directly from lead (converts lead to Deal object)
+      - Integration with external search APIs (Serper/Tavily)
+      - Job posting scraper (LinkedIn, job boards) integration
+      - Search history view (past searches and results)
+      - Re-run previous searches with updated criteria
+      - Bulk actions (select multiple leads, mark all as contacted)
+      - Lead detail modal with full context (all scraped data, timeline)
+    </intent_scraper_module>
+
+    <discovery_insight_extractor_module>
+      - CLI tool: `proces analyze ./transcript.txt` command
+      - Web UI: File upload interface (drag & drop)
+      - Support file formats: .txt, .json, .vtt (max 10MB per file)
+      - Auto-detect transcript source (Fireflies, Otter, Zoom, Google Meet)
+      - Filler word removal (yyy, eee, umm) before processing
+      - Batch upload (multiple transcripts at once)
+      - Link transcript to Deal object during upload
+      - AI extraction using Nessencja/Proces framework:
+        - Pain Points (business problems, frustrations, financial loss, delays)
+        - Stakeholder Map (names, titles, roles: Champion, Decision Maker, Blocker, Influencer)
+        - Red Flags (budget issues, competitor preference, resistance to change)
+        - Next Steps (auto-generated action items based on conversation)
+      - CLI output: Formatted Markdown to terminal (copy-paste ready for CRM)
+      - Web output: Structured view with sections (Pain, Stakeholders, Red Flags, Next Steps)
+      - Edit extracted insights in web UI before saving
+      - Manual override (add missing insights AI didn't catch)
+      - Save processed insights to Deal object
+      - Transcript history per Deal (list all transcripts)
+      - Compare insights across multiple meetings for same Deal
+      - Timeline view showing evolution of pain points across meetings
+      - Deal Health Score calculation based on insight completeness
+      - Re-process old transcripts with updated prompts
+      - Export Discovery Report to Markdown or PDF
+      - Integration with meeting recorder APIs (auto-import from Fireflies/Otter)
+      - Search across all transcripts (keyword search for quotes)
+    </discovery_insight_extractor_module>
+
+    <stakeholder_sales_room_module>
+      - Sales Room creation wizard (3-step process)
+      - Step 1: Select Deal (pulls in Discovery insights automatically)
+      - Step 2: Select mission template (Legacy Modernization, Cloud Migration, Staff Augmentation, etc.)
+      - Step 3: Upload or select offer file (oferta.txt, .md, .pdf)
+      - Tiered offer system: Global templates vs Deal-specific overrides
+      - In-app Markdown editor for quick content edits
+      - Auto-generate Sales Room draft from Discovery + offer data
+      - Stakeholder-specific sections:
+        - CFO section (ROI calculator, financial projections)
+        - CTO section (technical specifications, architecture diagrams)
+        - Security Officer section (compliance, GDPR, ISO/SOC2 certifications)
+        - Head of Engineering section (CI/CD, tech debt solutions, developer experience)
+      - Auto-ROI calculation based on pain points from Discovery (e.g., "losing $50k/month" → ROI chart)
+      - RAG-powered Chatbot widget on Sales Room page
+      - Chatbot knowledge base: offer content + company FAQ + Discovery transcript context
+      - Loom video integration (embed video message from sales rep)
+      - Upload custom video file option
+      - Calendly widget integration (meeting scheduler under each section)
+      - Unique public URL per Sales Room (shareable link)
+      - Role-based tracking: URL parameter ?role=cfo to track who viewed
+      - Real-time analytics: track which sections were viewed, time spent per section
+      - Slack notification when client opens Sales Room
+      - Slack notification when client views specific section (e.g., "CFO viewed ROI section")
+      - Chatbot conversation log (see what questions client asked)
+      - Mutual Action Plan (MAP): Interactive checklist (client tasks vs your tasks)
+      - MAP task completion tracking (checkboxes for both parties)
+      - Stakeholder Consensus Poll: Survey widget at bottom of page ("Does this address your concerns?")
+      - Poll results dashboard (see which stakeholders are skeptical)
+      - Internal Deck Generator: Auto-generate 5-slide PowerPoint for client's Champion to pitch internally
+      - Sales Room list view (all created rooms, filterable by deal, status, date)
+      - Clone successful Sales Room as template
+      - Live edit mode: Changes to offer file auto-update Sales Room
+      - Manual refresh option (regenerate Sales Room from updated data)
+      - Preview mode (view as client would see it)
+      - Expire Sales Room links after X days (configurable)
+      - Password-protect option (optional, per room)
+      - Custom branding per room (client logo, colors)
+      - Download Sales Room as static HTML (offline version for client)
+    </stakeholder_sales_room_module>
+
+    <objection_battlecard_module>
+      - Three activation modes:
+        - Strategic/Proactive: Pre-meeting analysis (predict objections based on client profile)
+        - Operational/Live: CLI command `proces battle [objection-type]` for instant responses
+        - Reflective/Email: Paste client's objection email → get detailed response
+      - Objection categorization: Price, Technology, Trust, Competition, Timing, Features
+      - Knowledge source integration:
+        - Victory & Defeat Repository (analysis of won/lost deals)
+        - Competitor Kill-Sheets (advantages vs specific competitors)
+        - Company USPs, certifications, case studies
+      - ARC framework output (Acknowledge → Reframe → Counter)
+      - Include supporting case study links in responses
+      - CLI output: 3 bullet points for live use (fast response in 2 seconds)
+      - Web output: Detailed diplomatic response for email follow-up
+      - Search objection database (keyword search for past objections)
+      - Browse objections by category
+      - Add new objection manually (rep can add custom scenarios)
+      - AI-generated response for new objections (uses RAG on knowledge base)
+      - Feedback loop: Thumbs up/down on generated responses
+      - Mark response as "Worked!" to reinforce learning
+      - Crowdsourced "Golden Arrows" (reps add proven responses that worked in the field)
+      - Edit generated responses before using
+      - Save customized responses to personal library
+      - Share successful responses with team (add to shared knowledge base)
+      - Objection history per Deal (track which objections came up, how resolved)
+      - Pre-meeting battlecard generation (analyze Deal, predict likely objections)
+      - Email assistant: Paste client email → generate full response in ARC format
+      - Integration with Sales Room chatbot logs (if client asked about price, prep battlecard)
+      - Analytics: Most common objections, win rate by objection type
+    </objection_battlecard_module>
+
+    <deal_and_pipeline_management>
+      - Central Deal object (single source of truth across all modules)
+      - Deal creation from Intent Scraper lead
+      - Manual deal creation (for inbound leads)
+      - Deal stages: New Signal → Qualified → Discovery → Solution Design → Negotiation → Closed Won/Lost
+      - Hybrid stage advancement (auto-advance on key actions + manual override)
+      - Auto-advance to "Solution Design" when Sales Room generated
+      - Auto-advance to "Discovery" when transcript uploaded
+      - Manual drag-and-drop stage changes
+      - Deal metadata fields: Company name, industry, estimated value, close date, priority, health score, owner
+      - Health Score algorithm (0-100%):
+        - +10 points for identified Decision Maker
+        - +20 points for confirmed budget
+        - -30 points for no activity in 14 days
+        - -15 points for strong competitor detected in transcript
+        - Bonus points for completed Discovery, Sales Room created, positive consensus poll
+      - Compelling Event field (date by which client must decide)
+      - Next Step Date field (required, cannot save without it)
+      - Deal ownership (assigned to specific rep)
+      - Deal transfer functionality (SDR → AE, or between reps)
+      - Transfer with full context (all history, transcripts, notes preserved)
+      - Three dashboard views:
+        - Kanban board (columns for each stage, drag-and-drop cards)
+        - Health Score list (sorted by health score, shows deals needing attention)
+        - Forecast calendar (deals by expected close date)
+      - Stagnation alerts (deals stuck in stage >10 days turn yellow/red)
+      - Deal detail page ("The Cockpit"):
+        - Activity Feed timeline (chronological log of all actions)
+        - Proces Intelligence Panel (sidebar showing Pain/Power/Risk/Next Step summary)
+        - Agentic Actions Bar (quick buttons: Generate Sales Room, Analyze Transcript, Prep Battlecard)
+      - Add notes to deals (timestamped, with author)
+      - Attach files to deals (proposals, contracts, additional documents)
+      - Deal search (by company name, industry, owner)
+      - Filter deals (by stage, owner, health score range, date range)
+      - Bulk actions (assign multiple deals, change stage)
+      - Lost Deal autopsy: AI analyzes history and suggests what went wrong
+      - Lost reason categorization (Price, Features, Ghosting, Timing, Competitor Won, No Budget)
+      - Re-engagement trigger: Auto-create task after 3 months for "Timing" losses
+      - Deal archive (soft delete for deals inactive >12 months)
+      - Hard delete (GDPR compliance, remove PII completely)
+      - Export deal data to JSON
+      - Deal analytics per rep (conversion rates, avg deal size, avg cycle time)
+    </deal_and_pipeline_management>
+
+    <shared_knowledge_base>
+      - ICP template library (shared search configurations)
+      - Case study repository (upload PDFs, documents)
+      - Battlecard response library (successful objection responses)
+      - Company FAQ database (for RAG chatbot)
+      - Competitor intelligence sheets (advantages, pricing, weaknesses)
+      - Global offer templates (reusable across deals)
+      - Document tagging and categorization
+      - Search knowledge base (full-text search)
+      - Upload documents (PDF, DOCX, MD, TXT)
+      - Edit knowledge base items (Markdown editor)
+      - Delete items (only creator or admin)
+      - Knowledge base analytics (most-used items, contributions per rep)
+    </shared_knowledge_base>
+
+    <manager_features>
+      - Manager dashboard (team performance overview)
+      - Team pipeline view (all deals across all reps)
+      - Pipeline health metrics (total value, weighted forecast, at-risk deals)
+      - Rep performance leaderboard (deals closed, win rate, avg deal size)
+      - Coaching mode (view any rep's deal details read-only)
+      - Transcript review (access all team transcripts for training)
+      - Sales Room review (view all team Sales Rooms)
+      - Activity report (reps' daily activity log)
+      - Stagnation report (deals stuck in stages across team)
+      - Forecast accuracy tracking (predicted vs actual close dates)
+      - Team analytics charts (conversion funnel, win/loss trends)
+    </manager_features>
+
+    <admin_features>
+      - User management (create, edit, deactivate users)
+      - Role assignment and modification
+      - System settings (session timeout, notification preferences)
+      - Integration configuration (Slack webhooks, API keys)
+      - Knowledge base moderation (review and approve submissions)
+      - Data export (full system data dump for backup)
+      - GDPR tools (hard delete user data on request)
+      - Audit log (track who did what, when)
+      - System health dashboard (API usage, error rates, storage)
+    </admin_features>
+
+    <notifications_and_alerts>
+      - Slack integration for all key events
+      - Intent Scraper search completed (with lead count)
+      - Sales Room viewed by client (with timestamp and sections viewed)
+      - Deal stage changed (automatic or manual)
+      - Deal transferred to you (from another rep)
+      - Stagnation alert (deal stuck >10 days)
+      - Health Score dropped significantly (threshold-based)
+      - Compelling Event approaching (7 days before deadline)
+      - Next Step Date overdue (missed action item)
+      - Slack channel configuration (per-user or team channel)
+      - Notification preferences (enable/disable per event type)
+    </notifications_and_alerts>
+
+    <integrations>
+      - Slack webhooks (outbound notifications)
+      - Meeting recorder APIs (Fireflies, Otter) for auto-import transcripts
+      - LinkedIn enrichment API (auto-fetch company and contact details)
+      - Email tracking (optional: track email opens, send from platform)
+      - Calendly integration (embed meeting scheduler)
+      - Loom integration (embed video messages)
+      - CSV import/export for leads and deals
+      - PDF generation (export Discovery reports, Sales Room static versions)
+      - Future: CRM sync (Salesforce, HubSpot) - not in MVP
+    </integrations>
+
+    <data_handling>
+      - Transcript storage (raw content in database for re-processing)
+      - Offer file storage (tiered: global templates vs deal-specific)
+      - In-app Markdown editor for offers
+      - CSV import wizard (column mapping for leads/deals)
+      - CSV export (Intent Scraper results, deal data)
+      - PDF export (Discovery reports)
+      - JSON export (deal data, system backup)
+      - 12-month auto-archive (soft delete inactive deals)
+      - GDPR hard delete (remove PII, keep anonymized metrics)
+      - File size limits (10MB transcripts, 5MB offers)
+      - Supported formats: .txt, .json, .vtt, .md, .pdf
+    </data_handling>
+
+    <ui_ux_and_design>
+      - Dark mode by default (with light mode toggle)
+      - Clean enterprise aesthetic (shadcn/ui components)
+      - Tailwind CSS styling
+      - Inter font (professional, readable)
+      - Lucide React icons
+      - Fixed left sidebar navigation (dark slate)
+      - Top header (global search, user profile dropdown)
+      - Main content area (padded, card-based layout)
+      - Toast notifications for actions (success, error, info)
+      - Loading spinners for async operations
+      - Drag-and-drop file uploads
+      - Modal dialogs for confirmations
+      - Responsive design (desktop, tablet, mobile)
+      - Touch-friendly on mobile (44px min tap targets)
+      - Sales Room premium design (full-width, client logo, hero section)
+      - Accessibility (keyboard navigation, ARIA labels, focus rings)
+      - Error states (empty states, 404 page, network errors)
+    </ui_ux_and_design>
+  </core_features>
+
+  <database_schema>
+    <tables>
+      <users>
+        - id (UUID, primary key)
+        - email (unique, required)
+        - password_hash (bcrypt)
+        - name (required)
+        - role (enum: rep, sdr, ae, manager, admin)
+        - avatar_url (optional)
+        - is_active (boolean, default true)
+        - created_at, updated_at (timestamps)
+      </users>
+      <deals>
+        - id (UUID, primary key)
+        - company_name (required)
+        - industry (string)
+        - stage (enum: new_signal, qualified, discovery, solution_design, negotiation, closed_won, closed_lost)
+        - estimated_value (decimal)
+        - close_date (date)
+        - compelling_event_date (date)
+        - next_step_date (date, required)
+        - health_score (integer 0-100)
+        - owner_id (foreign key to users)
+        - source (enum: intent_scraper, manual, import)
+        - priority (enum: low, medium, high)
+        - lost_reason (string, for closed_lost)
+        - is_archived (boolean, default false)
+        - created_at, updated_at (timestamps)
+      </deals>
+      <leads>
+        - id (UUID, primary key)
+        - company_name (required)
+        - industry (string)
+        - tech_stack (JSON array)
+        - identified_pain (text)
+        - confidence_score (integer 0-100)
+        - source_link (URL)
+        - status (enum: new, contacted, qualified, nurturing, not_interested)
+        - search_id (foreign key to intent_searches)
+        - deal_id (foreign key to deals, nullable)
+        - owner_id (foreign key to users)
+        - notes (text)
+        - created_at, updated_at (timestamps)
+      </leads>
+      <intent_searches>
+        - id (UUID, primary key)
+        - mission_objective (text, natural language input)
+        - icp_template_id (foreign key to icp_templates, nullable)
+        - status (enum: queued, running, completed, failed)
+        - results_count (integer)
+        - owner_id (foreign key to users)
+        - created_at, completed_at (timestamps)
+      </intent_searches>
+      <icp_templates>
+        - id (UUID, primary key)
+        - name (required)
+        - description (text)
+        - criteria (JSON: industries, tech_stack, pain_points, etc.)
+        - is_shared (boolean, default false)
+        - owner_id (foreign key to users)
+        - created_at, updated_at (timestamps)
+      </icp_templates>
+      <transcripts>
+        - id (UUID, primary key)
+        - deal_id (foreign key to deals)
+        - file_name (string)
+        - file_format (enum: txt, json, vtt)
+        - raw_content (text)
+        - source_platform (enum: fireflies, otter, zoom, google_meet, manual)
+        - processed (boolean, default false)
+        - insights (JSON: pain_points, stakeholders, red_flags, next_steps)
+        - uploaded_by (foreign key to users)
+        - created_at, processed_at (timestamps)
+      </transcripts>
+      <sales_rooms>
+        - id (UUID, primary key)
+        - deal_id (foreign key to deals, unique)
+        - template_type (enum: legacy_modernization, cloud_migration, staff_augmentation, custom)
+        - public_url_slug (unique)
+        - offer_content (text, Markdown)
+        - sections (JSON: cfo, cto, security, engineering content)
+        - chatbot_enabled (boolean, default true)
+        - video_url (optional, Loom or uploaded)
+        - calendly_link (optional)
+        - is_expired (boolean, default false)
+        - password_protected (boolean, default false)
+        - password_hash (optional)
+        - created_by (foreign key to users)
+        - created_at, updated_at (timestamps)
+      </sales_rooms>
+      <sales_room_analytics>
+        - id (UUID, primary key)
+        - sales_room_id (foreign key to sales_rooms)
+        - visitor_role (optional, from URL param)
+        - section_viewed (string)
+        - time_spent_seconds (integer)
+        - visited_at (timestamp)
+      </sales_room_analytics>
+      <chatbot_logs>
+        - id (UUID, primary key)
+        - sales_room_id (foreign key to sales_rooms)
+        - question (text)
+        - answer (text)
+        - asked_at (timestamp)
+      </chatbot_logs>
+      <battlecards>
+        - id (UUID, primary key)
+        - category (enum: price, technology, trust, competition, timing, features)
+        - objection_text (text)
+        - arc_response (JSON: acknowledge, reframe, counter)
+        - case_study_links (JSON array)
+        - is_shared (boolean, default false)
+        - created_by (foreign key to users)
+        - feedback_score (integer, sum of upvotes - downvotes)
+        - created_at, updated_at (timestamps)
+      </battlecards>
+      <knowledge_base>
+        - id (UUID, primary key)
+        - type (enum: case_study, faq, competitor_sheet, offer_template)
+        - title (required)
+        - content (text)
+        - file_url (optional, for PDFs/documents)
+        - tags (JSON array)
+        - is_shared (boolean, default true)
+        - created_by (foreign key to users)
+        - created_at, updated_at (timestamps)
+      </knowledge_base>
+      <activities>
+        - id (UUID, primary key)
+        - deal_id (foreign key to deals)
+        - activity_type (enum: note, transcript_uploaded, sales_room_created, stage_changed, etc.)
+        - description (text)
+        - metadata (JSON, additional context)
+        - created_by (foreign key to users)
+        - created_at (timestamp)
+      </activities>
+      <notifications>
+        - id (UUID, primary key)
+        - user_id (foreign key to users)
+        - type (enum: search_complete, sales_room_viewed, deal_transferred, etc.)
+        - message (text)
+        - link (URL, optional)
+        - is_read (boolean, default false)
+        - created_at (timestamp)
+      </notifications>
+    </tables>
+  </database_schema>
+
+  <api_endpoints_summary>
+    <auth>
+      - POST /api/auth/login
+      - POST /api/auth/logout
+      - POST /api/auth/forgot-password
+      - POST /api/auth/reset-password
+      - GET /api/auth/me
+    </auth>
+    <users>
+      - GET /api/users (admin only)
+      - POST /api/users (admin only)
+      - GET /api/users/:id
+      - PUT /api/users/:id
+      - DELETE /api/users/:id (admin only)
+    </users>
+    <deals>
+      - GET /api/deals (with filters: stage, owner, health_score)
+      - POST /api/deals
+      - GET /api/deals/:id
+      - PUT /api/deals/:id
+      - DELETE /api/deals/:id
+      - POST /api/deals/:id/transfer
+      - GET /api/deals/:id/activities
+      - POST /api/deals/:id/notes
+      - GET /api/deals/:id/health-score (recalculate)
+      - POST /api/deals/:id/autopsy (for lost deals)
+    </deals>
+    <intent_scraper>
+      - POST /api/intent-scraper/search (start background job)
+      - GET /api/intent-scraper/searches (list searches)
+      - GET /api/intent-scraper/searches/:id (status and results)
+      - GET /api/leads (with filters)
+      - POST /api/leads (manual create)
+      - PUT /api/leads/:id
+      - DELETE /api/leads/:id
+      - POST /api/leads/:id/convert-to-deal
+      - POST /api/leads/import-csv
+      - GET /api/leads/export-csv
+      - GET /api/icp-templates
+      - POST /api/icp-templates
+      - PUT /api/icp-templates/:id
+      - DELETE /api/icp-templates/:id
+    </intent_scraper>
+    <discovery>
+      - POST /api/discovery/upload (transcript file upload)
+      - POST /api/discovery/analyze (process transcript)
+      - GET /api/transcripts (list all)
+      - GET /api/transcripts/:id
+      - PUT /api/transcripts/:id (edit insights)
+      - DELETE /api/transcripts/:id
+      - POST /api/transcripts/:id/reprocess
+      - GET /api/discovery/export/:id (PDF or Markdown)
+    </discovery>
+    <sales_rooms>
+      - GET /api/sales-rooms (list all for user)
+      - POST /api/sales-rooms (create new)
+      - GET /api/sales-rooms/:id
+      - PUT /api/sales-rooms/:id
+      - DELETE /api/sales-rooms/:id
+      - POST /api/sales-rooms/:id/clone
+      - GET /api/sales-rooms/:id/analytics
+      - GET /api/sales-rooms/public/:slug (public access for clients)
+      - POST /api/sales-rooms/:id/chatbot (chatbot query)
+      - GET /api/sales-rooms/:id/chatbot-logs
+      - POST /api/sales-rooms/:id/generate-deck (PowerPoint export)
+    </sales_rooms>
+    <battlecards>
+      - GET /api/battlecards (search and filter)
+      - POST /api/battlecards (create new)
+      - PUT /api/battlecards/:id
+      - DELETE /api/battlecards/:id
+      - POST /api/battlecards/generate (AI-generate response for new objection)
+      - POST /api/battlecards/:id/feedback (upvote/downvote)
+      - POST /api/battlecards/predict (pre-meeting battlecard generation)
+    </battlecards>
+    <knowledge_base>
+      - GET /api/knowledge (list all)
+      - POST /api/knowledge (upload document)
+      - GET /api/knowledge/:id
+      - PUT /api/knowledge/:id
+      - DELETE /api/knowledge/:id
+      - GET /api/knowledge/search (full-text search)
+    </knowledge_base>
+    <manager>
+      - GET /api/manager/dashboard (team metrics)
+      - GET /api/manager/team-pipeline
+      - GET /api/manager/rep-performance
+      - GET /api/manager/forecast
+    </manager>
+    <notifications>
+      - GET /api/notifications (user's notifications)
+      - PUT /api/notifications/:id/read
+      - DELETE /api/notifications/:id
+    </notifications>
+    <admin>
+      - GET /api/admin/audit-log
+      - GET /api/admin/system-health
+      - POST /api/admin/export-data
+      - POST /api/admin/gdpr-delete
+    </admin>
+  </api_endpoints_summary>
+
+  <ui_layout>
+    <main_structure>
+      - Fixed left sidebar (200px width, dark slate background)
+      - Sidebar sections: Logo, Navigation links, User profile (bottom)
+      - Navigation links: Dashboard, Deals, Intent Scraper, Discovery, Sales Rooms, Battlecards, Knowledge Base
+      - Manager-only links: Team Pipeline, Analytics
+      - Admin-only links: Users, Settings, Audit Log
+      - Top header (60px height, white/light background)
+      - Header contents: Page title, Global search bar, Notifications bell icon, User avatar dropdown
+      - Main content area (right of sidebar, below header, padded 24px)
+      - Content uses card-based layout (shadcn/ui Card components)
+      - Responsive breakpoints: Desktop (1024px+), Tablet (768px-1023px), Mobile (<768px)
+      - Mobile: Hamburger menu collapses sidebar, full-width content
+    </main_structure>
+    <deal_detail_page_layout>
+      - Three-column layout (desktop):
+        - Left column (300px): Deal metadata, Health Score widget, Quick Actions
+        - Center column (flexible): Activity Feed timeline
+        - Right column (300px): Proces Intelligence Card (Pain/Power/Risk/Next Step)
+      - Two-column layout (tablet): Left metadata + Center/Right combined
+      - Single column (mobile): Stack all sections vertically
+    </deal_detail_page_layout>
+    <kanban_board_layout>
+      - Horizontal scrollable columns (one per stage)
+      - Each column: Header with stage name and count
+      - Cards within columns: Drag-and-drop enabled
+      - Card contents: Company name, owner, health score badge, estimated value, close date
+      - Stagnation indicator: Yellow border (>10 days), Red border (>20 days)
+    </kanban_board_layout>
+    <sales_room_client_layout>
+      - No sidebar (full-width, client-facing)
+      - Hero section: Client logo (left), Company name (center), Video message thumbnail (right)
+      - Navigation tabs: Overview, For CFO, For CTO, For Security, For Engineering
+      - Each tab scrolls to section (or loads different view)
+      - Chatbot widget: Fixed bottom-right corner (expandable)
+      - Calendly widget: Embedded at bottom of each section
+      - Footer: Mutual Action Plan, Consensus Poll, Contact info
+    </sales_room_client_layout>
+  </ui_layout>
+
+  <design_system>
+    <color_palette>
+      - Primary: Slate-700 (dark mode sidebar, headers)
+      - Secondary: Blue-600 (CTAs, links, active states)
+      - Success: Green-600 (Health Score high, success toasts)
+      - Warning: Yellow-600 (Stagnation alerts, caution states)
+      - Danger: Red-600 (Delete actions, critical alerts)
+      - Background (dark mode): Slate-900
+      - Background (light mode): White
+      - Text (dark mode): Slate-100
+      - Text (light mode): Slate-900
+      - Card backgrounds (dark mode): Slate-800
+      - Card backgrounds (light mode): White with subtle border
+    </color_palette>
+    <typography>
+      - Font family: Inter (Google Fonts)
+      - Headings: Bold, tight line-height
+      - Body text: Regular weight, 16px base size, 1.5 line-height
+      - Code/CLI output: Monospace font (Fira Code or system monospace)
+    </typography>
+    <spacing>
+      - Base unit: 4px (use Tailwind spacing scale)
+      - Card padding: 24px (p-6)
+      - Section spacing: 32px (space-y-8)
+      - Component spacing: 16px (space-y-4)
+    </spacing>
+    <components>
+      - Buttons: shadcn/ui Button (variants: default, outline, ghost, destructive)
+      - Forms: shadcn/ui Input, Textarea, Select, Checkbox, Radio
+      - Modals: shadcn/ui Dialog
+      - Notifications: shadcn/ui Toast
+      - Cards: shadcn/ui Card
+      - Tables: shadcn/ui Table
+      - Dropdowns: shadcn/ui DropdownMenu
+      - Icons: Lucide React (24px default size)
+    </components>
+  </design_system>
+
+  <implementation_steps>
+    <step number="1">
+      <title>Foundation & Authentication</title>
+      <tasks>
+        - Initialize React (Vite) + TypeScript project
+        - Set up Tailwind CSS and shadcn/ui
+        - Create Node.js/Express backend with SQLite
+        - Implement user authentication (login, logout, password reset)
+        - Create user management (admin CRUD)
+        - Set up role-based access control middleware
+        - Build basic dashboard layout (sidebar, header, main content)
+        - Implement dark mode toggle
+        - Create user profile page
+      </tasks>
+    </step>
+    <step number="2">
+      <title>Deal Management Core</title>
+      <tasks>
+        - Create Deal database schema and API endpoints
+        - Build Deal list view (table with filters)
+        - Create Deal detail page (3-column layout)
+        - Implement Deal CRUD operations
+        - Build Activity Feed timeline component
+        - Create Kanban board view (drag-and-drop)
+        - Implement Health Score calculation algorithm
+        - Build Forecast calendar view
+        - Add deal notes functionality
+        - Implement deal transfer between users
+      </tasks>
+    </step>
+    <step number="3">
+      <title>Intent Scraper Module</title>
+      <tasks>
+        - Create Lead and Intent Search database schemas
+        - Integrate Serper/Tavily search API
+        - Build natural language mission objective parser (AI prompt)
+        - Implement background job queue for searches
+        - Create ICP template CRUD
+        - Build search results table UI
+        - Implement Confidence Score generation (AI)
+        - Add Personalized Hook Generator (AI, 3 variants)
+        - Build Competitor Displacement analysis
+        - Implement Trigger Event Analysis
+        - Create lead status management
+        - Build CSV import/export functionality
+        - Add "Convert Lead to Deal" workflow
+        - Implement Slack notifications for search completion
+      </tasks>
+    </step>
+    <step number="4">
+      <title>Discovery Insight Extractor</title>
+      <tasks>
+        - Create Transcript database schema
+        - Build CLI tool (proces-cli with Commander.js)
+        - Implement file upload (drag-and-drop) in web UI
+        - Add auto-detection for transcript formats
+        - Build filler word removal logic
+        - Create AI extraction prompt (Nessencja framework: Pain/Power/Risk/Next Steps)
+        - Implement CLI Markdown output
+        - Build web UI structured insight view
+        - Add edit insights functionality
+        - Create transcript history per deal
+        - Implement comparison view (multiple transcripts)
+        - Build Discovery report PDF export
+        - Integrate meeting recorder APIs (Fireflies, Otter)
+        - Add re-process old transcripts feature
+      </tasks>
+    </step>
+    <step number="5">
+      <title>Stakeholder Sales Room</title>
+      <tasks>
+        - Create Sales Room and Analytics database schemas
+        - Build Sales Room creation wizard (3-step)
+        - Implement template selection (Legacy Modernization, Cloud Migration, etc.)
+        - Create offer file upload and parsing (txt, md, pdf)
+        - Build in-app Markdown editor
+        - Implement auto-ROI calculation from Discovery insights
+        - Create stakeholder section components (CFO, CTO, Security, Engineering)
+        - Integrate RAG chatbot (LangChain + Claude API)
+        - Build chatbot knowledge base (offer + FAQ + Discovery context)
+        - Add Loom video integration
+        - Embed Calendly widgets
+        - Implement public URL generation (unique slugs)
+        - Build role-based tracking (?role=cfo)
+        - Create real-time analytics dashboard
+        - Implement Slack notifications for views
+        - Build chatbot conversation log viewer
+        - Create Mutual Action Plan interactive checklist
+        - Implement Stakeholder Consensus Poll
+        - Build Internal Deck Generator (PowerPoint export)
+        - Add Sales Room cloning
+        - Implement live edit mode (auto-update from offer changes)
+      </tasks>
+    </step>
+    <step number="6">
+      <title>Objection Battlecard Generator</title>
+      <tasks>
+        - Create Battlecard database schema
+        - Build objection categorization (Price, Technology, Trust, Competition, Timing, Features)
+        - Integrate knowledge sources (Victory/Defeat repo, Competitor sheets, USPs)
+        - Implement ARC framework generator (Acknowledge/Reframe/Counter)
+        - Create CLI command: proces battle [objection-type]
+        - Build web UI search and browse
+        - Add AI response generation for new objections (RAG)
+        - Implement feedback loop (thumbs up/down)
+        - Create "Golden Arrows" crowdsourcing (reps add proven responses)
+        - Build pre-meeting battlecard generator (predict objections)
+        - Implement email assistant (paste objection → get response)
+        - Add objection history per deal
+        - Create analytics (common objections, win rates)
+      </tasks>
+    </step>
+    <step number="7">
+      <title>Shared Knowledge Base & Manager Features</title>
+      <tasks>
+        - Create Knowledge Base database schema
+        - Build document upload (PDFs, DOCX, MD, TXT)
+        - Implement full-text search
+        - Create knowledge base CRUD UI
+        - Add tagging and categorization
+        - Build Manager dashboard (team metrics)
+        - Create team pipeline view
+        - Implement rep performance leaderboard
+        - Build coaching mode (view team deals read-only)
+        - Create activity and stagnation reports
+        - Add forecast accuracy tracking
+      </tasks>
+    </step>
+    <step number="8">
+      <title>Notifications & Integrations</title>
+      <tasks>
+        - Implement Slack webhook integration
+        - Build notification system (database + WebSocket)
+        - Create in-app notification center
+        - Add email tracking integration (optional)
+        - Integrate LinkedIn enrichment API
+        - Build Calendly and Loom integrations
+        - Implement notification preferences UI
+      </tasks>
+    </step>
+    <step number="9">
+      <title>Admin Features & Data Management</title>
+      <tasks>
+        - Build admin dashboard (system health)
+        - Create audit log viewer
+        - Implement data export (JSON backup)
+        - Build GDPR hard delete tool
+        - Add 12-month auto-archive logic
+        - Create system settings UI
+        - Implement integration configuration (API keys, webhooks)
+      </tasks>
+    </step>
+    <step number="10">
+      <title>Polish, Testing & Optimization</title>
+      <tasks>
+        - Responsive design refinement (mobile, tablet)
+        - Accessibility improvements (keyboard nav, ARIA labels)
+        - Performance optimization (lazy loading, pagination)
+        - Error handling and edge cases
+        - Loading states and skeletons
+        - Empty states for all views
+        - 404 and error pages
+        - Form validation polish
+        - Toast notification consistency
+        - Cross-browser testing
+        - Security audit (SQL injection, XSS protection)
+        - API rate limiting
+        - Environment variable configuration
+        - Production build optimization
+        - Documentation (README, API docs)
+      </tasks>
+    </step>
+  </implementation_steps>
+
+  <success_criteria>
+    <functionality>
+      - All 4 modules (Intent Scraper, Discovery, Sales Room, Battlecard) fully functional
+      - Deal object flows through entire pipeline (Lead → Discovery → Sales Room → Closed)
+      - CLI tool (proces-cli) works for Discovery analysis
+      - Health Score algorithm calculates correctly based on deal data
+      - RAG chatbot answers questions accurately using deal context
+      - All CRUD operations work for deals, leads, transcripts, sales rooms, battlecards
+      - Role-based access control enforced (Rep/Manager/Admin permissions)
+      - Real-time notifications via Slack work
+      - CSV import/export functional
+      - PDF export for Discovery reports and Internal Decks
+    </functionality>
+    <user_experience>
+      - Intuitive navigation (users can find features without training)
+      - Fast response times (<2s for most operations, <15s for AI generations)
+      - Clear feedback for all actions (toasts, loading states)
+      - No crashes or unhandled errors (graceful error handling)
+      - Responsive on desktop, tablet, and mobile
+      - Dark mode looks professional (clean, readable)
+      - Sales Room (client-facing) looks premium and branded
+    </user_experience>
+    <technical_quality>
+      - Clean, maintainable code (TypeScript types, React best practices)
+      - Secure authentication (bcrypt passwords, session management)
+      - No SQL injection or XSS vulnerabilities
+      - API error handling (proper HTTP status codes)
+      - Database relationships correct (foreign keys, cascades)
+      - Environment variables for secrets (no hardcoded API keys)
+      - Git repository with clear commit history
+      - README with setup instructions
+    </technical_quality>
+    <design_polish>
+      - Consistent use of shadcn/ui components
+      - Professional color palette (enterprise-grade)
+      - Readable typography (Inter font, proper sizes)
+      - Proper spacing (Tailwind scale, no cramped layouts)
+      - Icons used consistently (Lucide React)
+      - No broken layouts at any viewport size
+      - Accessibility basics met (keyboard nav, focus rings, ARIA labels)
+    </design_polish>
+  </success_criteria>
+</project_specification>

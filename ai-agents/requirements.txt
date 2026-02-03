@@ -1,0 +1,32 @@
+# Sales Room (Proces OS) - Python AI Agent Dependencies
+
+# Core AI
+anthropic>=0.18.0
+langchain>=0.1.0
+langchain-anthropic>=0.1.0
+langchain-community>=0.0.20
+
+# RAG and Embeddings
+chromadb>=0.4.22
+sentence-transformers>=2.3.1
+
+# Document Processing
+pypdf>=4.0.0
+python-docx>=1.1.0
+markdown>=3.5.2
+
+# API and Web
+fastapi>=0.109.0
+uvicorn>=0.27.0
+httpx>=0.26.0
+pydantic>=2.6.0
+
+# Database
+aiosqlite>=0.19.0
+
+# Utilities
+python-dotenv>=1.0.1
+tenacity>=8.2.3
+
+# Search APIs
+tavily-python>=0.3.0
