@@ -21,6 +21,7 @@ import knowledgeRoutes from './routes/knowledge.js';
 import notificationRoutes from './routes/notifications.js';
 import managerRoutes from './routes/manager.js';
 import adminRoutes from './routes/admin.js';
+import dashboardRoutes from './routes/dashboard.js';
 
 // Import middleware
 import { authMiddleware } from './middleware/auth.js';
@@ -65,6 +66,7 @@ app.use('/api/knowledge', authMiddleware, knowledgeRoutes);
 app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/manager', authMiddleware, managerRoutes);
 app.use('/api/admin', authMiddleware, adminRoutes);
+app.use('/api/dashboard', authMiddleware, dashboardRoutes);
 
 // Error handling
 app.use(errorHandler);

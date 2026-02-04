@@ -456,6 +456,245 @@ router.get('/:id/activities', async (req, res) => {
   }
 });
 
+// POST /api/deals/import/csv - Import deals from CSV
+router.post('/import/csv', async (req, res) => {
+  try {
+    const { csvContent } = req.body;
+
+    if (!csvContent) {
+      return res.status(400).json({ error: 'CSV content is required' });
+    }
+
+    // Parse CSV content
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) {
+      return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
+    }
+
+    // Parse header
+    const headerLine = lines[0];
+    const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+
+    // Find column indices
+    const companyNameIndex = headers.findIndex(h => h === 'company name' || h === 'company_name' || h === 'companyname');
+    const industryIndex = headers.findIndex(h => h === 'industry');
+    const stageIndex = headers.findIndex(h => h === 'stage');
+    const valueIndex = headers.findIndex(h => h === 'estimated value' || h === 'estimated_value' || h === 'value');
+    const closeDateIndex = headers.findIndex(h => h === 'close date' || h === 'close_date');
+    const nextStepDateIndex = headers.findIndex(h => h === 'next step date' || h === 'next_step_date');
+    const nextStepDescIndex = headers.findIndex(h => h === 'next step description' || h === 'next_step_description');
+    const priorityIndex = headers.findIndex(h => h === 'priority');
+
+    if (companyNameIndex === -1) {
+      return res.status(400).json({ error: 'CSV must have a "Company Name" column' });
+    }
+
+    // Parse CSV values (handle quoted fields)
+    const parseCSVLine = (line) => {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const validStages = ['new_signal', 'qualified', 'discovery', 'solution_design', 'negotiation', 'closed_won', 'closed_lost'];
+    const validPriorities = ['low', 'medium', 'high'];
+
+    const createdDeals = [];
+    const errors = [];
+
+    // Process data rows
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const values = parseCSVLine(line);
+      const companyName = values[companyNameIndex]?.replace(/^"|"$/g, '');
+
+      if (!companyName) {
+        errors.push(`Row ${i + 1}: Company name is required`);
+        continue;
+      }
+
+      const industry = industryIndex >= 0 ? values[industryIndex]?.replace(/^"|"$/g, '') || null : null;
+      let stage = stageIndex >= 0 ? values[stageIndex]?.replace(/^"|"$/g, '').toLowerCase().replace(/ /g, '_') || 'new_signal' : 'new_signal';
+      const estimatedValue = valueIndex >= 0 ? parseFloat(values[valueIndex]?.replace(/[^0-9.]/g, '')) || null : null;
+      const closeDate = closeDateIndex >= 0 ? values[closeDateIndex]?.replace(/^"|"$/g, '') || null : null;
+      const nextStepDate = nextStepDateIndex >= 0 ? values[nextStepDateIndex]?.replace(/^"|"$/g, '') || null : null;
+      const nextStepDesc = nextStepDescIndex >= 0 ? values[nextStepDescIndex]?.replace(/^"|"$/g, '') || null : null;
+      let priority = priorityIndex >= 0 ? values[priorityIndex]?.replace(/^"|"$/g, '').toLowerCase() || 'medium' : 'medium';
+
+      // Validate and normalize stage
+      if (!validStages.includes(stage)) {
+        stage = 'new_signal';
+      }
+
+      // Validate and normalize priority
+      if (!validPriorities.includes(priority)) {
+        priority = 'medium';
+      }
+
+      // Use current date + 30 days for next_step_date if not provided
+      const defaultNextStepDate = new Date();
+      defaultNextStepDate.setDate(defaultNextStepDate.getDate() + 30);
+      const finalNextStepDate = nextStepDate || defaultNextStepDate.toISOString().split('T')[0];
+
+      const dealId = uuidv4();
+
+      try {
+        await run(
+          `INSERT INTO deals (
+            id, company_name, industry, stage, estimated_value, close_date,
+            next_step_date, next_step_description, health_score, owner_id, source, priority
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            dealId,
+            companyName,
+            industry,
+            stage,
+            estimatedValue,
+            closeDate,
+            finalNextStepDate,
+            nextStepDesc,
+            50,
+            req.user.id,
+            'import',
+            priority
+          ]
+        );
+
+        // Create activity log
+        await run(
+          `INSERT INTO activities (id, deal_id, activity_type, description, created_by)
+           VALUES (?, ?, ?, ?, ?)`,
+          [uuidv4(), dealId, 'deal_created', `Deal imported for ${companyName}`, req.user.id]
+        );
+
+        createdDeals.push({ id: dealId, company_name: companyName });
+      } catch (err) {
+        errors.push(`Row ${i + 1}: Failed to create deal for ${companyName} - ${err.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      imported: createdDeals.length,
+      deals: createdDeals,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error) {
+    console.error('Error importing deals:', error);
+    res.status(500).json({ error: 'Failed to import deals' });
+  }
+});
+
+// GET /api/deals/export/csv - Export deals to CSV
+router.get('/export/csv', async (req, res) => {
+  try {
+    const { stage, owner, search } = req.query;
+
+    let sql = `
+      SELECT d.*, u.name as owner_name, u.email as owner_email
+      FROM deals d
+      LEFT JOIN users u ON d.owner_id = u.id
+      WHERE d.is_archived = 0
+    `;
+    const params = [];
+
+    // Filter by stage
+    if (stage) {
+      sql += ' AND d.stage = ?';
+      params.push(stage);
+    }
+
+    // Filter by owner (managers can see all, reps can only see their own)
+    if (req.user.role === 'rep' || req.user.role === 'sdr' || req.user.role === 'ae') {
+      sql += ' AND d.owner_id = ?';
+      params.push(req.user.id);
+    } else if (owner) {
+      sql += ' AND d.owner_id = ?';
+      params.push(owner);
+    }
+
+    // Filter by search term
+    if (search) {
+      sql += ' AND (d.company_name LIKE ? OR d.industry LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    sql += ' ORDER BY d.created_at DESC';
+
+    const deals = await all(sql, params);
+
+    // Create CSV content
+    const headers = [
+      'ID',
+      'Company Name',
+      'Industry',
+      'Stage',
+      'Estimated Value',
+      'Close Date',
+      'Compelling Event Date',
+      'Next Step Date',
+      'Next Step Description',
+      'Health Score',
+      'Priority',
+      'Owner',
+      'Owner Email',
+      'Created At',
+      'Updated At'
+    ];
+
+    const rows = deals.map(deal => [
+      deal.id,
+      `"${(deal.company_name || '').replace(/"/g, '""')}"`,
+      `"${(deal.industry || '').replace(/"/g, '""')}"`,
+      deal.stage,
+      deal.estimated_value || '',
+      deal.close_date || '',
+      deal.compelling_event_date || '',
+      deal.next_step_date || '',
+      `"${(deal.next_step_description || '').replace(/"/g, '""')}"`,
+      deal.health_score,
+      deal.priority,
+      `"${(deal.owner_name || '').replace(/"/g, '""')}"`,
+      deal.owner_email || '',
+      deal.created_at,
+      deal.updated_at
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=deals-export-${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csvContent);
+  } catch (error) {
+    console.error('Error exporting deals:', error);
+    res.status(500).json({ error: 'Failed to export deals' });
+  }
+});
+
 // POST /api/deals/:id/notes - Add note to deal
 router.post('/:id/notes', async (req, res) => {
   try {

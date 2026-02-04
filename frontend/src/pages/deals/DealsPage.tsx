@@ -1,14 +1,388 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useAuth } from '@/contexts/AuthContext';
+import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload } from 'lucide-react';
+
+interface Deal {
+  id: string;
+  company_name: string;
+  industry: string | null;
+  stage: string;
+  estimated_value: number | null;
+  close_date: string | null;
+  next_step_date: string;
+  health_score: number;
+  priority: string;
+  owner_name: string;
+  created_at: string;
+}
+
+const stageLabels: Record<string, string> = {
+  new_signal: 'New Signal',
+  qualified: 'Qualified',
+  discovery: 'Discovery',
+  solution_design: 'Solution Design',
+  negotiation: 'Negotiation',
+  closed_won: 'Closed Won',
+  closed_lost: 'Closed Lost',
+};
+
+const stageColors: Record<string, string> = {
+  new_signal: 'bg-blue-500/10 text-blue-500',
+  qualified: 'bg-purple-500/10 text-purple-500',
+  discovery: 'bg-yellow-500/10 text-yellow-500',
+  solution_design: 'bg-orange-500/10 text-orange-500',
+  negotiation: 'bg-pink-500/10 text-pink-500',
+  closed_won: 'bg-green-500/10 text-green-500',
+  closed_lost: 'bg-red-500/10 text-red-500',
+};
+
+const priorityColors: Record<string, string> = {
+  low: 'text-slate-400',
+  medium: 'text-yellow-500',
+  high: 'text-red-500',
+};
+
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function DealsPage() {
+  const { token } = useAuth();
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchDeals();
+  }, [token, searchTerm, selectedStage]);
+
+  const fetchDeals = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (searchTerm) params.append('search', searchTerm);
+      if (selectedStage) params.append('stage', selectedStage);
+
+      const response = await fetch(`${API_URL}/deals?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch deals');
+      }
+
+      const data = await response.json();
+      setDeals(data.deals || []);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const importFromCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const csvContent = await file.text();
+
+      const response = await fetch(`${API_URL}/deals/import/csv`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ csvContent }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to import deals');
+      }
+
+      const result = await response.json();
+      alert(`Successfully imported ${result.imported} deal(s)`);
+
+      // Refresh deals list
+      fetchDeals();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to import deals');
+    }
+
+    // Reset file input
+    event.target.value = '';
+  };
+
+  const exportToCsv = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (searchTerm) params.append('search', searchTerm);
+      if (selectedStage) params.append('stage', selectedStage);
+
+      const response = await fetch(`${API_URL}/deals/export/csv?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to export deals');
+      }
+
+      // Create a blob from the response
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `deals-export-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export deals');
+    }
+  };
+
+  const deleteDeal = async (id: string, companyName: string) => {
+    if (!confirm(`Are you sure you want to delete the deal for "${companyName}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/deals/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete deal');
+      }
+
+      // Refresh deals list
+      fetchDeals();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete deal');
+    }
+  };
+
+  const formatCurrency = (value: number | null) => {
+    if (!value) return '-';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  const formatDate = (date: string | null) => {
+    if (!date) return '-';
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const getHealthScoreColor = (score: number) => {
+    if (score >= 70) return 'text-green-500';
+    if (score >= 40) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Deals</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground">Deals management coming soon...</p>
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Deals</h2>
+          <p className="text-muted-foreground">Manage your sales pipeline</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportToCsv}>
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+          <label>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={importFromCsv}
+              className="hidden"
+            />
+            <Button variant="outline" asChild>
+              <span>
+                <Upload className="w-4 h-4 mr-2" />
+                Import CSV
+              </span>
+            </Button>
+          </label>
+          <Link to="/deals/new">
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Deal
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search deals..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant={selectedStage === null ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedStage(null)}
+              >
+                All
+              </Button>
+              {Object.entries(stageLabels).map(([value, label]) => (
+                <Button
+                  key={value}
+                  variant={selectedStage === value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedStage(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Deals Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>All Deals</CardTitle>
+          <CardDescription>
+            {loading ? 'Loading...' : `${deals.length} deal${deals.length !== 1 ? 's' : ''} found`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {error ? (
+            <div className="text-center py-8 text-red-500">
+              {error}
+            </div>
+          ) : loading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Loading deals...
+            </div>
+          ) : deals.length === 0 ? (
+            <div className="text-center py-8">
+              <Building2 className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground mb-4">No deals yet</p>
+              <Link to="/deals/new">
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your First Deal
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Company</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Stage</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Value</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Health</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Next Step</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Owner</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deals.map((deal) => (
+                    <tr key={deal.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                      <td className="py-3 px-4">
+                        <div>
+                          <Link to={`/deals/${deal.id}`} className="font-medium hover:text-primary">
+                            {deal.company_name}
+                          </Link>
+                          {deal.industry && (
+                            <p className="text-sm text-muted-foreground">{deal.industry}</p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stageColors[deal.stage]}`}>
+                          {stageLabels[deal.stage]}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-medium">{formatCurrency(deal.estimated_value)}</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className={`w-4 h-4 ${getHealthScoreColor(deal.health_score)}`} />
+                          <span className={`font-medium ${getHealthScoreColor(deal.health_score)}`}>
+                            {deal.health_score}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Calendar className="w-4 h-4 text-muted-foreground" />
+                          {formatDate(deal.next_step_date)}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm">
+                        {deal.owner_name}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link to={`/deals/${deal.id}`}>
+                            <Button variant="ghost" size="sm">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </Link>
+                          <Link to={`/deals/${deal.id}/edit`}>
+                            <Button variant="ghost" size="sm">
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteDeal(deal.id, deal.company_name)}
+                            className="text-red-500 hover:text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
