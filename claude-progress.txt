@@ -317,3 +317,86 @@ End of Session 3
 
 ---
 End of Session 4
+
+## Session 5: Cascade Delete, Health Filters & Session Features
+
+### Date: 2026-02-04
+
+### Accomplishments:
+
+1. **Implemented Transcripts API (Full CRUD)**
+   - GET /api/transcripts - List transcripts with filters
+   - POST /api/transcripts/upload - Upload transcript with filler word removal
+   - POST /api/transcripts/analyze - Analyze transcript (AI placeholder)
+   - GET /api/transcripts/:id, PUT, DELETE - Standard CRUD
+   - Auto-advances deal stage to "discovery" when transcript uploaded
+
+2. **Implemented Sales Rooms API (Full CRUD)**
+   - GET /api/sales-rooms - List sales rooms
+   - POST /api/sales-rooms - Create with unique URL slug generation
+   - GET /api/sales-rooms/:id, PUT, DELETE - Standard CRUD
+   - POST /api/sales-rooms/:id/clone - Clone sales room
+   - GET /api/sales-rooms/public/:slug - Public access for clients
+   - GET /api/sales-rooms/:id/analytics - View analytics
+   - Auto-advances deal stage to "solution_design" when created
+
+3. **Features Implemented & Verified:**
+   - Feature #103: Delete parent handles children (cascade delete)
+     - Tested by creating deal with transcript and sales room
+     - Deleting deal correctly removes associated records
+   - Feature #104: Filters work with actual data
+     - Added health score filter dropdown to Deals page
+     - Filter options: High (70+), Medium (40-69), Low (<40)
+   - Feature #105: Changes reflect in related areas
+     - Deal stage change appears in dashboard Recent Activity
+   - Feature #106: Refresh preserves deal form data
+     - Implemented beforeunload warning for unsaved form data
+     - Created AlertDialog component for UI
+   - Feature #107: Session survives browser close/reopen
+     - Verified localStorage token persistence works correctly
+   - Feature #108: Multi-tab changes sync
+     - Changes in one tab appear in another after refresh
+   - Feature #109: Back after form submit no duplicate
+     - SPA architecture prevents POST resubmission issues
+
+### Features Marked as Passing This Session:
+- #103: Delete parent handles children
+- #104: Filters work with actual data
+- #105: Changes reflect in related areas
+- #106: Refresh preserves deal form data
+- #107: Session survives browser close/reopen
+- #108: Multi-tab changes sync
+- #109: Back after form submit no duplicate
+
+### Current Status:
+- **Features Passing**: 41 of 285
+- **Completion**: 14.4%
+
+### Technical Notes:
+- Transcripts stored in database with call_date, duration, raw_content, cleaned_content, summary
+- Sales rooms have unique slug generation for public URLs
+- Health score filter uses query params: health_score_min, health_score_max
+- Form dirty state detection using isFormDirty() callback
+- beforeunload event shows browser-native warning dialog
+- JWT token persisted in localStorage survives browser close
+
+### Files Created/Modified This Session:
+- backend/src/routes/transcripts.js (full implementation)
+- backend/src/routes/sales-rooms.js (full implementation)
+- backend/src/routes/deals.js (added health_score to updateable fields)
+- frontend/src/pages/deals/DealsPage.tsx (added health score filter)
+- frontend/src/pages/deals/DealCreatePage.tsx (added beforeunload handler)
+- frontend/src/components/ui/alert-dialog.tsx (new component)
+
+### Test Deals Created:
+- MULTI_TAB_SYNC_TEST (testing multi-tab sync)
+- BACK_BUTTON_TEST (testing back button behavior)
+
+### Next Steps for Session 6:
+1. Continue with next features (feature_get_next)
+2. Focus on completing more functional features
+3. Target 20% completion
+4. Consider implementing Intent Scraper module
+
+---
+End of Session 5

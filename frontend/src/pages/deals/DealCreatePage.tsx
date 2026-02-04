@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,6 +53,38 @@ export default function DealCreatePage() {
     next_step_description: '',
     priority: 'medium',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Check if form has any data entered (dirty state)
+  const isFormDirty = useCallback(() => {
+    return (
+      form.company_name.trim() !== '' ||
+      form.industry.trim() !== '' ||
+      form.estimated_value !== '' ||
+      form.close_date !== '' ||
+      form.compelling_event_date !== '' ||
+      form.next_step_date !== '' ||
+      form.next_step_description.trim() !== '' ||
+      form.stage !== 'new_signal' ||
+      form.priority !== 'medium'
+    );
+  }, [form]);
+
+  // Handle browser refresh/close with beforeunload warning
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isFormDirty() && !isSubmitting) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isFormDirty, isSubmitting]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -103,6 +135,7 @@ export default function DealCreatePage() {
       }
 
       const data = await response.json();
+      setIsSubmitting(true);
       navigate(`/deals/${data.deal.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');

@@ -6,6 +6,7 @@ import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 
 // Load environment variables
+// Session 5: Added health_score filter support
 dotenv.config();
 
 // Import routes

@@ -55,10 +55,11 @@ export default function DealsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
+  const [healthScoreFilter, setHealthScoreFilter] = useState<string>('all');
 
   useEffect(() => {
     fetchDeals();
-  }, [token, searchTerm, selectedStage]);
+  }, [token, searchTerm, selectedStage, healthScoreFilter]);
 
   const fetchDeals = async () => {
     try {
@@ -66,6 +67,12 @@ export default function DealsPage() {
       const params = new URLSearchParams();
       if (searchTerm) params.append('search', searchTerm);
       if (selectedStage) params.append('stage', selectedStage);
+      if (healthScoreFilter === 'high') params.append('health_score_min', '70');
+      if (healthScoreFilter === 'medium') {
+        params.append('health_score_min', '40');
+        params.append('health_score_max', '69');
+      }
+      if (healthScoreFilter === 'low') params.append('health_score_max', '39');
 
       const response = await fetch(`${API_URL}/deals?${params.toString()}`, {
         headers: {
@@ -268,6 +275,19 @@ export default function DealsPage() {
                   {label}
                 </Button>
               ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Health:</span>
+              <select
+                value={healthScoreFilter}
+                onChange={(e) => setHealthScoreFilter(e.target.value)}
+                className="bg-background border border-input rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="all">All Health</option>
+                <option value="high">High (70+)</option>
+                <option value="medium">Medium (40-69)</option>
+                <option value="low">Low (&lt;40)</option>
+              </select>
             </div>
           </div>
         </CardContent>

@@ -240,7 +240,8 @@ router.put('/:id', async (req, res) => {
       next_step_description,
       priority,
       lost_reason,
-      is_archived
+      is_archived,
+      health_score
     } = req.body;
 
     // Validate required fields
@@ -323,6 +324,14 @@ router.put('/:id', async (req, res) => {
     if (is_archived !== undefined) {
       updates.push('is_archived = ?');
       params.push(is_archived ? 1 : 0);
+    }
+    if (health_score !== undefined) {
+      const score = parseInt(health_score);
+      if (isNaN(score) || score < 0 || score > 100) {
+        return res.status(400).json({ error: 'Health score must be between 0 and 100' });
+      }
+      updates.push('health_score = ?');
+      params.push(score);
     }
 
     if (updates.length === 0) {
