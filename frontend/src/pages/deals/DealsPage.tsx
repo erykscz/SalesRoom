@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload } from 'lucide-react';
+import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface Deal {
   id: string;
@@ -50,16 +50,36 @@ const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function DealsPage() {
   const { token } = useAuth();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStage, setSelectedStage] = useState<string | null>(null);
-  const [healthScoreFilter, setHealthScoreFilter] = useState<string>('all');
+
+  // Get current URL with search params for passing to detail pages
+  const currentUrl = location.pathname + location.search;
+
+  // Initialize state from URL params
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [selectedStage, setSelectedStage] = useState<string | null>(searchParams.get('stage'));
+  const [healthScoreFilter, setHealthScoreFilter] = useState<string>(searchParams.get('health') || 'all');
+  const [sortBy, setSortBy] = useState<string>(searchParams.get('sort_by') || 'created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sort_order') as 'asc' | 'desc') || 'desc');
+
+  // Sync state changes to URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchTerm) params.set('search', searchTerm);
+    if (selectedStage) params.set('stage', selectedStage);
+    if (healthScoreFilter && healthScoreFilter !== 'all') params.set('health', healthScoreFilter);
+    if (sortBy && sortBy !== 'created_at') params.set('sort_by', sortBy);
+    if (sortOrder && sortOrder !== 'desc') params.set('sort_order', sortOrder);
+    setSearchParams(params, { replace: true });
+  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, setSearchParams]);
 
   useEffect(() => {
     fetchDeals();
-  }, [token, searchTerm, selectedStage, healthScoreFilter]);
+  }, [token, searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder]);
 
   const fetchDeals = async () => {
     try {
@@ -73,6 +93,8 @@ export default function DealsPage() {
         params.append('health_score_max', '69');
       }
       if (healthScoreFilter === 'low') params.append('health_score_max', '39');
+      if (sortBy) params.append('sort_by', sortBy);
+      if (sortOrder) params.append('sort_order', sortOrder);
 
       const response = await fetch(`${API_URL}/deals?${params.toString()}`, {
         headers: {
@@ -208,6 +230,20 @@ export default function DealsPage() {
     return 'text-red-500';
   };
 
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('desc');
+    }
+  };
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortBy !== column) return <ArrowUpDown className="w-4 h-4 ml-1 opacity-50" />;
+    return sortOrder === 'asc' ? <ArrowUp className="w-4 h-4 ml-1" /> : <ArrowDown className="w-4 h-4 ml-1" />;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -313,24 +349,50 @@ export default function DealsPage() {
           ) : deals.length === 0 ? (
             <div className="text-center py-8">
               <Building2 className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-4">No deals yet</p>
-              <Link to="/deals/new">
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Your First Deal
-                </Button>
-              </Link>
+              {(searchTerm || selectedStage || healthScoreFilter !== 'all') ? (
+                <>
+                  <p className="text-muted-foreground mb-2">No results match your filters</p>
+                  <p className="text-sm text-muted-foreground mb-4">Try adjusting your search or filter criteria</p>
+                  <Button variant="outline" onClick={() => {
+                    setSearchTerm('');
+                    setSelectedStage(null);
+                    setHealthScoreFilter('all');
+                  }}>
+                    Clear Filters
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-muted-foreground mb-4">No deals yet</p>
+                  <Link to="/deals/new">
+                    <Button>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Your First Deal
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Company</th>
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Stage</th>
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Value</th>
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Health</th>
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Next Step</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('company_name')}>
+                      <div className="flex items-center">Company<SortIcon column="company_name" /></div>
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('stage')}>
+                      <div className="flex items-center">Stage<SortIcon column="stage" /></div>
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('estimated_value')}>
+                      <div className="flex items-center">Value<SortIcon column="estimated_value" /></div>
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('health_score')}>
+                      <div className="flex items-center">Health<SortIcon column="health_score" /></div>
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('next_step_date')}>
+                      <div className="flex items-center">Next Step<SortIcon column="next_step_date" /></div>
+                    </th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">Owner</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
                   </tr>
@@ -338,13 +400,13 @@ export default function DealsPage() {
                 <tbody>
                   {deals.map((deal) => (
                     <tr key={deal.id} className="border-b border-border hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4">
-                        <div>
-                          <Link to={`/deals/${deal.id}`} className="font-medium hover:text-primary">
+                      <td className="py-3 px-4 max-w-xs">
+                        <div className="truncate">
+                          <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }} className="font-medium hover:text-primary truncate block" title={deal.company_name}>
                             {deal.company_name}
                           </Link>
                           {deal.industry && (
-                            <p className="text-sm text-muted-foreground">{deal.industry}</p>
+                            <p className="text-sm text-muted-foreground truncate" title={deal.industry}>{deal.industry}</p>
                           )}
                         </div>
                       </td>
@@ -375,13 +437,13 @@ export default function DealsPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
-                          <Link to={`/deals/${deal.id}`}>
-                            <Button variant="ghost" size="sm">
+                          <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }}>
+                            <Button variant="ghost" size="sm" aria-label={`View ${deal.company_name}`}>
                               <Eye className="w-4 h-4" />
                             </Button>
                           </Link>
-                          <Link to={`/deals/${deal.id}/edit`}>
-                            <Button variant="ghost" size="sm">
+                          <Link to={`/deals/${deal.id}/edit`} state={{ from: currentUrl }}>
+                            <Button variant="ghost" size="sm" aria-label={`Edit ${deal.company_name}`}>
                               <Pencil className="w-4 h-4" />
                             </Button>
                           </Link>
@@ -390,6 +452,7 @@ export default function DealsPage() {
                             size="sm"
                             onClick={() => deleteDeal(deal.id, deal.company_name)}
                             className="text-red-500 hover:text-red-600"
+                            aria-label={`Delete ${deal.company_name}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
