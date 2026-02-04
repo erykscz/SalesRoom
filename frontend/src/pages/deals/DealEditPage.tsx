@@ -198,7 +198,7 @@ export default function DealEditPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg">
+              <div role="alert" className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg">
                 {error}
               </div>
             )}

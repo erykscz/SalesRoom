@@ -339,7 +339,7 @@ export default function DealsPage() {
         </CardHeader>
         <CardContent>
           {error ? (
-            <div className="text-center py-8 text-red-500">
+            <div role="alert" className="text-center py-8 text-red-500">
               {error}
             </div>
           ) : loading ? (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, Save } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -54,6 +64,9 @@ export default function DealCreatePage() {
     priority: 'medium',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+  const formDirtyRef = useRef(false);
 
   // Check if form has any data entered (dirty state)
   const isFormDirty = useCallback(() => {
@@ -70,6 +83,11 @@ export default function DealCreatePage() {
     );
   }, [form]);
 
+  // Keep ref in sync with dirty state for click handler
+  useEffect(() => {
+    formDirtyRef.current = isFormDirty();
+  }, [isFormDirty]);
+
   // Handle browser refresh/close with beforeunload warning
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -85,6 +103,42 @@ export default function DealCreatePage() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [isFormDirty, isSubmitting]);
+
+  // Handle in-app navigation (sidebar links, etc.)
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const link = target.closest('a');
+
+      if (link && link.href && formDirtyRef.current && !isSubmitting) {
+        const url = new URL(link.href);
+        // Only intercept internal navigation
+        if (url.origin === window.location.origin && url.pathname !== window.location.pathname) {
+          e.preventDefault();
+          e.stopPropagation();
+          setPendingNavigation(url.pathname);
+          setShowUnsavedDialog(true);
+        }
+      }
+    };
+
+    document.addEventListener('click', handleClick, true);
+    return () => {
+      document.removeEventListener('click', handleClick, true);
+    };
+  }, [isSubmitting]);
+
+  const handleConfirmNavigation = () => {
+    if (pendingNavigation) {
+      setShowUnsavedDialog(false);
+      navigate(pendingNavigation);
+    }
+  };
+
+  const handleCancelNavigation = () => {
+    setShowUnsavedDialog(false);
+    setPendingNavigation(null);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -146,6 +200,26 @@ export default function DealCreatePage() {
 
   return (
     <div className="space-y-6">
+      {/* Unsaved Changes Dialog */}
+      <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes. Are you sure you want to leave this page? Your changes will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelNavigation}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmNavigation}>
+              Leave Page
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link to="/deals">
@@ -169,7 +243,7 @@ export default function DealCreatePage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg">
+              <div role="alert" className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg">
                 {error}
               </div>
             )}
