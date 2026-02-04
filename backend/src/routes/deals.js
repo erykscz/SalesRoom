@@ -7,7 +7,7 @@ const router = express.Router();
 // GET /api/deals - List all deals
 router.get('/', async (req, res) => {
   try {
-    const { stage, owner, health_score_min, health_score_max, search, archived } = req.query;
+    const { stage, owner, health_score_min, health_score_max, search, archived, sort_by, sort_order } = req.query;
 
     let sql = `
       SELECT d.*, u.name as owner_name, u.email as owner_email
@@ -55,7 +55,11 @@ router.get('/', async (req, res) => {
       sql += ' AND d.is_archived = 0';
     }
 
-    sql += ' ORDER BY d.created_at DESC';
+    // Sort by column (whitelist allowed columns to prevent SQL injection)
+    const allowedSortColumns = ['company_name', 'estimated_value', 'health_score', 'created_at', 'next_step_date', 'stage'];
+    const sortColumn = allowedSortColumns.includes(sort_by) ? sort_by : 'created_at';
+    const sortDirection = sort_order === 'asc' ? 'ASC' : 'DESC';
+    sql += ` ORDER BY d.${sortColumn} ${sortDirection}`;
 
     const deals = await all(sql, params);
 

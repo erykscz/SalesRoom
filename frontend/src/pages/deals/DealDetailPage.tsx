@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,6 +77,7 @@ export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { token } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [deal, setDeal] = useState<Deal | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +85,9 @@ export default function DealDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [noteContent, setNoteContent] = useState('');
   const [addingNote, setAddingNote] = useState(false);
+
+  // Store the referrer URL (deals list with filters) from location state
+  const backUrl = (location.state as { from?: string })?.from || '/deals';
 
   useEffect(() => {
     const fetchDeal = async () => {
@@ -203,7 +207,7 @@ export default function DealDetailPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Link to="/deals">
+          <Link to={backUrl}>
             <Button variant="ghost" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Deals
@@ -217,7 +221,7 @@ export default function DealDetailPage() {
             <p className="text-muted-foreground mb-4">
               {error || 'The deal you are looking for does not exist or has been deleted.'}
             </p>
-            <Link to="/deals">
+            <Link to={backUrl}>
               <Button>Return to Deals</Button>
             </Link>
           </CardContent>
@@ -231,7 +235,7 @@ export default function DealDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link to="/deals">
+          <Link to={backUrl}>
             <Button variant="ghost" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back

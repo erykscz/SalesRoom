@@ -1,0 +1,4 @@
+company_name,industry,stage,estimated_value,close_date,next_step_date,next_step_description,priority
+MALFORMED_TEST_1,Technology,new_signal,50000,2026-03-15,2026-03-01,Test description,medium
+MALFORMED_ROW_NO_QUOTES,"This has an unclosed quote
+MALFORMED_TEST_3,Healthcare,qualified,not_a_number,2026-04-15,2026-03-10,Test,high

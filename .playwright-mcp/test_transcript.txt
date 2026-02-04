@@ -1,0 +1,17 @@
+Meeting Transcript - Acme Corp Discovery Call
+Date: February 4, 2026
+Attendees: John Smith (CEO), Jane Doe (CTO), Bob Wilson (CFO)
+
+John: Thank you for joining us today. We've been struggling with our current sales process and looking for a better solution.
+
+Jane: Yes, the main issue is that our team spends too much time on manual data entry. It's really affecting productivity.
+
+Bob: From a financial perspective, we're seeing a lot of leakage in our pipeline. Deals are falling through the cracks because there's no visibility.
+
+John: Our biggest pain point is forecasting. We have no reliable way to predict revenue.
+
+Jane: We've tried Salesforce before but it was too complex for our team. We need something simpler.
+
+Bob: Budget-wise, we're looking at solutions under $50k annually. Is that feasible?
+
+John: If you can solve our forecasting problem, this would be a top priority. We need to make a decision by Q2.
