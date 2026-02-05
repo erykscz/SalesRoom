@@ -617,4 +617,43 @@ router.get('/:id/analytics', async (req, res) => {
   }
 });
 
+// POST /api/sales-rooms/public/:slug/track - Track section view from public room (no auth required)
+router.post('/public/:slug/track', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { section, role, time_spent_seconds } = req.body;
+
+    const salesRoom = await get(
+      'SELECT id, is_expired FROM sales_rooms WHERE public_url_slug = ?',
+      [slug]
+    );
+
+    if (!salesRoom) {
+      return res.status(404).json({ error: 'Sales Room not found' });
+    }
+
+    if (salesRoom.is_expired) {
+      return res.status(410).json({ error: 'This Sales Room has expired' });
+    }
+
+    // Validate section
+    const validSections = ['overview', 'cfo', 'cto', 'security', 'engineering', 'map', 'poll'];
+    if (!section || !validSections.includes(section)) {
+      return res.status(400).json({ error: 'Invalid section' });
+    }
+
+    // Log the view
+    await run(
+      `INSERT INTO sales_room_analytics (id, sales_room_id, visitor_role, section_viewed, time_spent_seconds)
+       VALUES (?, ?, ?, ?, ?)`,
+      [uuidv4(), salesRoom.id, role || null, section, time_spent_seconds || 0]
+    );
+
+    res.json({ success: true, message: 'View tracked' });
+  } catch (error) {
+    console.error('Error tracking view:', error);
+    res.status(500).json({ error: 'Failed to track view' });
+  }
+});
+
 export default router;
