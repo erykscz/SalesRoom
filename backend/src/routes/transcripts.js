@@ -73,7 +73,7 @@ router.post('/upload', async (req, res) => {
     }
 
     // Verify deal exists
-    const deal = await get('SELECT id, owner_id, company_name FROM deals WHERE id = ?', [deal_id]);
+    const deal = await get('SELECT id, owner_id, company_name, stage FROM deals WHERE id = ?', [deal_id]);
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
