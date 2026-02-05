@@ -42,6 +42,7 @@ interface DealAttention {
   health_score: number | null;
   priority: string;
   stage: string;
+  compelling_event_date: string | null;
 }
 
 export default function DashboardPage() {
@@ -134,6 +135,15 @@ export default function DashboardPage() {
 
   const isOverdue = (dateStr: string) => {
     return new Date(dateStr) < new Date();
+  };
+
+  const isCompellingEventApproaching = (dateStr: string | null) => {
+    if (!dateStr) return false;
+    const eventDate = new Date(dateStr);
+    const today = new Date();
+    const twoWeeksFromNow = new Date();
+    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+    return eventDate >= today && eventDate <= twoWeeksFromNow;
   };
 
   if (loading) {
@@ -274,7 +284,9 @@ export default function DashboardPage() {
                 {dealsNeedingAttention.map((deal) => (
                   <Link key={deal.id} to={`/deals/${deal.id}`} className="block">
                     <div className="flex items-center gap-3 hover:bg-accent/50 p-2 rounded-lg transition-colors">
-                      {isOverdue(deal.next_step_date) ? (
+                      {isCompellingEventApproaching(deal.compelling_event_date) ? (
+                        <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                      ) : isOverdue(deal.next_step_date) ? (
                         <Clock className="h-4 w-4 text-orange-500 shrink-0" />
                       ) : deal.health_score !== null && deal.health_score < 40 ? (
                         <AlertCircle className="h-4 w-4 text-yellow-500 shrink-0" />
@@ -284,11 +296,13 @@ export default function DashboardPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{deal.company_name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {isOverdue(deal.next_step_date)
-                            ? 'Next step overdue'
-                            : deal.health_score !== null && deal.health_score < 40
-                              ? `Health score: ${deal.health_score}%`
-                              : 'Needs attention'}
+                          {isCompellingEventApproaching(deal.compelling_event_date)
+                            ? 'Deadline approaching'
+                            : isOverdue(deal.next_step_date)
+                              ? 'Next step overdue'
+                              : deal.health_score !== null && deal.health_score < 40
+                                ? `Health score: ${deal.health_score}%`
+                                : 'Needs attention'}
                         </p>
                       </div>
                       <span className={`text-xs font-medium capitalize ${getPriorityColor(deal.priority)}`}>

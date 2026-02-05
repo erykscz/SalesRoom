@@ -1283,3 +1283,101 @@ Date: 2026-02-05
 
 ---
 End of Session 14
+
+## Session 15 - Compelling Event Tracking & More Feature Testing
+Date: 2026-02-05
+
+### Features Implemented:
+1. **Feature #191: Compelling event date tracking** ✅
+   - Added compelling_event_date to dashboard "dealsNeedingAttention" query
+   - Deals with compelling events within 14 days show "Deadline approaching"
+   - Modified backend dashboard.js to include compelling_event_date in query
+   - Modified frontend DashboardPage.tsx to show red AlertCircle for approaching deadlines
+   - Compelling event deals sorted first in "Needs Attention" section
+
+2. **Feature #231: Sales Room role-based tracking** ✅
+   - URL param ?role=cfo tracked correctly
+   - Tested by opening /room/:slug?role=cfo
+   - Analytics show "Unique Roles: 1" and "Role: cfo" in activity log
+   - Section views associated with role parameter
+
+3. **Feature #279: Sales Room client layout** ✅
+   - Public Sales Room has no sidebar (full-width design)
+   - Hero section with company name and proposal type
+   - Tab navigation for stakeholders (CFO, CTO, Security, Engineering)
+   - Chatbot button at bottom-right
+   - Footer with "Powered by Sales Room"
+
+4. **Feature #36: Modal close returns to previous state** ✅
+   - Transfer Deal modal opens on button click
+   - Clicking Cancel closes modal
+   - Deal detail page content still visible after closing
+
+### Features Skipped (unimplemented modules):
+- #196: List updates while on page 2 (pagination not implemented)
+- #210: Large file upload shows progress (transcript upload not implemented)
+- #211-216: Intent Scraper features (Intent Scraper is placeholder)
+- #218-225: Discovery features (Discovery is placeholder)
+- #226: Sales Room Markdown editor (editor not implemented)
+- #227: Sales Room auto-ROI calculation (Discovery not implemented)
+- #228: Sales Room RAG chatbot (chatbot not implemented)
+- #229: Sales Room Loom video integration (video embed not implemented)
+- #230: Sales Room Calendly integration (embed not implemented)
+- #232: Sales Room real-time analytics (time tracking not working)
+- #233: Sales Room Slack notification (Slack not integrated)
+- #234: Sales Room chatbot logs (chatbot not implemented)
+- #235: Sales Room Mutual Action Plan (MAP not interactive)
+- #236: Sales Room Consensus Poll (poll not implemented)
+- #237: Sales Room clone as template (clone not implemented)
+- #238: Sales Room expiry configuration (expiry UI not implemented)
+- #239: Sales Room password protection (password UI not implemented)
+- #240: Sales Room custom branding (branding upload not implemented)
+- #241-245: Battlecard features (Battlecards is placeholder)
+- #246-249: Knowledge Base features (Knowledge Base is placeholder)
+- #250-253: Manager features (Manager Dashboard is placeholder)
+- #255-257: Admin features (Audit Log, Settings, Export not implemented)
+- #259-260: Notification features (Notifications not implemented)
+- #263-265: Deal autopsy/re-engagement (AI features not implemented)
+- #278: Kanban board (not implemented)
+- #285: Avatar upload (not implemented)
+- #20: Knowledge base delete restricted (KB not implemented)
+- #32: Breadcrumbs (not implemented)
+- #34: Pagination navigation (pagination not implemented)
+- #35: Tab navigation within pages (deal detail has sections, not tabs)
+- #39: Kanban columns link (Kanban not implemented)
+- #42: Global search (not implemented)
+- #53: Deleted item removed from dropdowns (ICP not implemented)
+- #57: Lead converts to deal (leads/Intent Scraper not implemented)
+- #58: Health Score calculated from real data (complex calculation not implemented)
+- #62: Transcript insights stored (Discovery not implemented)
+- #64: Battlecard feedback (Battlecards not implemented)
+
+### Current Status:
+- **Features Passing**: 192 of 285
+- **Completion**: 67.4%
+- **Progress**: +4 features this session (188 → 192)
+
+### Files Modified This Session:
+- backend/src/routes/dashboard.js (compelling event date in attention query)
+- frontend/src/pages/DashboardPage.tsx (compelling event display logic)
+
+### Technical Notes:
+- Compelling event "approaching" defined as within 14 days from today
+- Dashboard "Needs Attention" now shows:
+  1. Compelling events approaching (red AlertCircle, "Deadline approaching")
+  2. Overdue next steps (orange Clock, "Next step overdue")
+  3. Low health score deals (yellow AlertCircle, health percentage)
+- Role tracking uses URL param ?role=value sent in POST /track request
+
+### Users Available for Testing:
+- admin@salesroom.local / Admin123! (role: admin)
+- userb@salesroom.local / UserB123! (role: rep)
+- manager@salesroom.local / Manager123! (role: manager)
+
+### Next Steps for Session 16:
+1. Commit current changes
+2. Continue testing remaining implemented features
+3. Target 70% completion
+
+---
+End of Session 15

@@ -87,22 +87,43 @@ router.get('/stats', async (req, res) => {
     const activityParams = isManager ? [] : [userId];
     const recentActivity = await all(activityQuery, activityParams);
 
-    // Get deals needing attention (overdue next steps or low health score)
+    // Get deals needing attention (overdue next steps, low health score, or compelling event approaching)
     const today = new Date().toISOString().split('T')[0];
+    // Define compelling event "approaching" as within 14 days
+    const twoWeeksFromNow = new Date();
+    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+    const twoWeeksFromNowStr = twoWeeksFromNow.toISOString().split('T')[0];
+
     const attentionQuery = isManager
-      ? `SELECT id, company_name, next_step_date, health_score, priority, stage
+      ? `SELECT id, company_name, next_step_date, health_score, priority, stage, compelling_event_date
          FROM deals
          WHERE is_archived = 0
-         AND (next_step_date < ? OR health_score < 40)
-         ORDER BY next_step_date ASC
+         AND (next_step_date < ? OR health_score < 40 OR (compelling_event_date IS NOT NULL AND compelling_event_date <= ? AND compelling_event_date >= ?))
+         ORDER BY
+           CASE
+             WHEN compelling_event_date IS NOT NULL AND compelling_event_date <= ? AND compelling_event_date >= ? THEN 0
+             WHEN next_step_date < ? THEN 1
+             ELSE 2
+           END,
+           compelling_event_date ASC,
+           next_step_date ASC
          LIMIT 5`
-      : `SELECT id, company_name, next_step_date, health_score, priority, stage
+      : `SELECT id, company_name, next_step_date, health_score, priority, stage, compelling_event_date
          FROM deals
          WHERE is_archived = 0 AND owner_id = ?
-         AND (next_step_date < ? OR health_score < 40)
-         ORDER BY next_step_date ASC
+         AND (next_step_date < ? OR health_score < 40 OR (compelling_event_date IS NOT NULL AND compelling_event_date <= ? AND compelling_event_date >= ?))
+         ORDER BY
+           CASE
+             WHEN compelling_event_date IS NOT NULL AND compelling_event_date <= ? AND compelling_event_date >= ? THEN 0
+             WHEN next_step_date < ? THEN 1
+             ELSE 2
+           END,
+           compelling_event_date ASC,
+           next_step_date ASC
          LIMIT 5`;
-    const attentionParams = isManager ? [today] : [userId, today];
+    const attentionParams = isManager
+      ? [today, twoWeeksFromNowStr, today, twoWeeksFromNowStr, today, today]
+      : [userId, today, twoWeeksFromNowStr, today, twoWeeksFromNowStr, today, today];
     const dealsNeedingAttention = await all(attentionQuery, attentionParams);
 
     // Get pipeline value
