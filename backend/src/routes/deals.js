@@ -1,13 +1,19 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { get, run, all } from '../db/database.js';
+import { createNotification } from './notifications.js';
 
 const router = express.Router();
 
 // GET /api/deals - List all deals
 router.get('/', async (req, res) => {
   try {
-    const { stage, owner, health_score_min, health_score_max, search, archived, sort_by, sort_order } = req.query;
+    const { stage, owner, health_score_min, health_score_max, search, archived, sort_by, sort_order, page, limit } = req.query;
+
+    // Pagination defaults
+    const pageNum = parseInt(page) || 1;
+    const pageSize = parseInt(limit) || 20;
+    const offset = (pageNum - 1) * pageSize;
 
     let sql = `
       SELECT d.*, u.name as owner_name, u.email as owner_email
@@ -15,44 +21,66 @@ router.get('/', async (req, res) => {
       LEFT JOIN users u ON d.owner_id = u.id
       WHERE 1=1
     `;
+
+    let countSql = `
+      SELECT COUNT(*) as total
+      FROM deals d
+      WHERE 1=1
+    `;
+
     const params = [];
+    const countParams = [];
 
     // Filter by stage
     if (stage) {
       sql += ' AND d.stage = ?';
+      countSql += ' AND d.stage = ?';
       params.push(stage);
+      countParams.push(stage);
     }
 
     // Filter by owner (managers can see all, reps can only see their own)
     if (req.user.role === 'rep' || req.user.role === 'sdr' || req.user.role === 'ae') {
       sql += ' AND d.owner_id = ?';
+      countSql += ' AND d.owner_id = ?';
       params.push(req.user.id);
+      countParams.push(req.user.id);
     } else if (owner) {
       sql += ' AND d.owner_id = ?';
+      countSql += ' AND d.owner_id = ?';
       params.push(owner);
+      countParams.push(owner);
     }
 
     // Filter by health score range
     if (health_score_min) {
       sql += ' AND d.health_score >= ?';
+      countSql += ' AND d.health_score >= ?';
       params.push(parseInt(health_score_min));
+      countParams.push(parseInt(health_score_min));
     }
     if (health_score_max) {
       sql += ' AND d.health_score <= ?';
+      countSql += ' AND d.health_score <= ?';
       params.push(parseInt(health_score_max));
+      countParams.push(parseInt(health_score_max));
     }
 
     // Filter by search term
     if (search) {
       sql += ' AND (d.company_name LIKE ? OR d.industry LIKE ?)';
+      countSql += ' AND (d.company_name LIKE ? OR d.industry LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
+      countParams.push(`%${search}%`, `%${search}%`);
     }
 
     // Filter archived
     if (archived === 'true') {
       sql += ' AND d.is_archived = 1';
+      countSql += ' AND d.is_archived = 1';
     } else {
       sql += ' AND d.is_archived = 0';
+      countSql += ' AND d.is_archived = 0';
     }
 
     // Sort by column (whitelist allowed columns to prevent SQL injection)
@@ -61,9 +89,27 @@ router.get('/', async (req, res) => {
     const sortDirection = sort_order === 'asc' ? 'ASC' : 'DESC';
     sql += ` ORDER BY d.${sortColumn} ${sortDirection}`;
 
-    const deals = await all(sql, params);
+    // Add pagination
+    sql += ` LIMIT ? OFFSET ?`;
+    params.push(pageSize, offset);
 
-    res.json({ deals });
+    // Get total count and deals
+    const countResult = await get(countSql, countParams);
+    const total = countResult?.total || 0;
+    const deals = await all(sql, params);
+    const totalPages = Math.ceil(total / pageSize);
+
+    res.json({
+      deals,
+      pagination: {
+        page: pageNum,
+        limit: pageSize,
+        total,
+        totalPages,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1
+      }
+    });
   } catch (error) {
     console.error('Error fetching deals:', error);
     res.status(500).json({ error: 'Failed to fetch deals' });
@@ -471,6 +517,14 @@ router.post('/:id/transfer', async (req, res) => {
         JSON.stringify({ fromOwnerId: existingDeal.owner_id, toOwnerId: newOwnerId }),
         req.user.id
       ]
+    );
+
+    // Create notification for new owner
+    await createNotification(
+      newOwnerId,
+      'deal_transferred',
+      `Deal "${existingDeal.company_name}" has been assigned to you by ${req.user.name}`,
+      `/deals/${id}`
     );
 
     res.json({ message: `Deal transferred to ${newOwner.name}` });

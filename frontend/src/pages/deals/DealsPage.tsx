@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 interface Deal {
   id: string;
@@ -18,6 +18,15 @@ interface Deal {
   priority: string;
   owner_name: string;
   created_at: string;
+}
+
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
 }
 
 const stageLabels: Record<string, string> = {
@@ -53,6 +62,7 @@ export default function DealsPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +75,8 @@ export default function DealsPage() {
   const [healthScoreFilter, setHealthScoreFilter] = useState<string>(searchParams.get('health') || 'all');
   const [sortBy, setSortBy] = useState<string>(searchParams.get('sort_by') || 'created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sort_order') as 'asc' | 'desc') || 'desc');
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1'));
+  const pageSize = 20;
 
   // Sync state changes to URL
   useEffect(() => {
@@ -74,12 +86,18 @@ export default function DealsPage() {
     if (healthScoreFilter && healthScoreFilter !== 'all') params.set('health', healthScoreFilter);
     if (sortBy && sortBy !== 'created_at') params.set('sort_by', sortBy);
     if (sortOrder && sortOrder !== 'desc') params.set('sort_order', sortOrder);
+    if (currentPage > 1) params.set('page', currentPage.toString());
     setSearchParams(params, { replace: true });
-  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, setSearchParams]);
+  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, setSearchParams]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchDeals();
-  }, [token, searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder]);
+  }, [token, searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage]);
 
   const fetchDeals = async () => {
     try {
@@ -95,6 +113,8 @@ export default function DealsPage() {
       if (healthScoreFilter === 'low') params.append('health_score_max', '39');
       if (sortBy) params.append('sort_by', sortBy);
       if (sortOrder) params.append('sort_order', sortOrder);
+      params.append('page', currentPage.toString());
+      params.append('limit', pageSize.toString());
 
       const response = await fetch(`${API_URL}/deals?${params.toString()}`, {
         headers: {
@@ -108,6 +128,7 @@ export default function DealsPage() {
 
       const data = await response.json();
       setDeals(data.deals || []);
+      setPagination(data.pagination || null);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -334,7 +355,7 @@ export default function DealsPage() {
         <CardHeader>
           <CardTitle>All Deals</CardTitle>
           <CardDescription>
-            {loading ? 'Loading...' : `${deals.length} deal${deals.length !== 1 ? 's' : ''} found`}
+            {loading ? 'Loading...' : `${pagination?.total || deals.length} deal${(pagination?.total || deals.length) !== 1 ? 's' : ''} found`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -374,6 +395,7 @@ export default function DealsPage() {
               )}
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -463,6 +485,84 @@ export default function DealsPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-4 border-t border-border">
+                <div className="text-sm text-muted-foreground">
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
+                  {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+                  {pagination.total} deals
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={!pagination.hasPrev}
+                    aria-label="First page"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={!pagination.hasPrev}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                      // Show pages around current page
+                      let pageNum;
+                      if (pagination.totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= pagination.totalPages - 2) {
+                        pageNum = pagination.totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                          className="w-8"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={!pagination.hasNext}
+                    aria-label="Next page"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(pagination.totalPages)}
+                    disabled={!pagination.hasNext}
+                    aria-label="Last page"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>
