@@ -17,6 +17,7 @@ import leadRoutes from './routes/leads.js';
 import intentScraperRoutes from './routes/intent-scraper.js';
 import transcriptRoutes from './routes/transcripts.js';
 import salesRoomRoutes from './routes/sales-rooms.js';
+import salesRoomPublicRoutes from './routes/sales-rooms-public.js';
 import battlecardRoutes from './routes/battlecards.js';
 import knowledgeRoutes from './routes/knowledge.js';
 import notificationRoutes from './routes/notifications.js';
@@ -50,9 +51,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Public routes
+// Public routes (no auth required)
 app.use('/api/auth', authRoutes);
-app.use('/api/sales-rooms/public', salesRoomRoutes);
+app.use('/api/sales-rooms/public', salesRoomPublicRoutes);
 
 // Protected routes
 app.use('/api/users', authMiddleware, userRoutes);

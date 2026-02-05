@@ -22,6 +22,7 @@ import {
   X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -201,9 +202,7 @@ export default function MainLayout() {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <h1 className="text-lg font-semibold capitalize">
-              {location.pathname.split('/').filter(Boolean).pop()?.replace(/-/g, ' ') || 'Dashboard'}
-            </h1>
+            <Breadcrumbs />
           </div>
 
           <div className="flex items-center gap-2">
