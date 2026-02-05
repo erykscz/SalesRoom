@@ -2159,3 +2159,122 @@ The application has reached a hard plateau at 73% completion. All remaining ~77 
 
 ---
 End of Session 24
+
+## Session 25: Leads CRUD Implementation
+
+### Date: 2026-02-05
+
+### Accomplishments:
+
+1. **Implemented Leads CRUD Backend API** (backend/src/routes/leads.js)
+   - GET /api/leads - List leads with search, status filter, and sorting
+   - POST /api/leads - Create new lead manually
+   - GET /api/leads/:id - Get single lead
+   - PUT /api/leads/:id - Update lead (owner/admin only)
+   - DELETE /api/leads/:id - Delete lead (owner/admin only)
+   - POST /api/leads/:id/convert-to-deal - Convert lead to deal
+
+2. **Implemented Intent Scraper Frontend UI** (frontend/src/pages/intent-scraper/IntentScraperPage.tsx)
+   - Full CRUD interface for leads
+   - Search and status filter
+   - Create/Edit form with all fields (company, industry, tech stack, pain points, confidence, etc.)
+   - Delete with confirmation dialog
+   - Convert to Deal button
+   - Stats summary (Total, New, Qualified, Converted)
+   - Empty state with call-to-action
+
+3. **Fixed Backend Database API Usage**
+   - Changed from async/await to callback style to match SQLite library usage
+   - Fixed server crashes caused by incorrect database method calls
+
+4. **Features Tested and Verified**
+   - #71: Lead CRUD - Create operation ✅
+     - Created lead "TEST_LEAD_71_VERIFY" with company, industry, tech stack, pain points
+     - Verified lead appears in list with correct data
+     - Screenshot: lead-crud-create-success.png
+
+   - #72: Lead CRUD - Update status ✅
+     - Changed lead status from "New" to "Contacted"
+     - Verified status persisted after page refresh
+
+   - #73: Lead CRUD - Delete operation ✅
+     - Created and deleted "DELETE_ME_TEST_73"
+     - Verified lead removed from list
+
+   - #57: Lead converts to deal correctly ✅
+     - Clicked Convert button on lead
+     - Confirmed dialog appeared
+     - Lead status changed to "Qualified" with "Converted to Deal" badge
+     - Deal "TEST_LEAD_71_VERIFY" appeared in Deals page
+     - Screenshot: lead-converted-to-deal.png
+
+### Features Marked as Passing This Session:
+- #71: Lead CRUD - Create operation ✅
+- #72: Lead CRUD - Update status ✅
+- #73: Lead CRUD - Delete operation ✅
+- #57: Lead converts to deal correctly ✅
+
+### Current Status:
+- **Features Passing**: 212 of 285
+- **Completion**: 74.4%
+- **Progress**: +4 features this session (208 → 212)
+- **Milestone**: Exceeded 74% completion!
+
+### Files Modified This Session:
+- backend/src/routes/leads.js (full CRUD implementation)
+- frontend/src/pages/intent-scraper/IntentScraperPage.tsx (full UI implementation)
+- frontend/vite.config.ts (proxy port configuration)
+
+### Technical Notes:
+- Leads API uses callback style with SQLite (not async/await)
+- Lead status options: new, contacted, qualified, nurturing, not_interested
+- Converting lead to deal:
+  - Creates deal in "qualified" stage
+  - Sets source to "intent_scraper"
+  - Updates lead status to "qualified"
+  - Links lead to deal via deal_id
+  - Creates activity log for deal
+- Tech stack stored as JSON array in database
+
+### Features Skipped (require unimplemented modules):
+- #74-76: ICP Template CRUD (ICP Templates not implemented)
+- #77: Transcript upload workflow (Discovery placeholder)
+
+### Updated Module Status:
+**Fully Implemented & Working:**
+- ✅ Authentication (login, logout, password reset, roles)
+- ✅ User Management (CRUD, GDPR delete)
+- ✅ Deals (full CRUD, filters, search, sort, export/import)
+- ✅ Sales Rooms (creation wizard, analytics, public URLs, Calendly)
+- ✅ Knowledge Base (CRUD, search, tags, edit restrictions)
+- ✅ Battlecards (CRUD, ARC framework, category filter, feedback)
+- ✅ **Leads/Intent Scraper** (CRUD, search, filter, convert to deal) **NEW!**
+- ✅ Dashboard (real metrics, needs attention, recent activity)
+- ✅ Responsive design (mobile, tablet, desktop)
+- ✅ Accessibility (focus rings, ARIA labels)
+- ✅ Error handling (toasts, validation, 404)
+
+**Still Placeholder/Not Implemented:**
+- ICP Templates (part of Intent Scraper)
+- AI-powered lead search (Intent Scraper advanced)
+- Discovery (transcript upload & AI analysis)
+- Manager Dashboard (team metrics)
+- Notifications
+- Pagination
+- Kanban board
+- File upload
+- Global search
+
+### Users Available for Testing:
+- admin@salesroom.local / Admin123! (role: admin)
+- userb@salesroom.local / UserB123! (role: rep)
+- manager@salesroom.local / Manager123! (role: manager)
+
+### Next Steps for Session 26:
+1. Continue testing remaining features
+2. Consider implementing ICP Templates for more Lead features
+3. Or implement pagination for list views
+4. Target 75% completion
+
+---
+End of Session 25
