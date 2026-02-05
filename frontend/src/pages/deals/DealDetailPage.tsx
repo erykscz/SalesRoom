@@ -17,7 +17,8 @@ import {
   Flag,
   TrendingUp,
   Send,
-  MessageSquare
+  MessageSquare,
+  UserPlus
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -45,6 +46,13 @@ interface Activity {
   type: string;
   description: string;
   created_at: string;
+}
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
 }
 
 const stageLabels: Record<string, string> = {
@@ -85,6 +93,11 @@ export default function DealDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [noteContent, setNoteContent] = useState('');
   const [addingNote, setAddingNote] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [transferring, setTransferring] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   // Store the referrer URL (deals list with filters) from location state
   const backUrl = (location.state as { from?: string })?.from || '/deals';
@@ -144,6 +157,70 @@ export default function DealDetailPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete deal');
       setDeleting(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      setLoadingUsers(true);
+      const response = await fetch(`${API_URL}/users`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // The API returns an array directly, not { users: [...] }
+        const usersArray = Array.isArray(data) ? data : (data.users || []);
+        // Filter out the current owner
+        const filteredUsers = usersArray.filter((u: User) => u.id !== deal?.owner_id);
+        setUsers(filteredUsers);
+      }
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleOpenTransferModal = () => {
+    setShowTransferModal(true);
+    fetchUsers();
+  };
+
+  const handleTransfer = async () => {
+    if (!selectedUserId) {
+      alert('Please select a user to transfer the deal to');
+      return;
+    }
+
+    try {
+      setTransferring(true);
+      const response = await fetch(`${API_URL}/deals/${id}/transfer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ newOwnerId: selectedUserId }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to transfer deal');
+      }
+
+      const data = await response.json();
+      alert(data.message || 'Deal transferred successfully');
+
+      // Refresh the page to show updated owner
+      window.location.reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to transfer deal');
+    } finally {
+      setTransferring(false);
+      setShowTransferModal(false);
     }
   };
 
@@ -254,6 +331,10 @@ export default function DealDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleOpenTransferModal}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Transfer Deal
+          </Button>
           <Link to={`/deals/${id}/edit`}>
             <Button variant="outline">
               <Edit className="w-4 h-4 mr-2" />
@@ -412,6 +493,73 @@ export default function DealDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Transfer Deal Modal */}
+      {showTransferModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>Transfer Deal</CardTitle>
+              <CardDescription>
+                Transfer "{deal.company_name}" to another sales rep
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loadingUsers ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : users.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">
+                  No other users available for transfer
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select New Owner</label>
+                  <select
+                    className="w-full p-2 border rounded-md bg-background"
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                  >
+                    <option value="">-- Select a user --</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.email}) - {user.role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowTransferModal(false);
+                    setSelectedUserId('');
+                  }}
+                  disabled={transferring}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleTransfer}
+                  disabled={transferring || !selectedUserId}
+                >
+                  {transferring ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Transferring...
+                    </>
+                  ) : (
+                    'Transfer'
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
