@@ -91,6 +91,24 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Company name is required' });
     }
 
+    // Validate text length
+    if (company_name.length < 2) {
+      return res.status(400).json({ error: 'Company name must be at least 2 characters' });
+    }
+    if (company_name.length > 255) {
+      return res.status(400).json({ error: 'Company name must not exceed 255 characters' });
+    }
+
+    // Validate industry length if provided
+    if (industry && industry.length > 100) {
+      return res.status(400).json({ error: 'Industry must not exceed 100 characters' });
+    }
+
+    // Validate next_step_description length if provided
+    if (next_step_description && next_step_description.length > 1000) {
+      return res.status(400).json({ error: 'Next step description must not exceed 1000 characters' });
+    }
+
     if (!next_step_date) {
       return res.status(400).json({ error: 'Next step date is required' });
     }
@@ -251,6 +269,20 @@ router.put('/:id', async (req, res) => {
     // Validate required fields
     if (company_name !== undefined && !company_name) {
       return res.status(400).json({ error: 'Company name cannot be empty' });
+    }
+
+    // Validate text length
+    if (company_name !== undefined && company_name.length < 2) {
+      return res.status(400).json({ error: 'Company name must be at least 2 characters' });
+    }
+    if (company_name !== undefined && company_name.length > 255) {
+      return res.status(400).json({ error: 'Company name must not exceed 255 characters' });
+    }
+    if (industry !== undefined && industry && industry.length > 100) {
+      return res.status(400).json({ error: 'Industry must not exceed 100 characters' });
+    }
+    if (next_step_description !== undefined && next_step_description && next_step_description.length > 1000) {
+      return res.status(400).json({ error: 'Next step description must not exceed 1000 characters' });
     }
 
     if (next_step_date !== undefined && !next_step_date) {

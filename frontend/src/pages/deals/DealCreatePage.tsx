@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Save } from 'lucide-react';
 import {
   AlertDialog,
@@ -50,6 +51,7 @@ const priorities = [
 export default function DealCreatePage() {
   const { token } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<DealForm>({
@@ -149,8 +151,33 @@ export default function DealCreatePage() {
     e.preventDefault();
     setError(null);
 
-    if (!form.company_name.trim()) {
+    const companyName = form.company_name.trim();
+    if (!companyName) {
       setError('Company name is required');
+      return;
+    }
+
+    // Validate min length
+    if (companyName.length < 2) {
+      setError('Company name must be at least 2 characters');
+      return;
+    }
+
+    // Validate max length
+    if (companyName.length > 255) {
+      setError('Company name must not exceed 255 characters');
+      return;
+    }
+
+    // Validate industry length
+    if (form.industry.trim().length > 100) {
+      setError('Industry must not exceed 100 characters');
+      return;
+    }
+
+    // Validate next step description length
+    if (form.next_step_description.trim().length > 1000) {
+      setError('Next step description must not exceed 1000 characters');
       return;
     }
 
@@ -190,6 +217,10 @@ export default function DealCreatePage() {
 
       const data = await response.json();
       setIsSubmitting(true);
+      toast({
+        title: 'Success',
+        description: 'Deal created successfully',
+      });
       navigate(`/deals/${data.deal.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -259,7 +290,10 @@ export default function DealCreatePage() {
                   onChange={handleChange}
                   placeholder="Acme Corp"
                   required
+                  minLength={2}
+                  maxLength={255}
                 />
+                <p className="text-xs text-muted-foreground">2-255 characters</p>
               </div>
 
               {/* Industry */}
@@ -271,6 +305,7 @@ export default function DealCreatePage() {
                   value={form.industry}
                   onChange={handleChange}
                   placeholder="Technology"
+                  maxLength={100}
                 />
               </div>
 
