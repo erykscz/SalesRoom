@@ -18,7 +18,13 @@ import {
   TrendingUp,
   Send,
   MessageSquare,
-  UserPlus
+  UserPlus,
+  Target,
+  AlertCircle,
+  CheckCircle2,
+  Users,
+  FileText,
+  Presentation
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -272,6 +278,20 @@ export default function DealDetailPage() {
     }).format(value);
   };
 
+  const getHealthScoreColor = (score: number | null) => {
+    if (score === null) return 'text-gray-400';
+    if (score >= 70) return 'text-green-500';
+    if (score >= 40) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
+  const getHealthScoreBg = (score: number | null) => {
+    if (score === null) return 'bg-gray-500/10';
+    if (score >= 70) return 'bg-green-500/10';
+    if (score >= 40) return 'bg-yellow-500/10';
+    return 'bg-red-500/10';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -348,54 +368,110 @@ export default function DealDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Info */}
-        <div className="lg:col-span-2 space-y-6">
+      {/* 3-Column Layout - The Cockpit */}
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr_300px] gap-6">
+        {/* Left Column - Deal Metadata & Quick Actions (300px) */}
+        <div className="space-y-6">
+          {/* Deal Metadata Card */}
           <Card>
-            <CardHeader>
-              <CardTitle>Deal Overview</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Deal Information</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="flex items-start gap-3">
-                  <DollarSign className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Estimated Value</p>
-                    <p className="font-semibold">{formatCurrency(deal.estimated_value)}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <TrendingUp className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Health Score</p>
-                    <p className="font-semibold">{deal.health_score !== null ? `${deal.health_score}%` : '-'}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Flag className={`h-5 w-5 mt-0.5 ${priorityColors[deal.priority]}`} />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Priority</p>
-                    <p className="font-semibold capitalize">{deal.priority}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Close Date</p>
-                    <p className="font-semibold">{formatDate(deal.close_date)}</p>
-                  </div>
-                </div>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Owner</p>
+                <p className="font-medium">{deal.owner_name || 'Unknown'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Stage</p>
+                <p className="font-medium">{stageLabels[deal.stage] || deal.stage}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Industry</p>
+                <p className="font-medium">{deal.industry || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Estimated Value</p>
+                <p className="font-medium text-lg">{formatCurrency(deal.estimated_value)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Priority</p>
+                <p className={`font-medium capitalize ${priorityColors[deal.priority]}`}>{deal.priority}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Close Date</p>
+                <p className="font-medium">{formatDate(deal.close_date)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Created</p>
+                <p className="font-medium">{formatDate(deal.created_at)}</p>
               </div>
             </CardContent>
           </Card>
 
+          {/* Health Score Widget */}
+          <Card className={getHealthScoreBg(deal.health_score)}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Health Score
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-center">
+                <div className={`text-5xl font-bold ${getHealthScoreColor(deal.health_score)}`}>
+                  {deal.health_score !== null ? `${deal.health_score}%` : '-'}
+                </div>
+              </div>
+              <p className="text-center text-sm text-muted-foreground mt-2">
+                {deal.health_score !== null ? (
+                  deal.health_score >= 70 ? 'Healthy' :
+                  deal.health_score >= 40 ? 'Needs Attention' : 'At Risk'
+                ) : 'Not calculated'}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Quick Actions */}
           <Card>
-            <CardHeader>
-              <CardTitle>Next Steps</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Link to={`/discovery?deal=${id}`} className="block">
+                <Button variant="outline" className="w-full justify-start">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Upload Transcript
+                </Button>
+              </Link>
+              <Link to={`/sales-rooms/create?deal=${id}`} className="block">
+                <Button variant="outline" className="w-full justify-start">
+                  <Presentation className="w-4 h-4 mr-2" />
+                  Create Sales Room
+                </Button>
+              </Link>
+              <Link to={`/battlecards?deal=${id}`} className="block">
+                <Button variant="outline" className="w-full justify-start">
+                  <Target className="w-4 h-4 mr-2" />
+                  Prep Battlecard
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Center Column - Activity Feed Timeline (flexible) */}
+        <div className="space-y-6">
+          {/* Next Steps Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Next Steps
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-start gap-3">
-                <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div>
                   <p className="text-sm text-muted-foreground">Due: {formatDate(deal.next_step_date)}</p>
                   <p className="mt-1">{deal.next_step_description || 'No next step defined'}</p>
@@ -414,10 +490,10 @@ export default function DealDetailPage() {
           </Card>
 
           {/* Activity Timeline */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Activity</CardTitle>
-              <CardDescription>Recent activity for this deal</CardDescription>
+          <Card className="flex-1">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Activity Feed</CardTitle>
+              <CardDescription>Chronological log of all actions</CardDescription>
             </CardHeader>
             <CardContent>
               {/* Add Note Form */}
@@ -444,7 +520,7 @@ export default function DealDetailPage() {
               {activities.length === 0 ? (
                 <p className="text-muted-foreground text-center py-4">No activity yet</p>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[500px] overflow-y-auto">
                   {activities.map((activity) => (
                     <div key={activity.id} className="flex items-start gap-3 pb-4 border-b last:border-0">
                       <div className="w-2 h-2 rounded-full bg-blue-500 mt-2" />
@@ -462,33 +538,74 @@ export default function DealDetailPage() {
           </Card>
         </div>
 
-        {/* Sidebar */}
+        {/* Right Column - Proces Intelligence Panel (300px) */}
         <div className="space-y-6">
+          {/* Pain Points */}
           <Card>
-            <CardHeader>
-              <CardTitle>Details</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-500" />
+                Pain Points
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Owner</p>
-                <p className="font-medium">{deal.owner_name || 'Unknown'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Stage</p>
-                <p className="font-medium">{stageLabels[deal.stage] || deal.stage}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Industry</p>
-                <p className="font-medium">{deal.industry || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Created</p>
-                <p className="font-medium">{formatDate(deal.created_at)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Last Updated</p>
-                <p className="font-medium">{formatDate(deal.updated_at)}</p>
-              </div>
+            <CardContent>
+              <p className="text-sm text-muted-foreground italic">
+                Upload a transcript to extract pain points automatically
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Power (Stakeholders) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-4 w-4 text-blue-500" />
+                Stakeholders
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground italic">
+                Upload a transcript to identify stakeholders
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Risk (Red Flags) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                Red Flags
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground italic">
+                Upload a transcript to detect red flags
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Next Step Summary */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                Action Items
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {deal.next_step_description ? (
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-2" />
+                    <p className="text-sm">{deal.next_step_description}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">
+                  No action items defined
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

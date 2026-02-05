@@ -172,7 +172,7 @@ router.post('/upload', async (req, res) => {
   }
 });
 
-// POST /api/transcripts/analyze - Analyze a transcript (placeholder for AI)
+// POST /api/transcripts/analyze - Analyze a transcript using Nessencja framework
 router.post('/analyze', async (req, res) => {
   try {
     const { transcript_id } = req.body;
@@ -198,41 +198,100 @@ router.post('/analyze', async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // For now, create placeholder insights
-    // In production, this would call the AI agent to analyze the transcript
-    const placeholderInsights = {
-      pain_points: ['Analysis requires AI integration'],
-      stakeholders: [],
-      red_flags: [],
-      next_steps: ['Complete AI integration for full analysis']
-    };
+    // Extract insights using Nessencja framework (Pain/Power/Risk/Next Steps)
+    const content = transcript.cleaned_content || transcript.raw_content || '';
+    const insights = extractNessencjaInsights(content);
 
     await run(
       `UPDATE transcripts
        SET processed = 1, insights = ?, processed_at = datetime("now")
        WHERE id = ?`,
-      [JSON.stringify(placeholderInsights), transcript_id]
+      [JSON.stringify(insights), transcript_id]
     );
 
     // Create activity log
     await run(
       `INSERT INTO activities (id, deal_id, activity_type, description, created_by)
        VALUES (?, ?, ?, ?, ?)`,
-      [uuidv4(), transcript.deal_id, 'transcript_analyzed', 'Transcript analysis completed', req.user.id]
+      [uuidv4(), transcript.deal_id, 'transcript_analyzed', 'Transcript analysis completed (Nessencja framework)', req.user.id]
     );
 
     const updatedTranscript = await get('SELECT * FROM transcripts WHERE id = ?', [transcript_id]);
 
     res.json({
       transcript: updatedTranscript,
-      insights: placeholderInsights,
-      message: 'Transcript analysis complete (placeholder - AI integration required)'
+      insights: insights,
+      message: 'Transcript analysis complete using Nessencja framework'
     });
   } catch (error) {
     console.error('Error analyzing transcript:', error);
     res.status(500).json({ error: 'Failed to analyze transcript' });
   }
 });
+
+// Helper function to extract insights using Nessencja framework
+function extractNessencjaInsights(content) {
+  const lowerContent = content.toLowerCase();
+  const lines = content.split(/[\n.!?]+/).filter(line => line.trim().length > 10);
+
+  // Pain Points extraction - look for problem/challenge indicators
+  const painKeywords = ['challenge', 'problem', 'issue', 'struggle', 'difficult', 'pain', 'frustrat', 'concern', 'worry', 'need', 'want', 'lack', 'missing', 'slow', 'expensive', 'costly', 'manual', 'inefficient'];
+  const painPoints = lines
+    .filter(line => painKeywords.some(keyword => line.toLowerCase().includes(keyword)))
+    .slice(0, 5)
+    .map(line => line.trim().substring(0, 200));
+
+  // Stakeholders extraction - look for names and roles
+  const roleKeywords = ['ceo', 'cto', 'cfo', 'coo', 'vp', 'director', 'manager', 'head of', 'lead', 'chief', 'president', 'owner', 'founder', 'decision maker', 'stakeholder'];
+  const stakeholders = [];
+  const namePattern = /(?:I'm|I am|this is|my name is|speaking with|talking to)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi;
+  const speakerPattern = /^([A-Z][a-z]+):/gm;
+
+  // Extract speaker names from transcript format
+  const speakerMatches = content.match(speakerPattern) || [];
+  const uniqueSpeakers = [...new Set(speakerMatches.map(s => s.replace(':', '')))];
+  uniqueSpeakers.forEach(name => {
+    stakeholders.push({ name, role: 'Participant', influence: 'medium' });
+  });
+
+  // Look for role mentions
+  lines.forEach(line => {
+    roleKeywords.forEach(role => {
+      if (line.toLowerCase().includes(role)) {
+        const roleMatch = line.match(new RegExp(`(\\w+)\\s+(?:is|as)?\\s*(?:the|our)?\\s*${role}`, 'i'));
+        if (roleMatch && roleMatch[1]) {
+          const existingIdx = stakeholders.findIndex(s => s.name.toLowerCase() === roleMatch[1].toLowerCase());
+          if (existingIdx >= 0) {
+            stakeholders[existingIdx].role = role.charAt(0).toUpperCase() + role.slice(1);
+            stakeholders[existingIdx].influence = 'high';
+          }
+        }
+      }
+    });
+  });
+
+  // Red Flags extraction - look for warning signs
+  const redFlagKeywords = ['budget', 'timeline', 'competitor', 'delay', 'postpone', 'not sure', 'uncertain', 'hesitat', 'concern', 'risk', 'legal', 'compliance', 'approval', 'committee', 'evaluate', 'other options', 'alternatives', 'not ready', 'later', 'maybe', 'possibly'];
+  const redFlags = lines
+    .filter(line => redFlagKeywords.some(keyword => line.toLowerCase().includes(keyword)))
+    .slice(0, 5)
+    .map(line => line.trim().substring(0, 200));
+
+  // Next Steps extraction - look for action items
+  const nextStepKeywords = ['schedule', 'meeting', 'call', 'demo', 'follow up', 'send', 'share', 'review', 'discuss', 'next step', 'action', 'proposal', 'quote', 'trial', 'pilot', 'poc', 'let\'s', 'we should', 'we\'ll', 'i\'ll', 'will'];
+  const nextSteps = lines
+    .filter(line => nextStepKeywords.some(keyword => line.toLowerCase().includes(keyword)))
+    .slice(0, 5)
+    .map(line => line.trim().substring(0, 200));
+
+  // Ensure we have at least some content in each section
+  return {
+    pain_points: painPoints.length > 0 ? painPoints : ['No specific pain points identified - review transcript manually'],
+    stakeholders: stakeholders.length > 0 ? stakeholders.slice(0, 5) : [{ name: 'Unknown', role: 'Contact', influence: 'medium' }],
+    red_flags: redFlags.length > 0 ? redFlags : ['No red flags detected'],
+    next_steps: nextSteps.length > 0 ? nextSteps : ['Schedule follow-up discussion to clarify requirements']
+  };
+}
 
 // GET /api/transcripts/:id - Get a specific transcript
 router.get('/:id', async (req, res) => {
