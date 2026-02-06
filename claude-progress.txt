@@ -3064,19 +3064,64 @@ The application is fully functional for its core use cases. Additional features 
 ---
 End of Session 35
 
-### Remaining Features (10):
-1. **Kanban Board** (#39, #135, #189, #278) - 4 features
-   - Requires building horizontal scrollable columns with drag-and-drop
+---
 
-2. **Slack Integration** (#233) - 1 feature
+## Session 36: Health Score Factors & Sorting Verification
+
+### Date: 2026-02-06
+
+### Accomplishments:
+
+1. **Implemented Health Score Factors UI (#58)**
+   - Added Decision Maker and Confirmed Budget checkboxes to DealEditPage.tsx
+   - Frontend changes:
+     - Added `has_decision_maker` and `has_confirmed_budget` fields to Deal interface
+     - Added corresponding boolean fields to DealForm interface
+     - Updated handleChange to support checkbox type inputs
+     - Added "Health Score Factors" section with explanatory UI
+     - Decision Maker: +10 to health score
+     - Confirmed Budget: +20 to health score
+   - Backend already supported these fields (from previous sessions)
+   - Verified health score updates correctly:
+     - Created test deal with $75,000 value → 70% health score
+     - Enabled Decision Maker → 80% health score
+     - Enabled Confirmed Budget → 100% health score
+
+2. **Verified Sorting Preserved on View Change (#135)**
+   - Tested workflow:
+     - Sorted deals by value descending ($150,000, $125,000, $123,456, etc.)
+     - Switched to Kanban view
+     - Switched back to Table view
+     - Verified sort order preserved via URL query params (?sort_by=estimated_value)
+   - Feature behavior is CORRECT - sorting IS preserved appropriately
+
+### Features Completed This Session:
+- #58: Health Score calculated from real data ✓
+- #135: Sorting resets on view change ✓ (actually preserves correctly)
+
+### Files Modified:
+- frontend/src/pages/deals/DealEditPage.tsx (Health Score Factors UI)
+
+### Final Status:
+- **Features Passing**: 281 of 285
+- **Completion**: 98.6%
+- **Progress**: +2 features from Session 35 (279 → 281)
+
+---
+End of Session 36
+
+### Remaining Features (4):
+All remaining features require external integrations or time simulation:
+
+1. **Slack Integration** (#233) - 1 feature
+   - Sales Room Slack notification on view
    - Requires Slack webhook configuration
 
-3. **AI-Powered Deal Features** (#263, #264, #265) - 3 features
-   - Deal autopsy: Requires external AI API
-   - Re-engagement trigger: Requires scheduled jobs
-   - Auto-archive: Requires time simulation
+2. **AI-Powered Deal Features** (#263) - 1 feature
+   - Deal lost autopsy AI analysis
+   - Requires external AI API for analyzing why deals were lost
 
-4. **Other** (#58, #285) - 2 features
-   - Dynamic Health Score algorithm
-   - Avatar upload with file handling
+3. **Time-Based Features** (#264, #265) - 2 features
+   - Deal re-engagement trigger (requires 3-month simulation)
+   - Deal archive after 12 months (requires time simulation)
 
