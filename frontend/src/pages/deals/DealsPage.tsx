@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore } from 'lucide-react';
 
 interface Deal {
   id: string;
@@ -18,6 +18,7 @@ interface Deal {
   priority: string;
   owner_name: string;
   created_at: string;
+  is_archived?: number;
 }
 
 interface Pagination {
@@ -76,6 +77,8 @@ export default function DealsPage() {
   const [sortBy, setSortBy] = useState<string>(searchParams.get('sort_by') || 'created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sort_order') as 'asc' | 'desc') || 'desc');
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1'));
+  const [showArchived, setShowArchived] = useState(searchParams.get('archived') === 'true');
+  const [dateFilter, setDateFilter] = useState<string>(searchParams.get('date_filter') || 'all');
   const pageSize = 20;
 
   // Sync state changes to URL
@@ -87,17 +90,19 @@ export default function DealsPage() {
     if (sortBy && sortBy !== 'created_at') params.set('sort_by', sortBy);
     if (sortOrder && sortOrder !== 'desc') params.set('sort_order', sortOrder);
     if (currentPage > 1) params.set('page', currentPage.toString());
+    if (showArchived) params.set('archived', 'true');
+    if (dateFilter && dateFilter !== 'all') params.set('date_filter', dateFilter);
     setSearchParams(params, { replace: true });
-  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, setSearchParams]);
+  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, showArchived, dateFilter, setSearchParams]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder]);
+  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, showArchived, dateFilter]);
 
   useEffect(() => {
     fetchDeals();
-  }, [token, searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage]);
+  }, [token, searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, showArchived, dateFilter]);
 
   const fetchDeals = async () => {
     try {
@@ -111,6 +116,8 @@ export default function DealsPage() {
         params.append('health_score_max', '69');
       }
       if (healthScoreFilter === 'low') params.append('health_score_max', '39');
+      if (showArchived) params.append('archived', 'true');
+      if (dateFilter && dateFilter !== 'all') params.append('date_filter', dateFilter);
       if (sortBy) params.append('sort_by', sortBy);
       if (sortOrder) params.append('sort_order', sortOrder);
       params.append('page', currentPage.toString());
@@ -223,6 +230,54 @@ export default function DealsPage() {
       fetchDeals();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete deal');
+    }
+  };
+
+  const archiveDeal = async (id: string, companyName: string) => {
+    if (!confirm(`Are you sure you want to archive the deal for "${companyName}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/deals/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_archived: true }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to archive deal');
+      }
+
+      // Refresh deals list
+      fetchDeals();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to archive deal');
+    }
+  };
+
+  const unarchiveDeal = async (id: string) => {
+    try {
+      const response = await fetch(`${API_URL}/deals/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_archived: false }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to restore deal');
+      }
+
+      // Refresh deals list
+      fetchDeals();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to restore deal');
     }
   };
 
@@ -346,6 +401,26 @@ export default function DealsPage() {
                 <option value="low">Low (&lt;40)</option>
               </select>
             </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Created:</span>
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="bg-background border border-input rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="this_week">This Week</option>
+              </select>
+            </div>
+            <Button
+              variant={showArchived ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowArchived(!showArchived)}
+            >
+              <Archive className="w-4 h-4 mr-2" />
+              {showArchived ? 'Showing Archived' : 'Show Archived'}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -469,6 +544,27 @@ export default function DealsPage() {
                               <Pencil className="w-4 h-4" />
                             </Button>
                           </Link>
+                          {showArchived ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => unarchiveDeal(deal.id)}
+                              className="text-green-500 hover:text-green-600"
+                              aria-label={`Restore ${deal.company_name}`}
+                            >
+                              <ArchiveRestore className="w-4 h-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => archiveDeal(deal.id, deal.company_name)}
+                              className="text-orange-500 hover:text-orange-600"
+                              aria-label={`Archive ${deal.company_name}`}
+                            >
+                              <Archive className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

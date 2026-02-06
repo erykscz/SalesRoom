@@ -8,7 +8,7 @@ const router = express.Router();
 // GET /api/deals - List all deals
 router.get('/', async (req, res) => {
   try {
-    const { stage, owner, health_score_min, health_score_max, search, archived, sort_by, sort_order, page, limit } = req.query;
+    const { stage, owner, health_score_min, health_score_max, search, archived, sort_by, sort_order, page, limit, date_filter } = req.query;
 
     // Pagination defaults
     const pageNum = parseInt(page) || 1;
@@ -81,6 +81,16 @@ router.get('/', async (req, res) => {
     } else {
       sql += ' AND d.is_archived = 0';
       countSql += ' AND d.is_archived = 0';
+    }
+
+    // Filter by date (today, this_week)
+    if (date_filter === 'today') {
+      sql += ' AND DATE(d.created_at) = DATE(\'now\')';
+      countSql += ' AND DATE(d.created_at) = DATE(\'now\')';
+    } else if (date_filter === 'this_week') {
+      // Get deals created in the last 7 days (including today)
+      sql += ' AND d.created_at >= DATE(\'now\', \'-7 days\')';
+      countSql += ' AND d.created_at >= DATE(\'now\', \'-7 days\')';
     }
 
     // Sort by column (whitelist allowed columns to prevent SQL injection)
