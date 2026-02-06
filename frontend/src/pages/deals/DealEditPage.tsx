@@ -21,6 +21,8 @@ interface Deal {
   next_step_description: string | null;
   priority: string;
   health_score: number | null;
+  has_decision_maker: number | null;
+  has_confirmed_budget: number | null;
 }
 
 interface DealForm {
@@ -33,6 +35,8 @@ interface DealForm {
   next_step_date: string;
   next_step_description: string;
   priority: string;
+  has_decision_maker: boolean;
+  has_confirmed_budget: boolean;
 }
 
 const stages = [
@@ -68,6 +72,8 @@ export default function DealEditPage() {
     next_step_date: '',
     next_step_description: '',
     priority: 'medium',
+    has_decision_maker: false,
+    has_confirmed_budget: false,
   });
 
   useEffect(() => {
@@ -96,6 +102,8 @@ export default function DealEditPage() {
           next_step_date: deal.next_step_date ? deal.next_step_date.split('T')[0] : '',
           next_step_description: deal.next_step_description || '',
           priority: deal.priority || 'medium',
+          has_decision_maker: deal.has_decision_maker === 1,
+          has_confirmed_budget: deal.has_confirmed_budget === 1,
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
@@ -110,8 +118,13 @@ export default function DealEditPage() {
   }, [id, token]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setForm((prev) => ({ ...prev, [name]: checked }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -141,6 +154,8 @@ export default function DealEditPage() {
         next_step_date: form.next_step_date,
         next_step_description: form.next_step_description.trim() || null,
         priority: form.priority,
+        has_decision_maker: form.has_decision_maker,
+        has_confirmed_budget: form.has_confirmed_budget,
       };
 
       const response = await fetch(`${API_URL}/deals/${id}`, {
@@ -330,6 +345,44 @@ export default function DealEditPage() {
                 rows={3}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
+            </div>
+
+            {/* Health Score Factors */}
+            <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+              <div>
+                <h4 className="font-medium mb-2">Health Score Factors</h4>
+                <p className="text-sm text-muted-foreground mb-4">
+                  These factors affect the deal's health score calculation
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="has_decision_maker"
+                    checked={form.has_decision_maker}
+                    onChange={handleChange}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <span className="font-medium">Decision Maker Identified</span>
+                    <p className="text-sm text-muted-foreground">+10 to health score</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="has_confirmed_budget"
+                    checked={form.has_confirmed_budget}
+                    onChange={handleChange}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <span className="font-medium">Confirmed Budget</span>
+                    <p className="text-sm text-muted-foreground">+20 to health score</p>
+                  </div>
+                </label>
+              </div>
             </div>
 
             {/* Actions */}
