@@ -7,7 +7,7 @@ const router = express.Router();
 // GET /api/leads - List all leads with filters
 router.get('/', (req, res) => {
   try {
-    const { status, search, sort_by = 'created_at', sort_order = 'desc' } = req.query;
+    const { status, search, sort_by = 'created_at', sort_order = 'desc', min_confidence } = req.query;
     const userId = req.user.id;
     const userRole = req.user.role;
 
@@ -29,6 +29,15 @@ router.get('/', (req, res) => {
     if (status) {
       query += ` AND l.status = ?`;
       params.push(status);
+    }
+
+    // Filter by minimum confidence score
+    if (min_confidence) {
+      const minScore = parseInt(min_confidence, 10);
+      if (!isNaN(minScore)) {
+        query += ` AND l.confidence_score >= ?`;
+        params.push(minScore);
+      }
     }
 
     // Search by company name or industry

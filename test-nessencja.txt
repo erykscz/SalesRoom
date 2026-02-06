@@ -1,0 +1,35 @@
+Discovery Call - Acme Corp Enterprise Deal
+
+John: Hello Sarah, thank you for joining this call. I'm John, the Account Executive.
+
+Sarah: Hi John, I'm Sarah, the VP of Operations. I also have Mike with us, he's our CTO.
+
+Mike: Thanks for having us. We've been evaluating several solutions.
+
+John: Great! So tell me about your current challenges.
+
+Sarah: Our biggest pain point is the manual inventory tracking process. It's incredibly slow and frustrating. We're losing about 20 hours per week on data entry.
+
+Mike: From a technical perspective, the problem is our systems don't integrate. It's difficult to get real-time visibility across our 5 warehouses.
+
+John: I understand. What's driving the urgency to solve this now?
+
+Sarah: We have a concern about our Q2 deadline. The CEO wants this resolved before the board meeting in June. There's also budget constraints we need to work around.
+
+Mike: I'm a bit uncertain about the timeline. We might need to evaluate other alternatives before making a final decision. The committee has to approve any purchase over $50k.
+
+John: What would success look like for you?
+
+Sarah: We need to reduce manual work by 80% and have real-time inventory data. That's our primary need.
+
+Mike: And we want a solution that integrates with our ERP system seamlessly.
+
+John: Perfect. Let me schedule a demo for next week. I'll also send you a proposal with pricing options. We should review the technical requirements document together.
+
+Sarah: That sounds great. Let's set up a follow-up call with the procurement team as well.
+
+John: I'll share some case studies from similar companies in your industry. We can discuss the pilot program options too.
+
+Mike: Yes, let's do a POC to validate the integration works before committing.
+
+John: Absolutely. I'll send over the trial agreement for review.

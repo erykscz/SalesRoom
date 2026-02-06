@@ -261,4 +261,79 @@ router.post('/refresh', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/auth/preferences - Get user notification preferences
+router.get('/preferences', authMiddleware, async (req, res) => {
+  try {
+    const user = await get('SELECT notification_preferences FROM users WHERE id = ?', [req.user.id]);
+
+    // Default preferences if none set
+    const defaultPreferences = {
+      deal_transferred: true,
+      deal_won: true,
+      deal_lost: true,
+      mention: true,
+      search_complete: true,
+      stage_change: true,
+      health_alert: true
+    };
+
+    let preferences = defaultPreferences;
+    if (user && user.notification_preferences) {
+      try {
+        preferences = { ...defaultPreferences, ...JSON.parse(user.notification_preferences) };
+      } catch (e) {
+        // Invalid JSON, use defaults
+      }
+    }
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Get preferences error:', error);
+    res.status(500).json({ error: 'Failed to get preferences' });
+  }
+});
+
+// PUT /api/auth/preferences - Update user notification preferences
+router.put('/preferences', authMiddleware, async (req, res) => {
+  try {
+    const { preferences } = req.body;
+
+    if (!preferences || typeof preferences !== 'object') {
+      return res.status(400).json({ error: 'Preferences object is required' });
+    }
+
+    // Validate preference keys
+    const validKeys = [
+      'deal_transferred',
+      'deal_won',
+      'deal_lost',
+      'mention',
+      'search_complete',
+      'stage_change',
+      'health_alert'
+    ];
+
+    const cleanPreferences = {};
+    for (const key of validKeys) {
+      if (key in preferences) {
+        cleanPreferences[key] = Boolean(preferences[key]);
+      }
+    }
+
+    // Update user's preferences
+    await run(
+      'UPDATE users SET notification_preferences = ?, updated_at = datetime("now") WHERE id = ?',
+      [JSON.stringify(cleanPreferences), req.user.id]
+    );
+
+    res.json({
+      message: 'Preferences updated successfully',
+      preferences: cleanPreferences
+    });
+  } catch (error) {
+    console.error('Update preferences error:', error);
+    res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
+
 export default router;

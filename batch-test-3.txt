@@ -1,0 +1,6 @@
+Batch Upload Test - File 3
+Technical Discussion with ABC Corp
+
+John: Today we'll review the technical requirements.
+Jane: Our IT team has specific integration needs.
+John: Let's go through them one by one.

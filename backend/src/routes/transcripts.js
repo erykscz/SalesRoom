@@ -7,7 +7,7 @@ const router = express.Router();
 // GET /api/transcripts - List all transcripts
 router.get('/', async (req, res) => {
   try {
-    const { deal_id, processed } = req.query;
+    const { deal_id, processed, search } = req.query;
 
     let sql = `
       SELECT t.*, d.company_name as deal_company, u.name as uploaded_by_name
@@ -28,6 +28,19 @@ router.get('/', async (req, res) => {
     if (processed !== undefined) {
       sql += ' AND t.processed = ?';
       params.push(processed === 'true' ? 1 : 0);
+    }
+
+    // Search across transcript content (keyword search)
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      sql += ` AND (
+        t.raw_content LIKE ? OR
+        t.cleaned_content LIKE ? OR
+        t.file_name LIKE ? OR
+        d.company_name LIKE ? OR
+        t.insights LIKE ?
+      )`;
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
     // For non-admin/manager users, only show their own transcripts
@@ -229,10 +242,96 @@ router.post('/analyze', async (req, res) => {
   }
 });
 
+// Helper function to extract financial data for ROI calculation
+function extractFinancialData(content) {
+  const financialPains = [];
+
+  // Common patterns for financial losses/costs
+  const patterns = [
+    // Match dollar amounts with context: "losing $50k monthly", "costs $100,000", etc.
+    /(?:los(?:ing|t|es?)|cost(?:s|ing)?|spend(?:s|ing)?|wast(?:e|ing)|pay(?:s|ing)?)\s+(?:around\s+|about\s+|approximately\s+)?[\$€£]?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?:k|m|K|M)?)\s*(?:per\s+)?(month(?:ly)?|year(?:ly)?|week(?:ly)?|day|hour|annually)?/gi,
+    // Match "costs us X", "spending X"
+    /(?:cost(?:s|ing)?\s+us|we\s+(?:spend|lose|pay|waste))\s+(?:around\s+|about\s+)?[\$€£]?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?:k|m|K|M)?)\s*(?:per\s+)?(month(?:ly)?|year(?:ly)?|week(?:ly)?|day|hour)?/gi,
+    // Match "X in losses", "X per month in costs"
+    /[\$€£]?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?:k|m|K|M)?)\s*(?:per\s+)?(month(?:ly)?|year(?:ly)?|week(?:ly)?)?\s+(?:in\s+)?(?:loss(?:es)?|cost(?:s)?|damage)/gi,
+    // Match direct amounts with time: "$50k monthly", "100k per year"
+    /[\$€£](\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?:k|m|K|M)?)\s*(?:per\s+)?(month(?:ly)?|year(?:ly)?|week(?:ly)?|annually)/gi,
+    // Match percentages in context: "losing 30% of revenue"
+    /(?:los(?:ing|t)|waste|down)\s+(\d{1,3})%\s+(?:of\s+)?(?:revenue|profit|productivity|efficiency|sales)/gi
+  ];
+
+  const lines = content.split(/[\n.!?]+/);
+
+  for (const line of lines) {
+    for (const pattern of patterns) {
+      // Reset regex lastIndex
+      pattern.lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(line)) !== null) {
+        const amount = match[1];
+        const period = match[2] || 'monthly';
+
+        // Normalize the amount
+        let numericValue = parseFloat(amount.replace(/[$€£,]/g, ''));
+        const suffix = amount.toLowerCase().slice(-1);
+        if (suffix === 'k') numericValue *= 1000;
+        if (suffix === 'm') numericValue *= 1000000;
+
+        // Normalize period to monthly
+        let monthlyValue = numericValue;
+        const periodLower = period.toLowerCase();
+        if (periodLower.includes('year') || periodLower.includes('annual')) {
+          monthlyValue = numericValue / 12;
+        } else if (periodLower.includes('week')) {
+          monthlyValue = numericValue * 4.33;
+        } else if (periodLower === 'day' || periodLower === 'daily') {
+          monthlyValue = numericValue * 22; // Business days
+        }
+
+        // Only include significant amounts
+        if (monthlyValue >= 1000) {
+          financialPains.push({
+            rawText: line.trim().substring(0, 200),
+            amount: numericValue,
+            period: period,
+            monthlyValue: Math.round(monthlyValue),
+            yearlyValue: Math.round(monthlyValue * 12)
+          });
+        }
+      }
+    }
+  }
+
+  // Remove duplicates and sort by value
+  const uniquePains = financialPains
+    .filter((pain, index, self) =>
+      index === self.findIndex(p => p.monthlyValue === pain.monthlyValue)
+    )
+    .sort((a, b) => b.yearlyValue - a.yearlyValue)
+    .slice(0, 5);
+
+  // Calculate totals
+  const totalMonthly = uniquePains.reduce((sum, p) => sum + p.monthlyValue, 0);
+  const totalYearly = uniquePains.reduce((sum, p) => sum + p.yearlyValue, 0);
+
+  return {
+    pains: uniquePains,
+    totalMonthlyLoss: totalMonthly,
+    totalYearlyLoss: totalYearly,
+    // Estimated ROI assuming 50% cost recovery
+    estimatedMonthlySavings: Math.round(totalMonthly * 0.5),
+    estimatedYearlySavings: Math.round(totalYearly * 0.5),
+    hasFinancialData: uniquePains.length > 0
+  };
+}
+
 // Helper function to extract insights using Nessencja framework
 function extractNessencjaInsights(content) {
   const lowerContent = content.toLowerCase();
   const lines = content.split(/[\n.!?]+/).filter(line => line.trim().length > 10);
+
+  // Extract financial data for ROI calculation
+  const financialData = extractFinancialData(content);
 
   // Pain Points extraction - look for problem/challenge indicators
   const painKeywords = ['challenge', 'problem', 'issue', 'struggle', 'difficult', 'pain', 'frustrat', 'concern', 'worry', 'need', 'want', 'lack', 'missing', 'slow', 'expensive', 'costly', 'manual', 'inefficient'];
@@ -289,7 +388,8 @@ function extractNessencjaInsights(content) {
     pain_points: painPoints.length > 0 ? painPoints : ['No specific pain points identified - review transcript manually'],
     stakeholders: stakeholders.length > 0 ? stakeholders.slice(0, 5) : [{ name: 'Unknown', role: 'Contact', influence: 'medium' }],
     red_flags: redFlags.length > 0 ? redFlags : ['No red flags detected'],
-    next_steps: nextSteps.length > 0 ? nextSteps : ['Schedule follow-up discussion to clarify requirements']
+    next_steps: nextSteps.length > 0 ? nextSteps : ['Schedule follow-up discussion to clarify requirements'],
+    financial_data: financialData
   };
 }
 

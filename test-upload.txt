@@ -1,0 +1,18 @@
+# Test Document
+
+This is a test document for the Knowledge Base upload feature.
+
+## Overview
+The Knowledge Base allows users to upload documents in various formats:
+- PDF files
+- DOCX files
+- Markdown (MD) files
+- Plain text (TXT) files
+
+## Benefits
+- Centralized knowledge management
+- Easy search and discovery
+- Tag-based organization
+- Team collaboration
+
+This document was created for testing purposes.

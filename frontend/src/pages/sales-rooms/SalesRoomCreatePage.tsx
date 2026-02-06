@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, ArrowRight, Check, Building2, FileText, Palette } from 'lucide-react';
+import { Loader2, ArrowLeft, ArrowRight, Check, Building2, FileText, Palette, Users, Calendar, Lock, Image } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 
 interface Deal {
   id: string;
@@ -37,6 +38,16 @@ export default function SalesRoomCreatePage() {
   const [offerContent, setOfferContent] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [calendlyLink, setCalendlyLink] = useState('');
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('Does this proposal address your concerns?');
+  const [expiryEnabled, setExpiryEnabled] = useState(false);
+  const [expiryDays, setExpiryDays] = useState(7);
+  const [passwordProtected, setPasswordProtected] = useState(false);
+  const [password, setPassword] = useState('');
+  const [brandingEnabled, setBrandingEnabled] = useState(false);
+  const [logoUrl, setLogoUrl] = useState('');
+  const [primaryColor, setPrimaryColor] = useState('#2563eb');
+  const [companyNameOverride, setCompanyNameOverride] = useState('');
 
   // Load deals for step 1
   useEffect(() => {
@@ -97,6 +108,16 @@ export default function SalesRoomCreatePage() {
           offer_content: offerContent || null,
           video_url: videoUrl || null,
           calendly_link: calendlyLink || null,
+          poll_enabled: pollEnabled,
+          poll_question: pollEnabled ? pollQuestion : null,
+          expires_at: expiryEnabled ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString() : null,
+          password_protected: passwordProtected,
+          password: passwordProtected ? password : null,
+          branding: brandingEnabled ? {
+            logo_url: logoUrl || undefined,
+            primary_color: primaryColor,
+            company_name: companyNameOverride || undefined,
+          } : null,
         })
       });
 
@@ -313,12 +334,177 @@ export default function SalesRoomCreatePage() {
               />
             </div>
 
+            {/* Consensus Poll */}
+            <div className="space-y-4 p-4 border rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="pollEnabled" className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Stakeholder Consensus Poll
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Add a feedback survey for stakeholders
+                  </p>
+                </div>
+                <Switch
+                  id="pollEnabled"
+                  checked={pollEnabled}
+                  onCheckedChange={setPollEnabled}
+                />
+              </div>
+              {pollEnabled && (
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="pollQuestion">Poll Question</Label>
+                  <Input
+                    id="pollQuestion"
+                    placeholder="Does this proposal address your concerns?"
+                    value={pollQuestion}
+                    onChange={(e) => setPollQuestion(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Link Expiry */}
+            <div className="space-y-4 p-4 border rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="expiryEnabled" className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Link Expiry
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Set when the Sales Room link expires
+                  </p>
+                </div>
+                <Switch
+                  id="expiryEnabled"
+                  checked={expiryEnabled}
+                  onCheckedChange={setExpiryEnabled}
+                />
+              </div>
+              {expiryEnabled && (
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="expiryDays">Expires in (days)</Label>
+                  <Input
+                    id="expiryDays"
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={expiryDays}
+                    onChange={(e) => setExpiryDays(parseInt(e.target.value) || 7)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Link will expire on {new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Password Protection */}
+            <div className="space-y-4 p-4 border rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="passwordProtected" className="flex items-center gap-2">
+                    <Lock className="h-4 w-4" />
+                    Password Protection
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Require a password to view the Sales Room
+                  </p>
+                </div>
+                <Switch
+                  id="passwordProtected"
+                  checked={passwordProtected}
+                  onCheckedChange={setPasswordProtected}
+                />
+              </div>
+              {passwordProtected && (
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter a secure password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Custom Branding */}
+            <div className="space-y-4 p-4 border rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="brandingEnabled" className="flex items-center gap-2">
+                    <Image className="h-4 w-4" />
+                    Custom Branding
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Add your client's logo and brand colors
+                  </p>
+                </div>
+                <Switch
+                  id="brandingEnabled"
+                  checked={brandingEnabled}
+                  onCheckedChange={setBrandingEnabled}
+                />
+              </div>
+              {brandingEnabled && (
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="logoUrl">Logo URL</Label>
+                    <Input
+                      id="logoUrl"
+                      type="url"
+                      placeholder="https://example.com/logo.png"
+                      value={logoUrl}
+                      onChange={(e) => setLogoUrl(e.target.value)}
+                    />
+                    {logoUrl && (
+                      <div className="mt-2 p-2 bg-muted rounded-lg inline-block">
+                        <img src={logoUrl} alt="Logo preview" className="h-12 w-auto object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="primaryColor">Brand Color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="primaryColor"
+                        type="color"
+                        value={primaryColor}
+                        onChange={(e) => setPrimaryColor(e.target.value)}
+                        className="w-10 h-10 rounded border cursor-pointer"
+                      />
+                      <Input
+                        value={primaryColor}
+                        onChange={(e) => setPrimaryColor(e.target.value)}
+                        placeholder="#2563eb"
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="companyNameOverride">Company Name Override (Optional)</Label>
+                    <Input
+                      id="companyNameOverride"
+                      placeholder="Leave blank to use deal company name"
+                      value={companyNameOverride}
+                      onChange={(e) => setCompanyNameOverride(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={handleBack}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back
               </Button>
-              <Button onClick={handleCreate} disabled={loading}>
+              <Button onClick={handleCreate} disabled={loading || (passwordProtected && !password)}>
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

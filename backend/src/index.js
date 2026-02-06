@@ -36,7 +36,7 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-const PORT = process.env.PORT || 3003;
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(helmet());

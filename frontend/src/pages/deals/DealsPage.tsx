@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore } from 'lucide-react';
+import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban } from 'lucide-react';
+import KanbanBoard from '@/components/deals/KanbanBoard';
 
 interface Deal {
   id: string;
@@ -66,6 +67,9 @@ export default function DealsPage() {
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>(
+    (searchParams.get('view') as 'table' | 'kanban') || 'table'
+  );
 
   // Get current URL with search params for passing to detail pages
   const currentUrl = location.pathname + location.search;
@@ -92,8 +96,9 @@ export default function DealsPage() {
     if (currentPage > 1) params.set('page', currentPage.toString());
     if (showArchived) params.set('archived', 'true');
     if (dateFilter && dateFilter !== 'all') params.set('date_filter', dateFilter);
+    if (viewMode && viewMode !== 'table') params.set('view', viewMode);
     setSearchParams(params, { replace: true });
-  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, showArchived, dateFilter, setSearchParams]);
+  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, showArchived, dateFilter, viewMode, setSearchParams]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -328,7 +333,28 @@ export default function DealsPage() {
           <h2 className="text-2xl font-bold">Deals</h2>
           <p className="text-muted-foreground">Manage your sales pipeline</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* View Toggle */}
+          <div className="flex border rounded-md">
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+              className="rounded-r-none"
+              title="Table View"
+            >
+              <LayoutList className="w-4 h-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('kanban')}
+              className="rounded-l-none"
+              title="Kanban View"
+            >
+              <Kanban className="w-4 h-4" />
+            </Button>
+          </div>
           <Button variant="outline" onClick={exportToCsv}>
             <Download className="w-4 h-4 mr-2" />
             Export CSV
@@ -425,8 +451,12 @@ export default function DealsPage() {
         </CardContent>
       </Card>
 
-      {/* Deals Table */}
-      <Card>
+      {/* Kanban View */}
+      {viewMode === 'kanban' ? (
+        <KanbanBoard />
+      ) : (
+        /* Deals Table */
+        <Card>
         <CardHeader>
           <CardTitle>All Deals</CardTitle>
           <CardDescription>
@@ -660,8 +690,9 @@ export default function DealsPage() {
             )}
             </>
           )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

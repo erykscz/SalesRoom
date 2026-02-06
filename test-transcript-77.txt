@@ -1,0 +1,38 @@
+Discovery Call Transcript - Feature Test 77
+
+Date: February 5, 2026
+Participants: John Smith (Sales Rep), Sarah Johnson (CTO), Mike Brown (CFO)
+
+JOHN SMITH: Good morning everyone. Thank you for taking the time to meet with us today.
+
+SARAH JOHNSON (CTO): Thanks for reaching out. We've been looking at solutions for our modernization project.
+
+MIKE BROWN (CFO): Yes, our current system is costing us around $50,000 per month in maintenance fees alone. That's $600,000 annually that we need to reduce.
+
+JOHN SMITH: I understand. What are the main pain points you're experiencing?
+
+SARAH JOHNSON: We have significant technical debt. Our legacy system is built on COBOL and it's getting harder to find developers who can maintain it. We spend about 70% of our IT budget just keeping the lights on.
+
+MIKE BROWN: The budget constraints are also a concern. We need to see a clear ROI within 18 months.
+
+SARAH JOHNSON: Integration is another issue. We can't connect our legacy system to modern APIs, which means we're missing out on automation opportunities.
+
+JOHN SMITH: What about the decision-making process here?
+
+MIKE BROWN: I have final sign-off on budget, but Sarah makes the technical decisions. We also have our Security Officer, David Lee, who needs to approve any vendor from a compliance perspective.
+
+SARAH JOHNSON: David is quite cautious. He's been burned by vendors before who promised security but didn't deliver. He might be a blocker if we don't address his concerns upfront.
+
+JOHN SMITH: That's very helpful. Are there any competing solutions you're looking at?
+
+SARAH JOHNSON: We've looked at Competitor X but their pricing is aggressive and their implementation timeline is concerning.
+
+MIKE BROWN: Yes, we're also concerned about the hidden costs with them.
+
+JOHN SMITH: What would be ideal next steps?
+
+SARAH JOHNSON: We'd like to see a technical demo focused on the API integration capabilities.
+
+MIKE BROWN: And I'd like to see a detailed ROI analysis with the cost savings projections.
+
+JOHN SMITH: Perfect. Let's schedule both for next week. I'll send over the proposal document before our meeting.

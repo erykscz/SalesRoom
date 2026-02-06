@@ -1,0 +1,18 @@
+[Otter.ai Transcript]
+Meeting: Enterprise Sales Call
+Date: February 5, 2026
+Duration: 45 minutes
+
+Summary by Otter.ai:
+Key topics discussed include pricing, implementation timeline, and integration requirements.
+
+Speaker 1 00:00:
+Hello and welcome to this call. We're excited to discuss your requirements.
+
+Speaker 2 00:15:
+Thanks for having me. We've been looking for a solution like yours.
+
+Speaker 1 00:30:
+Let me walk you through our platform features.
+
+[Transcribed by Otter.ai]

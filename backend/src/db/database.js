@@ -26,6 +26,27 @@ const db = new sqlite3.Database(dbPath, (err) => {
 // Enable foreign keys
 db.run('PRAGMA foreign_keys = ON');
 
+// Run migrations to add any missing columns
+db.run('ALTER TABLE users ADD COLUMN notification_preferences TEXT', (err) => {
+  // Ignore error if column already exists
+  if (err && !err.message.includes('duplicate column')) {
+    console.error('Migration error:', err.message);
+  }
+});
+
+// Add health score calculation columns to deals
+db.run('ALTER TABLE deals ADD COLUMN has_decision_maker INTEGER DEFAULT 0', (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.error('Migration error:', err.message);
+  }
+});
+
+db.run('ALTER TABLE deals ADD COLUMN has_confirmed_budget INTEGER DEFAULT 0', (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.error('Migration error:', err.message);
+  }
+});
+
 // Promisified database methods
 export function run(sql, params = []) {
   return new Promise((resolve, reject) => {

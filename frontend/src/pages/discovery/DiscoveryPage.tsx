@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Upload, FileText, CheckCircle, AlertCircle, Trash2, Eye, Loader2, X, Cloud } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Trash2, Eye, Loader2, X, Cloud, Pencil, Plus, Save, Clock, TrendingUp, ChevronRight, Download, Search } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -62,24 +62,44 @@ export default function DiscoveryPage() {
   // View transcript modal
   const [viewTranscript, setViewTranscript] = useState<Transcript | null>(null);
 
+  // Edit insights state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingInsights, setEditingInsights] = useState<{
+    pain_points: string[];
+    stakeholders: { name: string; role: string; influence: string }[];
+    red_flags: string[];
+    next_steps: string[];
+  } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   // Drag and drop state
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // Timeline view state
+  const [timelineDeal, setTimelineDeal] = useState<string | null>(null);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
   useEffect(() => {
     fetchData();
   }, [token]);
 
-  const fetchData = async () => {
+  const fetchData = async (search?: string) => {
     try {
       setLoading(true);
+      const transcriptUrl = search
+        ? `${API_URL}/transcripts?search=${encodeURIComponent(search)}`
+        : `${API_URL}/transcripts`;
+
       const [dealsRes, transcriptsRes] = await Promise.all([
         fetch(`${API_URL}/deals?archived=false`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch(`${API_URL}/transcripts`, {
+        fetch(transcriptUrl, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
@@ -384,6 +404,15 @@ export default function DiscoveryPage() {
     }
   };
 
+  const handleSearch = () => {
+    fetchData(searchQuery);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    fetchData();
+  };
+
   const handleDelete = async () => {
     if (!deleteId) return;
 
@@ -413,6 +442,191 @@ export default function DiscoveryPage() {
     }
   };
 
+  // Start editing insights
+  const startEditingInsights = () => {
+    if (!viewTranscript?.insights) return;
+    const insights = typeof viewTranscript.insights === 'string'
+      ? JSON.parse(viewTranscript.insights)
+      : viewTranscript.insights;
+
+    // Normalize stakeholders to have proper structure
+    const normalizedStakeholders = (insights.stakeholders || []).map((s: any) => ({
+      name: s.name || s || '',
+      role: s.role || 'Contact',
+      influence: s.influence || 'medium'
+    }));
+
+    setEditingInsights({
+      pain_points: insights.pain_points || [],
+      stakeholders: normalizedStakeholders,
+      red_flags: insights.red_flags || [],
+      next_steps: insights.next_steps || []
+    });
+    setIsEditing(true);
+  };
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditingInsights(null);
+  };
+
+  // Save edited insights
+  const saveInsights = async () => {
+    if (!viewTranscript || !editingInsights) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`${API_URL}/transcripts/${viewTranscript.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ insights: editingInsights })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Save failed');
+      }
+
+      const data = await response.json();
+
+      // Update local state
+      setViewTranscript({
+        ...viewTranscript,
+        insights: data.transcript.insights
+      });
+
+      // Update transcripts list
+      setTranscripts(prev => prev.map(t =>
+        t.id === viewTranscript.id
+          ? { ...t, insights: data.transcript.insights }
+          : t
+      ));
+
+      toast({
+        title: 'Saved',
+        description: 'Insights updated successfully',
+      });
+      setIsEditing(false);
+      setEditingInsights(null);
+    } catch (error: any) {
+      toast({
+        title: 'Save Failed',
+        description: error.message || 'Failed to save insights',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Update a pain point
+  const updatePainPoint = (index: number, value: string) => {
+    if (!editingInsights) return;
+    const newPainPoints = [...editingInsights.pain_points];
+    newPainPoints[index] = value;
+    setEditingInsights({ ...editingInsights, pain_points: newPainPoints });
+  };
+
+  // Add a new pain point
+  const addPainPoint = () => {
+    if (!editingInsights) return;
+    setEditingInsights({
+      ...editingInsights,
+      pain_points: [...editingInsights.pain_points, '']
+    });
+  };
+
+  // Remove a pain point
+  const removePainPoint = (index: number) => {
+    if (!editingInsights) return;
+    setEditingInsights({
+      ...editingInsights,
+      pain_points: editingInsights.pain_points.filter((_, i) => i !== index)
+    });
+  };
+
+  // Update a stakeholder
+  const updateStakeholder = (index: number, field: 'name' | 'role' | 'influence', value: string) => {
+    if (!editingInsights) return;
+    const newStakeholders = [...editingInsights.stakeholders];
+    newStakeholders[index] = { ...newStakeholders[index], [field]: value };
+    setEditingInsights({ ...editingInsights, stakeholders: newStakeholders });
+  };
+
+  // Add a new stakeholder
+  const addStakeholder = () => {
+    if (!editingInsights) return;
+    setEditingInsights({
+      ...editingInsights,
+      stakeholders: [...editingInsights.stakeholders, { name: '', role: 'Contact', influence: 'medium' }]
+    });
+  };
+
+  // Remove a stakeholder
+  const removeStakeholder = (index: number) => {
+    if (!editingInsights) return;
+    setEditingInsights({
+      ...editingInsights,
+      stakeholders: editingInsights.stakeholders.filter((_, i) => i !== index)
+    });
+  };
+
+  // Update a red flag
+  const updateRedFlag = (index: number, value: string) => {
+    if (!editingInsights) return;
+    const newRedFlags = [...editingInsights.red_flags];
+    newRedFlags[index] = value;
+    setEditingInsights({ ...editingInsights, red_flags: newRedFlags });
+  };
+
+  // Add a new red flag
+  const addRedFlag = () => {
+    if (!editingInsights) return;
+    setEditingInsights({
+      ...editingInsights,
+      red_flags: [...editingInsights.red_flags, '']
+    });
+  };
+
+  // Remove a red flag
+  const removeRedFlag = (index: number) => {
+    if (!editingInsights) return;
+    setEditingInsights({
+      ...editingInsights,
+      red_flags: editingInsights.red_flags.filter((_, i) => i !== index)
+    });
+  };
+
+  // Update a next step
+  const updateNextStep = (index: number, value: string) => {
+    if (!editingInsights) return;
+    const newNextSteps = [...editingInsights.next_steps];
+    newNextSteps[index] = value;
+    setEditingInsights({ ...editingInsights, next_steps: newNextSteps });
+  };
+
+  // Add a new next step
+  const addNextStep = () => {
+    if (!editingInsights) return;
+    setEditingInsights({
+      ...editingInsights,
+      next_steps: [...editingInsights.next_steps, '']
+    });
+  };
+
+  // Remove a next step
+  const removeNextStep = (index: number) => {
+    if (!editingInsights) return;
+    setEditingInsights({
+      ...editingInsights,
+      next_steps: editingInsights.next_steps.filter((_, i) => i !== index)
+    });
+  };
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -432,6 +646,129 @@ export default function DiscoveryPage() {
       manual: 'Manual Upload'
     };
     return labels[platform] || platform;
+  };
+
+  // Export transcript report as PDF
+  const exportToPDF = (transcript: Transcript) => {
+    if (!transcript.processed || !transcript.insights) {
+      toast({
+        title: 'Cannot Export',
+        description: 'Please analyze the transcript first before exporting',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const insights = typeof transcript.insights === 'string'
+      ? JSON.parse(transcript.insights)
+      : transcript.insights;
+
+    // Create printable HTML content
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Discovery Report - ${transcript.file_name}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+          h1 { color: #1a1a1a; border-bottom: 2px solid #333; padding-bottom: 10px; }
+          h2 { color: #333; margin-top: 30px; }
+          .meta { color: #666; font-size: 14px; margin-bottom: 20px; }
+          .section { margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 8px; }
+          .section-title { font-weight: bold; color: #333; margin-bottom: 10px; }
+          .pain-points { border-left: 4px solid #ef4444; }
+          .stakeholders { border-left: 4px solid #3b82f6; }
+          .red-flags { border-left: 4px solid #f97316; }
+          .next-steps { border-left: 4px solid #22c55e; }
+          ul { margin: 0; padding-left: 20px; }
+          li { margin: 8px 0; }
+          .stakeholder { margin: 10px 0; }
+          .stakeholder-name { font-weight: bold; }
+          .stakeholder-role { color: #666; }
+          .stakeholder-influence { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px; }
+          .influence-high { background: #fee2e2; color: #991b1b; }
+          .influence-medium { background: #fef3c7; color: #92400e; }
+          .influence-low { background: #e0e7ff; color: #3730a3; }
+          .transcript-content { margin-top: 30px; padding: 20px; background: #f5f5f5; border-radius: 8px; white-space: pre-wrap; font-family: monospace; font-size: 12px; max-height: 400px; overflow: auto; }
+          .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+          @media print { .no-print { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>Discovery Report</h1>
+        <div class="meta">
+          <strong>File:</strong> ${transcript.file_name}<br>
+          <strong>Deal:</strong> ${transcript.deal_company || 'Unknown'}<br>
+          <strong>Platform:</strong> ${getPlatformLabel(transcript.source_platform)}<br>
+          <strong>Uploaded:</strong> ${formatDate(transcript.created_at)}<br>
+          <strong>Analyzed:</strong> ${transcript.processed_at ? formatDate(transcript.processed_at) : 'N/A'}
+        </div>
+
+        <h2>Insights Summary (Nessencja Framework)</h2>
+
+        <div class="section pain-points">
+          <div class="section-title">🔴 Pain Points (${insights.pain_points?.length || 0})</div>
+          <ul>
+            ${(insights.pain_points || []).map((p: string) => `<li>${p}</li>`).join('')}
+          </ul>
+        </div>
+
+        <div class="section stakeholders">
+          <div class="section-title">👥 Stakeholder Map (${insights.stakeholders?.length || 0})</div>
+          ${(insights.stakeholders || []).map((s: any) => `
+            <div class="stakeholder">
+              <span class="stakeholder-name">${s.name || s}</span>
+              ${s.role ? `<span class="stakeholder-role"> - ${s.role}</span>` : ''}
+              ${s.influence ? `<span class="stakeholder-influence influence-${s.influence}">${s.influence}</span>` : ''}
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="section red-flags">
+          <div class="section-title">⚠️ Red Flags (${insights.red_flags?.length || 0})</div>
+          <ul>
+            ${(insights.red_flags || []).map((f: string) => `<li>${f}</li>`).join('')}
+          </ul>
+        </div>
+
+        <div class="section next-steps">
+          <div class="section-title">✅ Next Steps (${insights.next_steps?.length || 0})</div>
+          <ul>
+            ${(insights.next_steps || []).map((s: string) => `<li>${s}</li>`).join('')}
+          </ul>
+        </div>
+
+        <h2>Transcript Content</h2>
+        <div class="transcript-content">${transcript.cleaned_content || transcript.raw_content}</div>
+
+        <div class="footer">
+          Generated by Sales Room - Proces OS on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Open print window
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      // Give time for content to load then trigger print
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+      toast({
+        title: 'Export Ready',
+        description: 'Use your browser\'s "Save as PDF" option in the print dialog',
+      });
+    } else {
+      toast({
+        title: 'Export Failed',
+        description: 'Please allow pop-ups for this site to export PDF',
+        variant: 'destructive'
+      });
+    }
   };
 
   if (loading) {
@@ -640,13 +977,44 @@ export default function DiscoveryPage() {
       {/* Transcripts List */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Transcripts
-          </CardTitle>
-          <CardDescription>
-            {transcripts.length} transcript{transcripts.length !== 1 ? 's' : ''} uploaded
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Transcripts
+              </CardTitle>
+              <CardDescription>
+                {transcripts.length} transcript{transcripts.length !== 1 ? 's' : ''} {searchQuery ? 'found' : 'uploaded'}
+              </CardDescription>
+            </div>
+            {/* Search Input */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search transcripts..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  className="pl-9 w-64"
+                />
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6"
+                    onClick={clearSearch}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+              <Button onClick={handleSearch} variant="secondary" size="sm">
+                Search
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {transcripts.length === 0 ? (
@@ -683,8 +1051,17 @@ export default function DiscoveryPage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setViewTranscript(transcript)}
+                      title="View transcript"
                     >
                       <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setTimelineDeal(transcript.deal_id)}
+                      title="View deal timeline"
+                    >
+                      <Clock className="h-4 w-4" />
                     </Button>
                     {!transcript.processed && (
                       <Button
@@ -711,16 +1088,53 @@ export default function DiscoveryPage() {
       </Card>
 
       {/* View Transcript Modal */}
-      <Dialog open={!!viewTranscript} onOpenChange={() => setViewTranscript(null)}>
+      <Dialog open={!!viewTranscript} onOpenChange={(open) => {
+        if (!open) {
+          setViewTranscript(null);
+          setIsEditing(false);
+          setEditingInsights(null);
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{viewTranscript?.file_name}</DialogTitle>
-            <DialogDescription>
-              {viewTranscript?.deal_company} - {viewTranscript && getPlatformLabel(viewTranscript.source_platform)}
-            </DialogDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>{viewTranscript?.file_name}</DialogTitle>
+                <DialogDescription>
+                  {viewTranscript?.deal_company} - {viewTranscript && getPlatformLabel(viewTranscript.source_platform)}
+                </DialogDescription>
+              </div>
+              {viewTranscript?.processed && viewTranscript.insights && !isEditing && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => viewTranscript && exportToPDF(viewTranscript)}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export PDF
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={startEditingInsights}>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit Insights
+                  </Button>
+                </div>
+              )}
+              {isEditing && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={cancelEditing} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={saveInsights} disabled={isSaving}>
+                    {isSaving ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save Changes
+                  </Button>
+                </div>
+              )}
+            </div>
           </DialogHeader>
           <div className="space-y-4">
-            {viewTranscript?.processed && viewTranscript.insights && (() => {
+            {viewTranscript?.processed && viewTranscript.insights && !isEditing && (() => {
               // Parse insights if it's a string
               const insights = typeof viewTranscript.insights === 'string'
                 ? JSON.parse(viewTranscript.insights)
@@ -789,12 +1203,344 @@ export default function DiscoveryPage() {
                 </div>
               );
             })()}
+
+            {/* Edit Mode */}
+            {isEditing && editingInsights && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Edit Pain Points */}
+                <Card>
+                  <CardHeader className="py-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm text-red-600">Pain Points</CardTitle>
+                      <Button variant="ghost" size="sm" onClick={addPainPoint}>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="py-2 space-y-2">
+                    {editingInsights.pain_points.map((pain, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Input
+                          value={pain}
+                          onChange={(e) => updatePainPoint(i, e.target.value)}
+                          placeholder="Enter pain point..."
+                          className="text-sm"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 shrink-0"
+                          onClick={() => removePainPoint(i)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {editingInsights.pain_points.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No pain points. Click Add to create one.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Edit Stakeholders */}
+                <Card>
+                  <CardHeader className="py-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm text-blue-600">Stakeholder Map</CardTitle>
+                      <Button variant="ghost" size="sm" onClick={addStakeholder}>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="py-2 space-y-3">
+                    {editingInsights.stakeholders.map((stakeholder, i) => (
+                      <div key={i} className="space-y-2 p-2 border rounded">
+                        <div className="flex gap-2">
+                          <Input
+                            value={stakeholder.name}
+                            onChange={(e) => updateStakeholder(i, 'name', e.target.value)}
+                            placeholder="Name"
+                            className="text-sm"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 shrink-0"
+                            onClick={() => removeStakeholder(i)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="flex gap-2">
+                          <Input
+                            value={stakeholder.role}
+                            onChange={(e) => updateStakeholder(i, 'role', e.target.value)}
+                            placeholder="Role"
+                            className="text-sm"
+                          />
+                          <Select
+                            value={stakeholder.influence}
+                            onValueChange={(value) => updateStakeholder(i, 'influence', value)}
+                          >
+                            <SelectTrigger className="w-28">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="low">Low</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    ))}
+                    {editingInsights.stakeholders.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No stakeholders. Click Add to create one.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Edit Red Flags */}
+                <Card>
+                  <CardHeader className="py-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm text-orange-600">Red Flags</CardTitle>
+                      <Button variant="ghost" size="sm" onClick={addRedFlag}>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="py-2 space-y-2">
+                    {editingInsights.red_flags.map((flag, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Input
+                          value={flag}
+                          onChange={(e) => updateRedFlag(i, e.target.value)}
+                          placeholder="Enter red flag..."
+                          className="text-sm"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 shrink-0"
+                          onClick={() => removeRedFlag(i)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {editingInsights.red_flags.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No red flags. Click Add to create one.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Edit Next Steps */}
+                <Card>
+                  <CardHeader className="py-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm text-green-600">Next Steps</CardTitle>
+                      <Button variant="ghost" size="sm" onClick={addNextStep}>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="py-2 space-y-2">
+                    {editingInsights.next_steps.map((step, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Input
+                          value={step}
+                          onChange={(e) => updateNextStep(i, e.target.value)}
+                          placeholder="Enter next step..."
+                          className="text-sm"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 shrink-0"
+                          onClick={() => removeNextStep(i)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {editingInsights.next_steps.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No next steps. Click Add to create one.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
             <div>
               <Label className="text-sm font-medium">Transcript Content</Label>
               <div className="mt-2 p-4 bg-muted rounded-lg text-sm font-mono whitespace-pre-wrap max-h-64 overflow-y-auto">
                 {viewTranscript?.cleaned_content || viewTranscript?.raw_content}
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Timeline View Modal */}
+      <Dialog open={!!timelineDeal} onOpenChange={() => setTimelineDeal(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Deal Timeline - {deals.find(d => d.id === timelineDeal)?.company_name || 'Unknown Deal'}
+            </DialogTitle>
+            <DialogDescription>
+              Evolution of insights across meetings
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            {/* Get transcripts for this deal, sorted chronologically */}
+            {(() => {
+              const dealTranscripts = transcripts
+                .filter(t => t.deal_id === timelineDeal)
+                .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+              if (dealTranscripts.length === 0) {
+                return (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No transcripts found for this deal</p>
+                  </div>
+                );
+              }
+
+              // Collect all pain points across meetings for evolution display
+              const painPointEvolution: { date: string; fileName: string; painPoints: string[] }[] = [];
+
+              dealTranscripts.forEach(t => {
+                if (t.processed && t.insights) {
+                  const insights = typeof t.insights === 'string' ? JSON.parse(t.insights) : t.insights;
+                  painPointEvolution.push({
+                    date: t.created_at,
+                    fileName: t.file_name,
+                    painPoints: insights.pain_points || []
+                  });
+                }
+              });
+
+              return (
+                <>
+                  {/* Timeline Display */}
+                  <div className="relative">
+                    {/* Timeline line */}
+                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-muted-foreground/20" />
+
+                    {dealTranscripts.map((transcript, index) => {
+                      const insights = transcript.processed && transcript.insights
+                        ? (typeof transcript.insights === 'string' ? JSON.parse(transcript.insights) : transcript.insights)
+                        : null;
+
+                      return (
+                        <div key={transcript.id} className="relative pl-10 pb-6">
+                          {/* Timeline dot */}
+                          <div className={`absolute left-2 top-1 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                            transcript.processed
+                              ? 'bg-green-500 border-green-600'
+                              : 'bg-muted border-muted-foreground/50'
+                          }`}>
+                            {transcript.processed && (
+                              <CheckCircle className="h-3 w-3 text-white" />
+                            )}
+                          </div>
+
+                          {/* Meeting card */}
+                          <Card className={index === dealTranscripts.length - 1 ? 'border-primary' : ''}>
+                            <CardHeader className="py-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <CardTitle className="text-sm flex items-center gap-2">
+                                    <FileText className="h-4 w-4" />
+                                    {transcript.file_name}
+                                    {index === dealTranscripts.length - 1 && (
+                                      <Badge variant="outline" className="text-xs">Latest</Badge>
+                                    )}
+                                  </CardTitle>
+                                  <CardDescription className="text-xs mt-1">
+                                    {formatDate(transcript.created_at)} • {getPlatformLabel(transcript.source_platform)}
+                                  </CardDescription>
+                                </div>
+                                <Badge variant={transcript.processed ? 'default' : 'secondary'}>
+                                  {transcript.processed ? 'Analyzed' : 'Pending'}
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            {insights && (
+                              <CardContent className="py-2">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <p className="font-medium text-red-600 mb-1">Pain Points ({insights.pain_points?.length || 0})</p>
+                                    <ul className="list-disc list-inside text-xs space-y-1 text-muted-foreground">
+                                      {(insights.pain_points || []).slice(0, 3).map((p: string, i: number) => (
+                                        <li key={i} className="truncate">{p}</li>
+                                      ))}
+                                      {(insights.pain_points?.length || 0) > 3 && (
+                                        <li className="text-muted-foreground/60">+{insights.pain_points.length - 3} more</li>
+                                      )}
+                                    </ul>
+                                  </div>
+                                  <div>
+                                    <p className="font-medium text-blue-600 mb-1">Stakeholders ({insights.stakeholders?.length || 0})</p>
+                                    <ul className="list-disc list-inside text-xs space-y-1 text-muted-foreground">
+                                      {(insights.stakeholders || []).slice(0, 3).map((s: any, i: number) => (
+                                        <li key={i}>{s.name || s} {s.role ? `(${s.role})` : ''}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            )}
+                          </Card>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Pain Point Evolution Summary */}
+                  {painPointEvolution.length > 1 && (
+                    <Card className="bg-muted/50">
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-red-600" />
+                          Pain Point Evolution
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="py-2">
+                        <div className="space-y-3">
+                          {painPointEvolution.map((meeting, index) => (
+                            <div key={index} className="flex items-start gap-3">
+                              <div className="text-xs text-muted-foreground whitespace-nowrap mt-0.5">
+                                {new Date(meeting.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </div>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <p className="text-xs font-medium">{meeting.fileName}</p>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {meeting.painPoints.slice(0, 3).map((p, i) => (
+                                    <Badge key={i} variant="outline" className="text-xs font-normal">
+                                      {p.length > 30 ? p.substring(0, 30) + '...' : p}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </DialogContent>
       </Dialog>

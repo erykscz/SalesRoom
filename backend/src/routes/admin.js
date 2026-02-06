@@ -136,7 +136,7 @@ router.post('/export-data', authMiddleware, requireRole('admin'), async (req, re
       all('SELECT id, email, name, role, is_active, created_at, updated_at FROM users'),
       all('SELECT * FROM deals'),
       all('SELECT * FROM leads'),
-      all('SELECT id, deal_id, file_name, file_format, summary, processed, created_at FROM transcripts'),
+      all('SELECT id, deal_id, file_name, file_format, source_platform, processed, uploaded_by, created_at, processed_at FROM transcripts'),
       all('SELECT id, deal_id, template_type, public_url_slug, chatbot_enabled, is_expired, created_at FROM sales_rooms'),
       all('SELECT * FROM activities'),
       all('SELECT * FROM battlecards'),
@@ -405,6 +405,148 @@ router.get('/gdpr-preview/:userId', authMiddleware, requireRole('admin'), async 
   } catch (error) {
     console.error('GDPR preview error:', error);
     res.status(500).json({ error: 'Failed to preview GDPR deletion' });
+  }
+});
+
+// GET /api/admin/settings - Get all system settings
+router.get('/settings', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const settings = await all('SELECT key, value, updated_at FROM system_settings');
+
+    // Convert to object format
+    const settingsObj = {};
+    settings.forEach(s => {
+      settingsObj[s.key] = {
+        value: s.value,
+        updatedAt: s.updated_at
+      };
+    });
+
+    res.json({ settings: settingsObj });
+  } catch (error) {
+    console.error('Get settings error:', error);
+    res.status(500).json({ error: 'Failed to get settings' });
+  }
+});
+
+// PUT /api/admin/settings - Update system settings
+router.put('/settings', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const { settings } = req.body;
+
+    if (!settings || typeof settings !== 'object') {
+      return res.status(400).json({ error: 'Settings object is required' });
+    }
+
+    // Validate known settings
+    const validKeys = [
+      'session_timeout_hours',
+      'max_file_size_mb',
+      'stagnation_warning_days',
+      'stagnation_critical_days',
+      'auto_archive_months',
+      'slack_webhook_url',
+      'slack_notifications_enabled',
+      'email_notifications_enabled',
+      'default_deal_health_threshold'
+    ];
+
+    const updatedSettings = [];
+
+    for (const [key, value] of Object.entries(settings)) {
+      if (!validKeys.includes(key)) {
+        continue; // Skip unknown keys
+      }
+
+      // Upsert the setting
+      await run(
+        `INSERT INTO system_settings (key, value, updated_at)
+         VALUES (?, ?, datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+        [key, String(value)]
+      );
+      updatedSettings.push(key);
+    }
+
+    // Log the settings change
+    await run(
+      'INSERT INTO audit_log (id, user_id, action, entity_type, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+      [uuidv4(), req.user.id, 'settings_updated', 'system', JSON.stringify({ updatedKeys: updatedSettings }), req.ip]
+    );
+
+    // Get updated settings
+    const allSettings = await all('SELECT key, value, updated_at FROM system_settings');
+    const settingsObj = {};
+    allSettings.forEach(s => {
+      settingsObj[s.key] = {
+        value: s.value,
+        updatedAt: s.updated_at
+      };
+    });
+
+    res.json({
+      message: 'Settings updated successfully',
+      settings: settingsObj
+    });
+  } catch (error) {
+    console.error('Update settings error:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// POST /api/admin/settings/test-slack - Test Slack webhook
+router.post('/settings/test-slack', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const slackSetting = await get('SELECT value FROM system_settings WHERE key = ?', ['slack_webhook_url']);
+
+    if (!slackSetting || !slackSetting.value) {
+      return res.status(400).json({ error: 'Slack webhook URL is not configured' });
+    }
+
+    const webhookUrl = slackSetting.value;
+
+    // Send test message to Slack
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: '🔔 Test notification from Proces OS Sales Room',
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '*Test Notification*\nThis is a test message from Proces OS Sales Room. If you see this, your Slack integration is working correctly!'
+            }
+          },
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `Sent by: ${req.user.name} (${req.user.email}) at ${new Date().toISOString()}`
+              }
+            ]
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Slack API error: ${errorText}`);
+    }
+
+    // Log the test
+    await run(
+      'INSERT INTO audit_log (id, user_id, action, entity_type, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+      [uuidv4(), req.user.id, 'slack_test', 'system', JSON.stringify({ success: true }), req.ip]
+    );
+
+    res.json({ message: 'Test notification sent successfully to Slack' });
+  } catch (error) {
+    console.error('Slack test error:', error);
+    res.status(500).json({ error: 'Failed to send test notification: ' + error.message });
   }
 });
 

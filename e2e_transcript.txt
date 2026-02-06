@@ -1,0 +1,37 @@
+E2E Sales Discovery Call - E2E_Test_Corporation
+Date: February 6, 2026
+Attendees: Jane Doe (Sales Rep), Robert Miller (CTO), Amanda Chen (VP Operations)
+
+Jane Doe: Thank you for making time for this call today. I'd like to understand your current challenges and how we might be able to help.
+
+Robert Miller: Thanks Jane. We've been dealing with significant scaling issues. Our legacy system simply can't handle our growth trajectory.
+
+Amanda Chen: That's right. We're processing about 1000 transactions per day now, and our old infrastructure is buckling under the pressure.
+
+Jane Doe: I see. What specific problems are you encountering?
+
+Robert Miller: Our response times have degraded from 200ms to over 2 seconds during peak hours. It's affecting customer satisfaction.
+
+Amanda Chen: And from an operations perspective, we're spending 40% of our time on manual workarounds and data reconciliation.
+
+Jane Doe: That sounds frustrating. What would an ideal solution look like for you?
+
+Robert Miller: We need something that can scale horizontally, has modern APIs, and integrates with our existing AWS infrastructure.
+
+Amanda Chen: For operations, we need better visibility, automated workflows, and real-time analytics.
+
+Jane Doe: Who else would be involved in evaluating this decision?
+
+Robert Miller: Our CEO, James Patterson, will need to sign off on any major technology investment. Our security team will also need to review compliance.
+
+Jane Doe: What's your timeline for making a decision?
+
+Amanda Chen: We have board pressure to address this by Q2. Our current contracts expire in April.
+
+Jane Doe: And what budget has been allocated for this initiative?
+
+Robert Miller: We're looking at $100,000 to $150,000 for the first year, with potential for growth.
+
+Jane Doe: Excellent. Let me show you how our platform addresses each of these pain points...
+
+[End of Call]

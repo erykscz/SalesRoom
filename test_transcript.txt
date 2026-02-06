@@ -1,0 +1,42 @@
+Discovery Call Transcript - TOAST_TEST_COMPANY
+Date: February 5, 2026
+Attendees: John Smith (Sales Rep), Sarah Johnson (CTO), Michael Chen (VP Engineering)
+
+John Smith: Thank you both for joining today. I wanted to understand more about your current challenges with your sales process.
+
+Sarah Johnson: Thanks for meeting with us, John. We've been struggling with our legacy CRM system. It's really slowing us down and causing a lot of manual work for our team.
+
+Michael Chen: Yes, our engineering team spends probably 30% of their time on manual data entry and report generation. It's a huge pain point for us.
+
+John Smith: I see. Can you tell me more about the specific bottlenecks you're experiencing?
+
+Sarah Johnson: Sure. The main issues are:
+1. Our current system doesn't integrate with our email platform
+2. We have no visibility into deal progress until it's too late
+3. The reporting is completely manual and takes days to compile
+
+Michael Chen: From a technical perspective, we need something that can handle our scale. We're processing about 500 deals per month currently, and we expect that to double next year.
+
+John Smith: That's really helpful context. What would success look like for you in terms of solving these problems?
+
+Sarah Johnson: Ideally, we'd want to reduce the time our team spends on administrative tasks by at least 50%. We also need better pipeline visibility for our leadership team.
+
+Michael Chen: And from my side, I need an API-first solution that our developers can integrate with. Security compliance is also critical - we need SOC 2 certification at minimum.
+
+John Smith: Makes sense. Who else would need to be involved in evaluating a solution like this?
+
+Sarah Johnson: Our CFO, David Williams, will need to approve any budget. And our Security Director, Lisa Park, will need to review any vendor from a compliance perspective.
+
+John Smith: Great. What's your timeline for making a decision on this?
+
+Michael Chen: We're hoping to have something in place by Q2 this year. Our current contract expires in April, so there's some urgency.
+
+Sarah Johnson: Yes, and our CEO has made this a priority for the company. He's been very vocal about needing better sales tools.
+
+John Smith: Perfect. What's your budget range for a solution like this?
+
+Sarah Johnson: We've allocated between $50,000 and $75,000 annually for this initiative.
+
+John Smith: Understood. Let me show you how our platform can address these specific challenges...
+
+[End of Discovery Call]

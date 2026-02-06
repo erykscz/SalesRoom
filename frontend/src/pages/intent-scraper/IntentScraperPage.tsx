@@ -1,11 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Search, Trash2, Edit2, ArrowRight, X, Filter, Building2, Target, Zap, RotateCcw, Settings, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2, ArrowRight, X, Filter, Building2, Target, Zap, RotateCcw, Settings, ChevronDown, ChevronUp, FileText, Sparkles, Loader2, Clock, CheckCircle, XCircle, History, MessageSquare, Copy, Shield } from 'lucide-react';
+
+interface IntentSearch {
+  id: string;
+  mission_objective: string;
+  icp_template_id: string | null;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  results_count: number;
+  owner_name: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+interface CompetitorInfo {
+  current_tools: { tool: string; category: string }[];
+  likely_solutions: string[];
+  competitive_landscape: string;
+}
 
 interface Lead {
   id: string;
@@ -20,6 +37,8 @@ interface Lead {
   deal_id: string | null;
   owner_name: string;
   created_at: string;
+  hook_suggestions: string[];
+  competitor_info: CompetitorInfo | null;
 }
 
 interface ICPTemplate {
@@ -60,6 +79,7 @@ export default function IntentScraperPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [icpTemplateFilter, setICPTemplateFilter] = useState('');
+  const [confidenceFilter, setConfidenceFilter] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState({
@@ -92,12 +112,23 @@ export default function IntentScraperPage() {
   });
   const [savingTemplate, setSavingTemplate] = useState(false);
 
+  // AI Search state
+  const [missionObjective, setMissionObjective] = useState('');
+  const [selectedICPForSearch, setSelectedICPForSearch] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searches, setSearches] = useState<IntentSearch[]>([]);
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
+  const [activeSearchId, setActiveSearchId] = useState<string | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
+  const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
+
   const fetchLeads = async () => {
     try {
       const token = localStorage.getItem('token');
       const params = new URLSearchParams();
       if (searchQuery) params.set('search', searchQuery);
       if (statusFilter) params.set('status', statusFilter);
+      if (confidenceFilter) params.set('min_confidence', confidenceFilter);
 
       const res = await fetch(`/api/leads?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -120,7 +151,7 @@ export default function IntentScraperPage() {
 
   useEffect(() => {
     fetchLeads();
-  }, [searchQuery, statusFilter]);
+  }, [searchQuery, statusFilter, confidenceFilter]);
 
   const resetFormFields = () => {
     setFormData({
@@ -312,6 +343,10 @@ export default function IntentScraperPage() {
     return 'text-red-600';
   };
 
+  const toggleExpandLead = (leadId: string) => {
+    setExpandedLeadId(expandedLeadId === leadId ? null : leadId);
+  };
+
   // ICP Templates functions
   const fetchICPTemplates = async () => {
     setLoadingTemplates(true);
@@ -497,7 +532,171 @@ export default function IntentScraperPage() {
   // Fetch ICP templates on page load (for dropdown filter) and when section is opened
   useEffect(() => {
     fetchICPTemplates();
+    fetchSearchHistory();
   }, []);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Fetch search history
+  const fetchSearchHistory = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/intent-scraper/searches', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch searches');
+      const data = await res.json();
+      setSearches(data.searches || []);
+    } catch (error) {
+      console.error('Error fetching search history:', error);
+    }
+  };
+
+  // Start AI search
+  const startSearch = async () => {
+    if (!missionObjective.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a mission objective',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsSearching(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/intent-scraper/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          mission_objective: missionObjective,
+          icp_template_id: selectedICPForSearch || null
+        })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to start search');
+      }
+
+      const result = await res.json();
+      setActiveSearchId(result.id);
+
+      toast({
+        title: 'Search Started',
+        description: 'AI is analyzing your mission objective...'
+      });
+
+      // Start polling for results
+      startPolling(result.id);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive'
+      });
+      setIsSearching(false);
+    }
+  };
+
+  // Poll for search results
+  const startPolling = (searchId: string) => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+
+    const poll = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/intent-scraper/searches/${searchId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!res.ok) throw new Error('Failed to fetch search status');
+        const data = await res.json();
+
+        if (data.search.status === 'completed') {
+          clearInterval(pollIntervalRef.current!);
+          pollIntervalRef.current = null;
+          setIsSearching(false);
+          setActiveSearchId(null);
+          setMissionObjective('');
+
+          toast({
+            title: 'Search Complete!',
+            description: `Found ${data.leads?.length || 0} potential leads`
+          });
+
+          // Refresh leads and search history
+          fetchLeads();
+          fetchSearchHistory();
+        } else if (data.search.status === 'failed') {
+          clearInterval(pollIntervalRef.current!);
+          pollIntervalRef.current = null;
+          setIsSearching(false);
+          setActiveSearchId(null);
+
+          toast({
+            title: 'Search Failed',
+            description: 'An error occurred during the search',
+            variant: 'destructive'
+          });
+
+          fetchSearchHistory();
+        }
+        // If still running, continue polling
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    };
+
+    // Poll every 1 second
+    pollIntervalRef.current = window.setInterval(poll, 1000);
+    // Also poll immediately
+    poll();
+  };
+
+  const getSearchStatusIcon = (status: string) => {
+    switch (status) {
+      case 'queued':
+        return <Clock className="h-4 w-4 text-yellow-500" />;
+      case 'running':
+        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
+      case 'completed':
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'failed':
+        return <XCircle className="h-4 w-4 text-red-500" />;
+      default:
+        return null;
+    }
+  };
+
+  const getSearchStatusLabel = (status: string) => {
+    switch (status) {
+      case 'queued':
+        return 'Queued';
+      case 'running':
+        return 'Running...';
+      case 'completed':
+        return 'Completed';
+      case 'failed':
+        return 'Failed';
+      default:
+        return status;
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -506,10 +705,15 @@ export default function IntentScraperPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Intent Scraper</h2>
           <p className="text-muted-foreground">
-            Manage and track your sales leads
+            AI-powered lead discovery and management
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowSearchHistory(!showSearchHistory)}>
+            <History className="mr-2 h-4 w-4" />
+            Search History
+            {showSearchHistory ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
+          </Button>
           <Button variant="outline" onClick={() => setShowICPTemplates(!showICPTemplates)}>
             <Settings className="mr-2 h-4 w-4" />
             ICP Templates
@@ -521,6 +725,107 @@ export default function IntentScraperPage() {
           </Button>
         </div>
       </div>
+
+      {/* AI Search Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-yellow-500" />
+            AI-Powered Lead Search
+          </CardTitle>
+          <CardDescription>
+            Describe your target customer in natural language and let AI find matching companies
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="mission_objective">Mission Objective</Label>
+              <Textarea
+                id="mission_objective"
+                placeholder="Example: Find mid-size healthcare companies using legacy ERP systems that might need modernization. Focus on companies with 100-500 employees in the US market that have recently received funding."
+                value={missionObjective}
+                onChange={(e) => setMissionObjective(e.target.value)}
+                rows={3}
+                disabled={isSearching}
+              />
+            </div>
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="flex-1 min-w-[200px]">
+                <Label htmlFor="icp_for_search">Apply ICP Template (optional)</Label>
+                <select
+                  id="icp_for_search"
+                  value={selectedICPForSearch}
+                  onChange={(e) => setSelectedICPForSearch(e.target.value)}
+                  disabled={isSearching}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                >
+                  <option value="">No template</option>
+                  {icpTemplates.map(template => (
+                    <option key={template.id} value={template.id}>{template.name}</option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                onClick={startSearch}
+                disabled={isSearching || !missionObjective.trim()}
+                className="min-w-[140px]"
+              >
+                {isSearching ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Searching...
+                  </>
+                ) : (
+                  <>
+                    <Search className="mr-2 h-4 w-4" />
+                    Start Search
+                  </>
+                )}
+              </Button>
+            </div>
+            {isSearching && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-blue-50 p-3 rounded-lg">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                <span>AI is analyzing your mission objective and searching for matching companies...</span>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Search History Section */}
+      {showSearchHistory && searches.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Recent Searches
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {searches.slice(0, 5).map((search) => (
+                <div key={search.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      {getSearchStatusIcon(search.status)}
+                      <span className="font-medium text-sm">{getSearchStatusLabel(search.status)}</span>
+                      {search.status === 'completed' && (
+                        <span className="text-xs text-green-600">({search.results_count} leads)</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{search.mission_objective}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {new Date(search.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ICP Templates Section */}
       {showICPTemplates && (
@@ -730,6 +1035,20 @@ export default function IntentScraperPage() {
                 ))}
               </select>
             </div>
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-muted-foreground" />
+              <select
+                value={confidenceFilter}
+                onChange={(e) => setConfidenceFilter(e.target.value)}
+                className="h-11 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                aria-label="Confidence Filter"
+              >
+                <option value="">All Confidence</option>
+                <option value="70">High (70%+)</option>
+                <option value="50">Medium (50%+)</option>
+                <option value="30">Low (30%+)</option>
+              </select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -923,6 +1242,24 @@ export default function IntentScraperPage() {
                           {lead.identified_pain}
                         </p>
                       )}
+
+                      {/* Expand/Collapse Button */}
+                      {lead.hook_suggestions && lead.hook_suggestions.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleExpandLead(lead.id)}
+                          className="mt-2 text-blue-600 hover:text-blue-700"
+                        >
+                          <MessageSquare className="h-4 w-4 mr-1" />
+                          {expandedLeadId === lead.id ? 'Hide' : 'Show'} Hook Suggestions ({lead.hook_suggestions.length})
+                          {expandedLeadId === lead.id ? (
+                            <ChevronUp className="h-4 w-4 ml-1" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 ml-1" />
+                          )}
+                        </Button>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -956,6 +1293,92 @@ export default function IntentScraperPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Expanded Hook Suggestions Section */}
+                  {expandedLeadId === lead.id && lead.hook_suggestions && lead.hook_suggestions.length > 0 && (
+                    <div className="mt-4 pt-4 border-t">
+                      <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-yellow-500" />
+                        AI-Generated Icebreaker Hooks
+                      </h4>
+                      <div className="space-y-3">
+                        {lead.hook_suggestions.map((hook, index) => (
+                          <div key={index} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <span className="inline-block px-2 py-0.5 bg-blue-200 text-blue-800 rounded text-xs font-medium mb-2">
+                                  Hook #{index + 1}
+                                </span>
+                                <p className="text-sm text-gray-700">{hook}</p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="shrink-0"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(hook);
+                                  toast({
+                                    title: 'Copied!',
+                                    description: 'Hook copied to clipboard'
+                                  });
+                                }}
+                                title="Copy to clipboard"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Competitor Analysis Section */}
+                      {lead.competitor_info && (
+                        <div className="mt-6">
+                          <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-purple-500" />
+                            Competitor & Tool Analysis
+                          </h4>
+                          <div className="space-y-4">
+                            {/* Current Tools */}
+                            {lead.competitor_info.current_tools && lead.competitor_info.current_tools.length > 0 && (
+                              <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
+                                <h5 className="text-xs font-medium text-purple-800 mb-2">Current Tools Detected</h5>
+                                <div className="flex flex-wrap gap-2">
+                                  {lead.competitor_info.current_tools.map((tool, idx) => (
+                                    <span key={idx} className="px-2 py-1 bg-purple-200 text-purple-800 rounded text-xs">
+                                      {tool.tool} <span className="text-purple-600">({tool.category})</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Likely Solutions / Competitors */}
+                            {lead.competitor_info.likely_solutions && lead.competitor_info.likely_solutions.length > 0 && (
+                              <div className="p-3 bg-orange-50 rounded-lg border border-orange-100">
+                                <h5 className="text-xs font-medium text-orange-800 mb-2">Likely Competitors / Solutions</h5>
+                                <div className="flex flex-wrap gap-2">
+                                  {lead.competitor_info.likely_solutions.map((solution, idx) => (
+                                    <span key={idx} className="px-2 py-1 bg-orange-200 text-orange-800 rounded text-xs">
+                                      {solution}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Competitive Landscape */}
+                            {lead.competitor_info.competitive_landscape && (
+                              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <h5 className="text-xs font-medium text-gray-700 mb-2">Competitive Landscape</h5>
+                                <p className="text-sm text-gray-600">{lead.competitor_info.competitive_landscape}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

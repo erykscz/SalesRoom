@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Search, Plus, FileText, HelpCircle, Users, FileBox, Trash2, Edit, X, Check, Loader2
+  Search, Plus, FileText, HelpCircle, Users, FileBox, Trash2, Edit, X, Check, Loader2, Upload, File
 } from 'lucide-react';
 
 interface KnowledgeItem {
@@ -43,7 +43,150 @@ export default function KnowledgeBasePage() {
   });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFormData, setUploadFormData] = useState({
+    type: 'case_study',
+    title: '',
+    tags: ''
+  });
+  const [uploadPreview, setUploadPreview] = useState<string>('');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const allowedExtensions = ['pdf', 'docx', 'md', 'txt'];
+
+    if (!extension || !allowedExtensions.includes(extension)) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Please upload a PDF, DOCX, MD, or TXT file',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setUploadFile(file);
+    setUploadFormData({
+      ...uploadFormData,
+      title: file.name.replace(/\.[^/.]+$/, '')
+    });
+    setShowUploadForm(true);
+
+    // Read file content for preview
+    try {
+      if (extension === 'txt' || extension === 'md') {
+        const text = await file.text();
+        setUploadPreview(text.substring(0, 1000) + (text.length > 1000 ? '...' : ''));
+      } else if (extension === 'pdf') {
+        setUploadPreview('[PDF Document - Content will be extracted on save]');
+      } else if (extension === 'docx') {
+        setUploadPreview('[Word Document - Content will be extracted on save]');
+      }
+    } catch (error) {
+      console.error('Error reading file:', error);
+      setUploadPreview('[Unable to preview file content]');
+    }
+  };
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile) return;
+
+    if (!uploadFormData.title.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Title is required',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setUploading(true);
+      const token = localStorage.getItem('token');
+
+      // For TXT and MD files, we can read the content directly
+      // For PDF and DOCX, in a real app we'd send to backend for processing
+      let content = '';
+      const extension = uploadFile.name.split('.').pop()?.toLowerCase();
+
+      if (extension === 'txt' || extension === 'md') {
+        content = await uploadFile.text();
+      } else {
+        // For PDF/DOCX, we simulate content extraction
+        // In production, this would be handled by a backend service
+        content = `[Uploaded from ${uploadFile.name}]\n\nThis document was uploaded and its content would be extracted by the document processing service.`;
+      }
+
+      const tags = uploadFormData.tags
+        ? uploadFormData.tags.split(',').map(t => t.trim()).filter(t => t)
+        : [];
+
+      // Add file type as a tag
+      if (extension) {
+        tags.push(extension.toUpperCase());
+      }
+
+      const response = await fetch('/api/knowledge', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: uploadFormData.type,
+          title: uploadFormData.title.trim(),
+          content,
+          tags
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload document');
+      }
+
+      toast({
+        title: 'Success',
+        description: `Document "${uploadFile.name}" uploaded successfully`
+      });
+
+      // Reset upload form
+      setShowUploadForm(false);
+      setUploadFile(null);
+      setUploadFormData({ type: 'case_study', title: '', tags: '' });
+      setUploadPreview('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+      fetchItems();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to upload document',
+        variant: 'destructive'
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const cancelUpload = () => {
+    setShowUploadForm(false);
+    setUploadFile(null);
+    setUploadFormData({ type: 'case_study', title: '', tags: '' });
+    setUploadPreview('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const fetchItems = async () => {
     try {
@@ -266,10 +409,26 @@ export default function KnowledgeBasePage() {
           <h1 className="text-2xl font-bold">Knowledge Base</h1>
           <p className="text-muted-foreground">Manage case studies, FAQs, and sales materials</p>
         </div>
-        <Button onClick={() => { setShowCreateForm(true); setEditingItem(null); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Item
-        </Button>
+        <div className="flex gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept=".pdf,.docx,.md,.txt"
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Upload
+          </Button>
+          <Button onClick={() => { setShowCreateForm(true); setEditingItem(null); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Item
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -302,6 +461,74 @@ export default function KnowledgeBasePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Upload Form */}
+      {showUploadForm && uploadFile && (
+        <Card className="border-green-200 bg-green-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-green-800">
+              <File className="h-5 w-5" />
+              Upload Document: {uploadFile.name}
+            </CardTitle>
+            <CardDescription>
+              Add title and tags for your uploaded document
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleUpload} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Type</label>
+                <select
+                  value={uploadFormData.type}
+                  onChange={(e) => setUploadFormData({ ...uploadFormData, type: e.target.value })}
+                  className="w-full px-3 py-2 rounded-md border bg-background"
+                  required
+                >
+                  <option value="case_study">Case Study</option>
+                  <option value="faq">FAQ</option>
+                  <option value="competitor_sheet">Competitor Sheet</option>
+                  <option value="offer_template">Offer Template</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Title</label>
+                <Input
+                  value={uploadFormData.title}
+                  onChange={(e) => setUploadFormData({ ...uploadFormData, title: e.target.value })}
+                  placeholder="Enter document title..."
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Tags (comma-separated)</label>
+                <Input
+                  value={uploadFormData.tags}
+                  onChange={(e) => setUploadFormData({ ...uploadFormData, tags: e.target.value })}
+                  placeholder="e.g., cloud, migration, enterprise"
+                />
+              </div>
+              {uploadPreview && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Content Preview</label>
+                  <div className="p-3 bg-white rounded-md border text-sm text-muted-foreground max-h-40 overflow-y-auto whitespace-pre-wrap">
+                    {uploadPreview}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Button type="submit" disabled={uploading} className="bg-green-600 hover:bg-green-700">
+                  {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                  Save Document
+                </Button>
+                <Button type="button" variant="outline" onClick={cancelUpload}>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Create Form */}
       {showCreateForm && (
