@@ -2636,3 +2636,68 @@ The remaining features require major module implementations:
 ---
 End of Session 30
 
+---
+
+## Session 31: Date Filters Implementation
+
+### Date: 2026-02-06
+
+### Accomplishments:
+
+1. **Verified Feature #53 - Deleted item removed from dropdowns**
+   - Created ICP Template "DELETE_TEST_TEMPLATE_53"
+   - Verified template appeared in ICP Template dropdown
+   - Deleted the template
+   - Verified template was removed from the dropdown
+   - Marked as passing (262/285)
+
+2. **Implemented Feature #190 - Today/This Week filters work**
+   - Added `date_filter` query parameter to backend deals.js route
+   - Implemented SQLite date filtering: DATE('now') for today, DATE('now', '-7 days') for this week
+   - Added date filter dropdown to DealsPage.tsx with options: All Time, Today, This Week
+   - Added URL parameter syncing for date_filter state
+   - Created test deal "TODAY_FILTER_TEST_190" and verified filtering:
+     - Today filter: 3 deals found
+     - This Week filter: 127 deals found
+   - Marked as passing (263/285)
+
+3. **Added Archive/Unarchive Functionality**
+   - Added showArchived state and URL param to DealsPage
+   - Added "Show Archived" toggle button
+   - Added Archive and Restore buttons in deal actions
+   - Implemented archiveDeal and unarchiveDeal functions
+
+### Current Status:
+- **Features Passing**: 263 of 285
+- **Completion**: 92.3%
+- **Progress**: +2 features this session (#53, #190)
+
+### Files Modified:
+- backend/src/routes/deals.js (date_filter query param, SQL filtering)
+- frontend/src/pages/deals/DealsPage.tsx (date filter dropdown, archive functionality)
+- frontend/vite.config.ts (proxy port updated to 3007)
+
+### Git Commits:
+- 34271e4: Add Today/This Week date filters to Deals page
+
+### Remaining Features (22):
+All remaining features require major unimplemented infrastructure:
+- **Intent Scraper AI Search** (6 features): #211-216 - Requires AI integration, web scraping
+- **Sales Room Advanced** (6 features): #226-228, #233-234 - Markdown editor, ROI calc, chatbot, Slack
+- **Kanban Board** (4 features): #39, #135, #189, #278 - Requires building entire Kanban view
+- **AI-Powered Features** (3 features): #263-265 - Deal autopsy, re-engagement triggers
+- **Other** (3 features): #42 Global search, #58 Health score calculation, #285 Avatar upload
+
+### Technical Notes:
+- Backend running on port 3007 (to avoid port conflicts)
+- Frontend running on port 5176
+- Date filtering uses SQLite DATE() functions for timezone-aware filtering
+
+### Users Available for Testing:
+- admin@salesroom.local / Admin123! (role: admin)
+- userb@salesroom.local / UserB123! (role: rep)
+- manager@salesroom.local / Manager123! (role: manager)
+
+---
+End of Session 31
+
