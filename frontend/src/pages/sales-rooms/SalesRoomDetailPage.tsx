@@ -2,7 +2,17 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, ArrowLeft, ExternalLink, Eye, Clock, Users, BarChart3, Copy, CheckCircle2 } from 'lucide-react';
+import { Loader2, ArrowLeft, ExternalLink, Eye, Clock, Users, BarChart3, Copy, CheckCircle2, CopyPlus, Edit3 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 
 interface SalesRoom {
@@ -45,6 +55,14 @@ export default function SalesRoomDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [availableDeals, setAvailableDeals] = useState<{ id: string; company_name: string }[]>([]);
+  const [selectedDealForClone, setSelectedDealForClone] = useState('');
+  const [cloning, setCloning] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [previewTab, setPreviewTab] = useState('edit');
 
   useEffect(() => {
     const fetchSalesRoom = async () => {
@@ -94,6 +112,123 @@ export default function SalesRoomDetailPage() {
     }
   };
 
+  const fetchAvailableDeals = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/deals?has_sales_room=false', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableDeals(data.deals || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch deals:', err);
+    }
+  };
+
+  const openEditDialog = () => {
+    setEditContent(salesRoom?.offer_content || '');
+    setPreviewTab('edit');
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveContent = async () => {
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/sales-rooms/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ offer_content: editContent })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save content');
+      }
+
+      // Update local state
+      setSalesRoom(prev => prev ? { ...prev, offer_content: editContent } : null);
+      toast({ title: 'Success!', description: 'Content saved successfully' });
+      setEditDialogOpen(false);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to save content',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Simple markdown to HTML converter for preview
+  const renderMarkdown = (text: string) => {
+    if (!text) return '<p class="text-muted-foreground">No content yet. Click Edit to add content.</p>';
+
+    return text
+      // Headers
+      .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mt-6 mb-3">$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mt-6 mb-4">$1</h1>')
+      // Bold
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      // Italic
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      // Inline code
+      .replace(/`(.*?)`/g, '<code class="bg-muted px-1 py-0.5 rounded text-sm">$1</code>')
+      // Links
+      .replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" class="text-primary underline" target="_blank">$1</a>')
+      // Unordered lists
+      .replace(/^\- (.*$)/gim, '<li class="ml-4">$1</li>')
+      // Line breaks
+      .replace(/\n/g, '<br />');
+  };
+
+  const handleClone = async () => {
+    if (!selectedDealForClone) {
+      toast({ title: 'Error', description: 'Please select a deal', variant: 'destructive' });
+      return;
+    }
+
+    setCloning(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/sales-rooms/${id}/clone`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ deal_id: selectedDealForClone })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to clone Sales Room');
+      }
+
+      toast({ title: 'Success!', description: 'Sales Room cloned successfully' });
+      setCloneDialogOpen(false);
+      // Navigate to the new sales room
+      window.location.href = `/sales-rooms/${data.salesRoom.id}`;
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to clone Sales Room',
+        variant: 'destructive'
+      });
+    } finally {
+      setCloning(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -138,10 +273,129 @@ export default function SalesRoomDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" onClick={openEditDialog}>
+                <Edit3 className="h-4 w-4 mr-2" />
+                Edit Content
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Edit Sales Room Content</DialogTitle>
+                <DialogDescription>
+                  Use Markdown to format your content. Changes will be reflected in the public Sales Room.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 overflow-hidden flex flex-col">
+                <Tabs value={previewTab} onValueChange={setPreviewTab} className="flex-1 flex flex-col">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="edit">Edit</TabsTrigger>
+                    <TabsTrigger value="preview">Preview</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="edit" className="flex-1 mt-4">
+                    <Textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      placeholder="# Your Offer&#10;&#10;Write your offer content using Markdown...&#10;&#10;## Features&#10;- Feature 1&#10;- Feature 2&#10;&#10;**Bold text** and *italic text*"
+                      className="h-[300px] font-mono text-sm resize-none"
+                    />
+                  </TabsContent>
+                  <TabsContent value="preview" className="flex-1 mt-4">
+                    <div
+                      className="h-[300px] p-4 border rounded-lg bg-background overflow-auto prose prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(editContent) }}
+                    />
+                  </TabsContent>
+                </Tabs>
+              </div>
+              <div className="flex justify-between items-center pt-4 border-t mt-4">
+                <p className="text-sm text-muted-foreground">
+                  Supports: # Headers, **bold**, *italic*, `code`, [links](url), - lists
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSaveContent} disabled={saving}>
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Button variant="outline" onClick={copyPublicUrl}>
             {copied ? <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" /> : <Copy className="h-4 w-4 mr-2" />}
             {copied ? 'Copied!' : 'Copy Link'}
           </Button>
+          <Dialog open={cloneDialogOpen} onOpenChange={(open) => {
+            setCloneDialogOpen(open);
+            if (open) fetchAvailableDeals();
+          }}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <CopyPlus className="h-4 w-4 mr-2" />
+                Clone
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Clone Sales Room</DialogTitle>
+                <DialogDescription>
+                  Create a copy of this Sales Room for another deal. All content and settings will be copied.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select Target Deal</label>
+                  {availableDeals.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No deals available without a Sales Room.</p>
+                  ) : (
+                    <div className="max-h-60 overflow-y-auto space-y-2">
+                      {availableDeals.map((deal) => (
+                        <div
+                          key={deal.id}
+                          onClick={() => setSelectedDealForClone(deal.id)}
+                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                            selectedDealForClone === deal.id
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:border-primary/50'
+                          }`}
+                        >
+                          <p className="font-medium">{deal.company_name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setCloneDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleClone} disabled={cloning || !selectedDealForClone}>
+                    {cloning ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Cloning...
+                      </>
+                    ) : (
+                      <>
+                        <CopyPlus className="h-4 w-4 mr-2" />
+                        Clone Sales Room
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
           <a href={publicUrl} target="_blank" rel="noopener noreferrer">
             <Button>
               <ExternalLink className="h-4 w-4 mr-2" />
