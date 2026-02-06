@@ -2594,15 +2594,21 @@ End of Session 29
      - List view with edit/delete actions
      - Toast notifications for all operations
 
-4. **Verified All Three Features Working**
+4. **Verified ICP Template CRUD Features**
    - ✅ #74 ICP Template CRUD - Create: Created test template with criteria
    - ✅ #75 ICP Template CRUD - Edit: Updated template description, verified persistence
    - ✅ #76 ICP Template CRUD - Delete: Confirmed deletion with dialog, verified removal
 
+5. **Added ICP Template Dropdown Filter**
+   - Added ICP Template dropdown to Intent Scraper filters section
+   - Templates load from database on page load
+   - Dropdown shows "All ICP Templates" + database-loaded templates
+   - ✅ #97 Dropdown options from database: Verified template appears in dropdown
+
 ### Current Status:
-- **Features Passing**: 260 of 285
-- **Completion**: 91.2%
-- **Progress**: +3 features this session
+- **Features Passing**: 261 of 285
+- **Completion**: 91.6%
+- **Progress**: +4 features this session (#74, #75, #76, #97)
 
 ### Files Created/Modified:
 - NEW: backend/src/routes/icp-templates.js (full CRUD API)
@@ -2612,14 +2618,15 @@ End of Session 29
 
 ### Git Commits:
 - 7ff1f1a: Session 30: Implement ICP Template CRUD (#74, #75, #76)
+- 0a20884: Add ICP Template dropdown filter (#97)
 
-### Remaining Features (25):
+### Remaining Features (24):
 The remaining features require major module implementations:
-- Kanban Board (~4 features)
-- Intent Scraper AI Search (~6 features)
-- Sales Room Advanced (~6 features)
-- AI-Powered Deal Analysis (~3 features)
-- Other (Global search, Avatar upload, etc.)
+- Kanban Board (~4 features): #39, #135, #189, #278
+- Intent Scraper AI Search (~6 features): #211-216
+- Sales Room Advanced (~5 features): #226-228, #233-234
+- AI-Powered Deal Analysis (~3 features): #263-265
+- Other (~6 features): #42 Global search, #53 Dropdown sync, #58 Health score, #190 Temporal filters, #260 Notification prefs, #285 Avatar upload
 
 ### Users Available for Testing:
 - admin@salesroom.local / Admin123! (role: admin)
