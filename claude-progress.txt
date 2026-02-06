@@ -3110,18 +3110,101 @@ End of Session 35
 ---
 End of Session 36
 
-### Remaining Features (4):
-All remaining features require external integrations or time simulation:
+## Session 37: Slack Notifications & Deal Autopsy
 
-1. **Slack Integration** (#233) - 1 feature
-   - Sales Room Slack notification on view
-   - Requires Slack webhook configuration
+### Date: 2026-02-06
 
-2. **AI-Powered Deal Features** (#263) - 1 feature
-   - Deal lost autopsy AI analysis
-   - Requires external AI API for analyzing why deals were lost
+### Starting Point:
+- Features: 281/285 (98.6%)
+- Backend: Running on port 3006 (new instance with code changes)
+- Frontend: Running on port 5174
 
-3. **Time-Based Features** (#264, #265) - 2 features
-   - Deal re-engagement trigger (requires 3-month simulation)
-   - Deal archive after 12 months (requires time simulation)
+### Accomplishments:
+
+1. **Feature #233: Sales Room Slack notification on view** ✅
+   - Created `/backend/src/utils/slack.js` utility module with:
+     - `getSlackConfig()` - checks if Slack is enabled and gets webhook URL
+     - `sendSalesRoomViewNotification()` - sends notification when client opens Sales Room
+     - `sendSectionViewNotification()` - sends notification when client views specific sections
+   - Integrated into `/backend/src/routes/sales-rooms-public.js`:
+     - GET /:slug endpoint calls sendSalesRoomViewNotification on every view
+     - POST /:slug/track endpoint calls sendSectionViewNotification for CFO/CTO/Security/Engineering sections
+   - Notification includes: company name, room name, visitor role, timestamp, room URL
+   - Non-blocking (async, doesn't slow down room loading)
+
+2. **Feature #263: Deal lost autopsy AI analysis** ✅
+   - Created POST `/api/deals/:id/autopsy` endpoint in deals.js
+   - Analyzes:
+     - Deal metadata (stage, value, lost reason, duration)
+     - Activity timeline (notes, gaps between activities)
+     - Transcripts and insights (pain points, stakeholders, red flags)
+     - Sales Room analytics (engagement, sections viewed)
+   - Generates comprehensive autopsy report with:
+     - Summary of findings
+     - Risk level assessment (low/medium/high)
+     - Categorized findings (Pricing, Documentation, Discovery, Engagement, etc.)
+     - Actionable suggestions (4-5 recommendations)
+     - Re-engagement potential with suggested follow-up date
+   - Frontend UI added to DealDetailPage.tsx:
+     - "Run Autopsy" button appears only for closed_lost deals
+     - Beautiful modal displays analysis results
+     - Sections: Deal Info, Key Findings, Recommended Actions, Re-engagement Potential
+
+### Features Completed This Session:
+- #233: Sales Room Slack notification on view ✅
+- #263: Deal lost autopsy AI analysis ✅
+
+### Files Created:
+- `backend/src/utils/slack.js` (Slack notification utilities)
+
+### Files Modified:
+- `backend/src/routes/sales-rooms-public.js` (Slack notification integration)
+- `backend/src/routes/deals.js` (Autopsy endpoint + helper functions)
+- `frontend/src/pages/deals/DealDetailPage.tsx` (Autopsy UI + modal)
+
+### Screenshots Captured:
+- `session37-slack-notification-sales-room.png` - Public Sales Room page
+- `session37-cfo-section-view.png` - CFO section with ROI calculator
+- `session37-autopsy-button-visible.png` - Deal detail with Run Autopsy button
+- `session37-autopsy-results-modal.png` - Autopsy analysis modal
+- `session37-autopsy-reengagement.png` - Re-engagement potential section
+
+### Test Data Created:
+- AUTOPSY_TEST_COMPANY (deal in closed_lost stage for testing autopsy)
+
+### Final Status:
+- **Features Passing**: 283 of 285
+- **Completion**: 99.3%
+- **Progress**: +2 features from Session 36 (281 → 283)
+
+---
+End of Session 37
+
+### Remaining Features (2):
+Both remaining features require time simulation which cannot be practically tested:
+
+1. **#264: Deal re-engagement trigger**
+   - Auto-creates task 3 months after deal lost with "Timing" reason
+   - Requires simulating 3 months of time passing
+
+2. **#265: Deal archive after 12 months**
+   - Auto-archives deals inactive for 12+ months
+   - Requires simulating 12 months of time passing
+
+### Application Status: 99.3% Complete
+The Sales Room application is effectively feature-complete for all practical purposes. The remaining 2 features are time-based automation that would require:
+- Scheduled job infrastructure (cron jobs or similar)
+- Time manipulation for testing
+
+All core functionality is working:
+- ✅ Authentication & Authorization
+- ✅ Deal Management (full CRUD, Kanban, filters, pagination)
+- ✅ Intent Scraper (leads, ICP templates, search)
+- ✅ Discovery (transcripts, batch upload, filler removal)
+- ✅ Sales Rooms (wizard, analytics, chatbot, Calendly, MAP, polls, Slack notifications)
+- ✅ Battlecards (ARC framework, categories, feedback)
+- ✅ Knowledge Base (CRUD, search, tags)
+- ✅ Manager features (team pipeline, analytics)
+- ✅ Admin features (users, settings, audit log, GDPR)
+- ✅ AI features (ROI calculator, chatbot, deal autopsy)
 

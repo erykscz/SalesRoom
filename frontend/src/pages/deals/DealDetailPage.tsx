@@ -45,6 +45,8 @@ interface Deal {
   owner_name?: string;
   created_at: string;
   updated_at: string;
+  has_decision_maker?: number;
+  has_confirmed_budget?: number;
 }
 
 interface Activity {
@@ -59,6 +61,34 @@ interface User {
   name: string;
   email: string;
   role: string;
+}
+
+interface AutopsyFinding {
+  category: string;
+  issue: string;
+  detail: string;
+}
+
+interface AutopsyResult {
+  deal: {
+    company_name: string;
+    industry: string | null;
+    estimated_value: number | null;
+    lost_reason: string | null;
+    stage_duration: string;
+  };
+  analysis: {
+    summary: string;
+    risk_level: string;
+    findings: AutopsyFinding[];
+    suggestions: string[];
+    reengagement_potential: {
+      score: string;
+      recommendation: string;
+      suggested_date: string | null;
+    };
+  };
+  generated_at: string;
 }
 
 const stageLabels: Record<string, string> = {
@@ -89,7 +119,7 @@ const priorityColors: Record<string, string> = {
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [deal, setDeal] = useState<Deal | null>(null);
@@ -104,9 +134,24 @@ export default function DealDetailPage() {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [transferring, setTransferring] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [runningAutopsy, setRunningAutopsy] = useState(false);
+  const [autopsyResult, setAutopsyResult] = useState<AutopsyResult | null>(null);
+  const [showAutopsyModal, setShowAutopsyModal] = useState(false);
 
   // Store the referrer URL (deals list with filters) from location state
   const backUrl = (location.state as { from?: string })?.from || '/deals';
+
+  // Check if current user can edit this deal
+  // Admin can edit all, owner can edit their own, manager cannot edit other's deals (coaching mode)
+  const canEdit = user && deal && (
+    user.role === 'admin' ||
+    deal.owner_id === user.id
+  );
+
+  // Manager can view but not edit/delete other reps' deals (coaching read-only mode)
+  const isCoachingMode = user && deal &&
+    user.role === 'manager' &&
+    deal.owner_id !== user.id;
 
   useEffect(() => {
     const fetchDeal = async () => {
@@ -260,6 +305,58 @@ export default function DealDetailPage() {
     }
   };
 
+  const handleRunAutopsy = async () => {
+    if (!deal || deal.stage !== 'closed_lost') return;
+
+    try {
+      setRunningAutopsy(true);
+      const response = await fetch(`${API_URL}/deals/${id}/autopsy`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to run autopsy');
+      }
+
+      const data = await response.json();
+      setAutopsyResult(data);
+      setShowAutopsyModal(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to run autopsy analysis');
+    } finally {
+      setRunningAutopsy(false);
+    }
+  };
+
+  const handleToggleHealthAttribute = async (attribute: 'has_decision_maker' | 'has_confirmed_budget', value: boolean) => {
+    if (!deal) return;
+
+    try {
+      const response = await fetch(`${API_URL}/deals/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ [attribute]: value }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update deal');
+      }
+
+      const data = await response.json();
+      setDeal(data.deal);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update health attribute');
+    }
+  };
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -351,20 +448,41 @@ export default function DealDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Coaching Mode Banner */}
+          {isCoachingMode && (
+            <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded-full">
+              Coaching Mode (Read-only)
+            </span>
+          )}
           <Button variant="outline" onClick={handleOpenTransferModal}>
             <UserPlus className="w-4 h-4 mr-2" />
             Transfer Deal
           </Button>
-          <Link to={`/deals/${id}/edit`}>
-            <Button variant="outline">
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </Button>
-          </Link>
-          <Button variant="outline" className="text-red-500 hover:text-red-600" onClick={handleDelete} disabled={deleting}>
-            <Trash2 className="w-4 h-4 mr-2" />
-            {deleting ? 'Deleting...' : 'Delete'}
-          </Button>
+          {canEdit ? (
+            <>
+              <Link to={`/deals/${id}/edit`}>
+                <Button variant="outline">
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              </Link>
+              <Button variant="outline" className="text-red-500 hover:text-red-600" onClick={handleDelete} disabled={deleting}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                {deleting ? 'Deleting...' : 'Delete'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" disabled title="Only the deal owner can edit">
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+              <Button variant="outline" disabled title="Only the deal owner can delete">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -429,6 +547,38 @@ export default function DealDetailPage() {
                   deal.health_score >= 40 ? 'Needs Attention' : 'At Risk'
                 ) : 'Not calculated'}
               </p>
+              {/* Health Score Factors */}
+              <div className="mt-4 pt-4 border-t space-y-2">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Score Factors</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Decision Maker
+                  </span>
+                  <Button
+                    variant={deal.has_decision_maker ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleToggleHealthAttribute('has_decision_maker', !deal.has_decision_maker)}
+                    className="text-xs"
+                  >
+                    {deal.has_decision_maker ? '+10 pts' : 'Not Set'}
+                  </Button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" />
+                    Confirmed Budget
+                  </span>
+                  <Button
+                    variant={deal.has_confirmed_budget ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleToggleHealthAttribute('has_confirmed_budget', !deal.has_confirmed_budget)}
+                    className="text-xs"
+                  >
+                    {deal.has_confirmed_budget ? '+20 pts' : 'Not Set'}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -456,6 +606,21 @@ export default function DealDetailPage() {
                   Prep Battlecard
                 </Button>
               </Link>
+              {deal.stage === 'closed_lost' && (
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={handleRunAutopsy}
+                  disabled={runningAutopsy}
+                >
+                  {runningAutopsy ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                  )}
+                  {runningAutopsy ? 'Analyzing...' : 'Run Autopsy'}
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -671,6 +836,132 @@ export default function DealDetailPage() {
                   ) : (
                     'Transfer'
                   )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Autopsy Results Modal */}
+      {showAutopsyModal && autopsyResult && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <CardHeader className="border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-red-600">
+                    <AlertCircle className="h-5 w-5" />
+                    Deal Autopsy Analysis
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    AI-generated analysis for {autopsyResult.deal.company_name}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAutopsyModal(false)}
+                >
+                  ×
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              {/* Summary */}
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm">{autopsyResult.analysis.summary}</p>
+              </div>
+
+              {/* Deal Info */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Value</p>
+                  <p className="font-semibold">{formatCurrency(autopsyResult.deal.estimated_value)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Duration</p>
+                  <p className="font-semibold">{autopsyResult.deal.stage_duration}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Lost Reason</p>
+                  <p className="font-semibold">{autopsyResult.deal.lost_reason || 'Not specified'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Risk Level</p>
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                    autopsyResult.analysis.risk_level === 'high' ? 'bg-red-100 text-red-700' :
+                    autopsyResult.analysis.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {autopsyResult.analysis.risk_level.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Findings */}
+              <div>
+                <h4 className="font-semibold mb-3 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                  Key Findings
+                </h4>
+                <div className="space-y-3">
+                  {autopsyResult.analysis.findings.map((finding, index) => (
+                    <div key={index} className="p-3 border rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-medium px-2 py-0.5 bg-slate-100 rounded">
+                          {finding.category}
+                        </span>
+                        <span className="font-medium text-sm">{finding.issue}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{finding.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Suggestions */}
+              <div>
+                <h4 className="font-semibold mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  Recommended Actions
+                </h4>
+                <ul className="space-y-2">
+                  {autopsyResult.analysis.suggestions.map((suggestion, index) => (
+                    <li key={index} className="flex items-start gap-2 text-sm">
+                      <span className="text-green-500 mt-0.5">•</span>
+                      <span>{suggestion}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Re-engagement Potential */}
+              <div className="p-4 border rounded-lg bg-blue-50">
+                <h4 className="font-semibold mb-2 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-blue-600" />
+                  Re-engagement Potential
+                </h4>
+                <div className="flex items-center gap-4 mb-2">
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                    autopsyResult.analysis.reengagement_potential.score === 'high' ? 'bg-green-100 text-green-700' :
+                    autopsyResult.analysis.reengagement_potential.score === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {autopsyResult.analysis.reengagement_potential.score.toUpperCase()} POTENTIAL
+                  </span>
+                  {autopsyResult.analysis.reengagement_potential.suggested_date && (
+                    <span className="text-sm text-muted-foreground">
+                      Suggested follow-up: {formatDate(autopsyResult.analysis.reengagement_potential.suggested_date)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm">{autopsyResult.analysis.reengagement_potential.recommendation}</p>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button onClick={() => setShowAutopsyModal(false)}>
+                  Close
                 </Button>
               </div>
             </CardContent>

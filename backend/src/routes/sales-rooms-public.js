@@ -1,6 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { get, run, all } from '../db/database.js';
+import { sendSalesRoomViewNotification, sendSectionViewNotification } from '../utils/slack.js';
 
 const router = express.Router();
 
@@ -55,6 +56,11 @@ router.get('/:slug', async (req, res) => {
        VALUES (?, ?, ?, ?, ?)`,
       [uuidv4(), salesRoom.id, role || null, 'overview', 0]
     );
+
+    // Send Slack notification when client opens the Sales Room (async, don't await)
+    sendSalesRoomViewNotification(salesRoom, role).catch(err => {
+      console.error('Failed to send Slack notification:', err);
+    });
 
     // Parse JSON fields
     if (salesRoom.sections) {
@@ -317,7 +323,10 @@ router.post('/:slug/track', async (req, res) => {
     const { section, role, time_spent_seconds } = req.body;
 
     const salesRoom = await get(
-      'SELECT id, is_expired FROM sales_rooms WHERE public_url_slug = ?',
+      `SELECT sr.id, sr.name, sr.is_expired, sr.public_url_slug, d.company_name as deal_company
+       FROM sales_rooms sr
+       LEFT JOIN deals d ON sr.deal_id = d.id
+       WHERE sr.public_url_slug = ?`,
       [slug]
     );
 
@@ -341,6 +350,15 @@ router.post('/:slug/track', async (req, res) => {
        VALUES (?, ?, ?, ?, ?)`,
       [uuidv4(), salesRoom.id, role || null, section, time_spent_seconds || 0]
     );
+
+    // Send Slack notification for section view (async, don't await)
+    // Only notify for specific sections to avoid spam
+    const notifySections = ['cfo', 'cto', 'security', 'engineering'];
+    if (notifySections.includes(section)) {
+      sendSectionViewNotification(salesRoom, section, role).catch(err => {
+        console.error('Failed to send section view Slack notification:', err);
+      });
+    }
 
     res.json({ success: true, message: 'View tracked' });
   } catch (error) {
