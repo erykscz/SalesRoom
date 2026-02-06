@@ -7,6 +7,7 @@ import { createServer } from 'http';
 
 // Load environment variables
 // Session 5: Added health_score filter support
+// Session 6: Implemented manager dashboard API with team metrics
 dotenv.config();
 
 // Import routes
@@ -24,6 +25,7 @@ import notificationRoutes from './routes/notifications.js';
 import managerRoutes from './routes/manager.js';
 import adminRoutes from './routes/admin.js';
 import dashboardRoutes from './routes/dashboard.js';
+import icpTemplateRoutes from './routes/icp-templates.js';
 
 // Import middleware
 import { authMiddleware } from './middleware/auth.js';
@@ -34,7 +36,7 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3003;
 
 // Middleware
 app.use(helmet());
@@ -69,6 +71,7 @@ app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/manager', authMiddleware, managerRoutes);
 app.use('/api/admin', authMiddleware, adminRoutes);
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
+app.use('/api/icp-templates', authMiddleware, icpTemplateRoutes);
 
 // Error handling
 app.use(errorHandler);
