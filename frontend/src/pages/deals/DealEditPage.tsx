@@ -23,6 +23,7 @@ interface Deal {
   health_score: number | null;
   has_decision_maker: number | null;
   has_confirmed_budget: number | null;
+  lost_reason: string | null;
 }
 
 interface DealForm {
@@ -37,6 +38,7 @@ interface DealForm {
   priority: string;
   has_decision_maker: boolean;
   has_confirmed_budget: boolean;
+  lost_reason: string;
 }
 
 const stages = [
@@ -74,6 +76,7 @@ export default function DealEditPage() {
     priority: 'medium',
     has_decision_maker: false,
     has_confirmed_budget: false,
+    lost_reason: '',
   });
 
   useEffect(() => {
@@ -104,6 +107,7 @@ export default function DealEditPage() {
           priority: deal.priority || 'medium',
           has_decision_maker: deal.has_decision_maker === 1,
           has_confirmed_budget: deal.has_confirmed_budget === 1,
+          lost_reason: deal.lost_reason || '',
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
@@ -156,6 +160,7 @@ export default function DealEditPage() {
         priority: form.priority,
         has_decision_maker: form.has_decision_maker,
         has_confirmed_budget: form.has_confirmed_budget,
+        lost_reason: form.stage === 'closed_lost' ? form.lost_reason.trim() || null : null,
       };
 
       const response = await fetch(`${API_URL}/deals/${id}`, {
@@ -261,6 +266,32 @@ export default function DealEditPage() {
                   ))}
                 </select>
               </div>
+
+              {/* Lost Reason - only show when stage is closed_lost */}
+              {form.stage === 'closed_lost' && (
+                <div className="space-y-2">
+                  <Label htmlFor="lost_reason">Lost Reason</Label>
+                  <select
+                    id="lost_reason"
+                    name="lost_reason"
+                    value={form.lost_reason}
+                    onChange={handleChange}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="">Select reason...</option>
+                    <option value="Timing">Timing - Not ready this quarter</option>
+                    <option value="Budget">Budget - No budget available</option>
+                    <option value="Competitor">Competitor - Chose another vendor</option>
+                    <option value="No Response">No Response - Went silent</option>
+                    <option value="Features">Features - Missing required features</option>
+                    <option value="Price">Price - Too expensive</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Selecting "Timing" will create a re-engagement task in 3 months
+                  </p>
+                </div>
+              )}
 
               {/* Priority */}
               <div className="space-y-2">

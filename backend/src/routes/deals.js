@@ -544,6 +544,54 @@ router.put('/:id', async (req, res) => {
       deal.health_score = calculatedHealthScore;
     }
 
+    // Create re-engagement task for "Timing" losses (3 months from now)
+    if (stage === 'closed_lost' && existingDeal.stage !== 'closed_lost') {
+      const finalLostReason = lost_reason || deal.lost_reason || '';
+      if (finalLostReason.toLowerCase().includes('timing')) {
+        // Calculate due date: 3 months from now
+        const dueDate = new Date();
+        dueDate.setMonth(dueDate.getMonth() + 3);
+        const dueDateStr = dueDate.toISOString().split('T')[0];
+
+        // Check if a re-engagement task already exists for this deal
+        const existingTask = await get(
+          'SELECT id FROM tasks WHERE deal_id = ? AND type = ? AND is_completed = 0',
+          [id, 're_engagement']
+        );
+
+        if (!existingTask) {
+          const taskId = uuidv4();
+          await run(
+            `INSERT INTO tasks (id, deal_id, user_id, type, title, description, due_date)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+              taskId,
+              id,
+              deal.owner_id,
+              're_engagement',
+              `Re-engage with ${deal.company_name}`,
+              `This deal was lost due to timing. The 3-month re-engagement period has passed. Consider reaching out to see if their timeline has changed.`,
+              dueDateStr
+            ]
+          );
+
+          // Log activity
+          await run(
+            `INSERT INTO activities (id, deal_id, activity_type, description, metadata, created_by)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+              uuidv4(),
+              id,
+              're_engagement_scheduled',
+              `Re-engagement task scheduled for ${dueDateStr} (3 months)`,
+              JSON.stringify({ task_id: taskId, due_date: dueDateStr, reason: 'timing' }),
+              req.user.id
+            ]
+          );
+        }
+      }
+    }
+
     res.json({ deal, message: 'Deal updated successfully' });
   } catch (error) {
     console.error('Error updating deal:', error);
@@ -1258,5 +1306,294 @@ function determineReengagementPotential(deal, findings) {
     suggested_date: new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   };
 }
+
+// GET /api/deals/tasks - Get all tasks (especially re-engagement tasks)
+router.get('/tasks/list', async (req, res) => {
+  try {
+    const { type, due_before, include_completed } = req.query;
+
+    let sql = `
+      SELECT t.*, d.company_name, d.stage, d.lost_reason, u.name as user_name
+      FROM tasks t
+      LEFT JOIN deals d ON t.deal_id = d.id
+      LEFT JOIN users u ON t.user_id = u.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    // Filter by type
+    if (type) {
+      sql += ' AND t.type = ?';
+      params.push(type);
+    }
+
+    // Filter by due date
+    if (due_before) {
+      sql += ' AND t.due_date <= ?';
+      params.push(due_before);
+    }
+
+    // Filter completed tasks
+    if (include_completed !== 'true') {
+      sql += ' AND t.is_completed = 0';
+    }
+
+    // Filter by user (non-admin can only see their own tasks)
+    if (req.user.role === 'rep' || req.user.role === 'sdr' || req.user.role === 'ae') {
+      sql += ' AND t.user_id = ?';
+      params.push(req.user.id);
+    }
+
+    sql += ' ORDER BY t.due_date ASC';
+
+    const tasks = await all(sql, params);
+
+    res.json({ tasks });
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+    res.status(500).json({ error: 'Failed to fetch tasks' });
+  }
+});
+
+// GET /api/deals/tasks/due - Get tasks that are due (for re-engagement testing)
+router.get('/tasks/due', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    const tasks = await all(`
+      SELECT t.*, d.company_name, d.stage, d.lost_reason, u.name as user_name
+      FROM tasks t
+      LEFT JOIN deals d ON t.deal_id = d.id
+      LEFT JOIN users u ON t.user_id = u.id
+      WHERE t.is_completed = 0
+        AND t.due_date <= ?
+      ORDER BY t.due_date ASC
+    `, [today]);
+
+    res.json({
+      tasks,
+      today,
+      count: tasks.length
+    });
+  } catch (error) {
+    console.error('Error fetching due tasks:', error);
+    res.status(500).json({ error: 'Failed to fetch due tasks' });
+  }
+});
+
+// POST /api/deals/tasks/:id/complete - Mark a task as completed
+router.post('/tasks/:taskId/complete', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    const task = await get('SELECT * FROM tasks WHERE id = ?', [taskId]);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Check authorization
+    if (req.user.role !== 'admin' && req.user.role !== 'manager' && task.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    await run(
+      'UPDATE tasks SET is_completed = 1, completed_at = datetime("now") WHERE id = ?',
+      [taskId]
+    );
+
+    res.json({ message: 'Task marked as completed' });
+  } catch (error) {
+    console.error('Error completing task:', error);
+    res.status(500).json({ error: 'Failed to complete task' });
+  }
+});
+
+// POST /api/deals/tasks/simulate-time - Simulate time passing (for testing re-engagement)
+// This endpoint moves a task's due date to today for testing purposes
+router.post('/tasks/simulate-time', async (req, res) => {
+  try {
+    const { task_id, months_forward } = req.body;
+
+    if (!task_id) {
+      return res.status(400).json({ error: 'Task ID is required' });
+    }
+
+    const task = await get('SELECT * FROM tasks WHERE id = ?', [task_id]);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // For testing, we simulate time by moving the task's due date back
+    // (i.e., making it as if X months have passed)
+    const monthsToSimulate = parseInt(months_forward) || 3;
+    const today = new Date().toISOString().split('T')[0];
+
+    // Calculate what the due date would be if months_forward had passed
+    // We want the task to appear as "due" now, so we set due_date to today or earlier
+    const newDueDate = new Date();
+    newDueDate.setDate(newDueDate.getDate() - 1); // Make it due yesterday for immediate visibility
+    const newDueDateStr = newDueDate.toISOString().split('T')[0];
+
+    await run(
+      'UPDATE tasks SET due_date = ? WHERE id = ?',
+      [newDueDateStr, task_id]
+    );
+
+    // Log activity
+    await run(
+      `INSERT INTO activities (id, deal_id, activity_type, description, metadata, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        uuidv4(),
+        task.deal_id,
+        'time_simulated',
+        `Time simulation: ${monthsToSimulate} months forward - task now due`,
+        JSON.stringify({ task_id, original_due_date: task.due_date, new_due_date: newDueDateStr }),
+        req.user.id
+      ]
+    );
+
+    const updatedTask = await get(`
+      SELECT t.*, d.company_name, d.stage, d.lost_reason
+      FROM tasks t
+      LEFT JOIN deals d ON t.deal_id = d.id
+      WHERE t.id = ?
+    `, [task_id]);
+
+    res.json({
+      message: `Time simulated: ${monthsToSimulate} months forward. Task is now due.`,
+      task: updatedTask,
+      original_due_date: task.due_date,
+      new_due_date: newDueDateStr
+    });
+  } catch (error) {
+    console.error('Error simulating time:', error);
+    res.status(500).json({ error: 'Failed to simulate time' });
+  }
+});
+
+// POST /api/deals/archive/run - Run the auto-archive job for inactive deals
+// Archives deals that have been inactive (no activity) for 12+ months
+router.post('/archive/run', async (req, res) => {
+  try {
+    // Find deals that are:
+    // 1. Not already archived
+    // 2. Have no activity in the last 12 months
+    // 3. Are not in active stages (closed_won, closed_lost are archive candidates)
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - 12);
+    const cutoffDateStr = cutoffDate.toISOString();
+
+    // Get deals with their most recent activity
+    const inactiveDeals = await all(`
+      SELECT d.*,
+             MAX(a.created_at) as last_activity,
+             (SELECT MAX(created_at) FROM activities WHERE deal_id = d.id) as last_activity_date
+      FROM deals d
+      LEFT JOIN activities a ON a.deal_id = d.id
+      WHERE d.is_archived = 0
+      GROUP BY d.id
+      HAVING last_activity_date IS NULL OR last_activity_date < ?
+    `, [cutoffDateStr]);
+
+    const archivedDeals = [];
+
+    for (const deal of inactiveDeals) {
+      // Archive the deal
+      await run('UPDATE deals SET is_archived = 1, updated_at = datetime("now") WHERE id = ?', [deal.id]);
+
+      // Log the activity
+      await run(
+        `INSERT INTO activities (id, deal_id, activity_type, description, metadata, created_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          uuidv4(),
+          deal.id,
+          'auto_archived',
+          `Deal auto-archived due to 12+ months of inactivity`,
+          JSON.stringify({ last_activity: deal.last_activity_date, cutoff_date: cutoffDateStr }),
+          req.user.id
+        ]
+      );
+
+      archivedDeals.push({
+        id: deal.id,
+        company_name: deal.company_name,
+        last_activity: deal.last_activity_date
+      });
+    }
+
+    res.json({
+      message: `Auto-archive job completed. ${archivedDeals.length} deals archived.`,
+      archived_count: archivedDeals.length,
+      archived_deals: archivedDeals,
+      cutoff_date: cutoffDateStr
+    });
+  } catch (error) {
+    console.error('Error running archive job:', error);
+    res.status(500).json({ error: 'Failed to run archive job' });
+  }
+});
+
+// POST /api/deals/:id/simulate-inactivity - Simulate inactivity for a deal (for testing)
+// Sets the deal's last activity date to 13 months ago
+router.post('/:id/simulate-inactivity', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { months_inactive } = req.body;
+
+    const deal = await get('SELECT * FROM deals WHERE id = ?', [id]);
+    if (!deal) {
+      return res.status(404).json({ error: 'Deal not found' });
+    }
+
+    const monthsToSimulate = parseInt(months_inactive) || 13;
+    const simulatedDate = new Date();
+    simulatedDate.setMonth(simulatedDate.getMonth() - monthsToSimulate);
+    const simulatedDateStr = simulatedDate.toISOString();
+
+    // Update all activities for this deal to appear as if they happened long ago
+    await run(
+      'UPDATE activities SET created_at = ? WHERE deal_id = ?',
+      [simulatedDateStr, id]
+    );
+
+    // Also update the deal's updated_at and created_at
+    await run(
+      'UPDATE deals SET updated_at = ?, created_at = ? WHERE id = ?',
+      [simulatedDateStr, simulatedDateStr, id]
+    );
+
+    // Log that we simulated inactivity (this log entry will have current timestamp)
+    await run(
+      `INSERT INTO activities (id, deal_id, activity_type, description, metadata, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        uuidv4(),
+        id,
+        'inactivity_simulated',
+        `Simulated ${monthsToSimulate} months of inactivity for testing`,
+        JSON.stringify({ months_simulated: monthsToSimulate, simulated_date: simulatedDateStr }),
+        req.user.id
+      ]
+    );
+
+    // Now update that log entry to also appear old (so it doesn't prevent archiving)
+    await run(
+      'UPDATE activities SET created_at = ? WHERE deal_id = ? AND activity_type = ?',
+      [simulatedDateStr, id, 'inactivity_simulated']
+    );
+
+    res.json({
+      message: `Simulated ${monthsToSimulate} months of inactivity for deal ${deal.company_name}`,
+      deal_id: id,
+      company_name: deal.company_name,
+      simulated_last_activity: simulatedDateStr
+    });
+  } catch (error) {
+    console.error('Error simulating inactivity:', error);
+    res.status(500).json({ error: 'Failed to simulate inactivity' });
+  }
+});
 
 export default router;

@@ -3208,3 +3208,109 @@ All core functionality is working:
 - ✅ Admin features (users, settings, audit log, GDPR)
 - ✅ AI features (ROI calculator, chatbot, deal autopsy)
 
+## Session 38: Time-Based Features Completion (100%)
+
+### Date: 2026-02-06
+
+### Starting Point:
+- Features: 283/285 (99.3%)
+- Backend: Running on port 3001
+- Frontend: Running on port 5174
+
+### Accomplishments:
+
+1. **Feature #264: Deal re-engagement trigger** ✅
+   - Added `tasks` table to database schema (init.js):
+     - id, deal_id, user_id, type, title, description, due_date, is_completed, completed_at, created_at
+     - Types: re_engagement, follow_up, reminder, other
+     - Proper foreign keys to deals and users tables
+     - Indexes for fast lookup by user, deal, and due_date
+   - Added re-engagement logic to PUT /deals/:id endpoint:
+     - When stage changes to `closed_lost` AND lost_reason is "Timing"
+     - Automatically creates a re-engagement task due 3 months later
+     - Activity logged: "Re-engagement task scheduled for YYYY-MM-DD (3 months)"
+   - Added task API endpoints:
+     - GET /tasks/list - get all tasks for current user
+     - GET /tasks/due - get tasks due within N days (default 7)
+     - POST /tasks/:taskId/complete - mark task as completed
+     - POST /tasks/simulate-time - advance time for testing
+   - Added `lost_reason` field to DealEditPage.tsx:
+     - Dropdown appears only when stage is "closed_lost"
+     - Options: Timing, Budget, Competitor, No Response, Features, Price, Other
+     - Helper text: "Selecting 'Timing' will create a re-engagement task in 3 months"
+   - Verified end-to-end: Created deal → Set to closed_lost with Timing → Task created
+
+2. **Feature #265: Deal archive after 12 months** ✅
+   - Added archive endpoints to deals.js:
+     - POST /deals/archive/run - runs the auto-archive job
+       - Finds deals with no activity in last 12 months
+       - Updates is_archived = 1 for qualifying deals
+       - Creates activity log entry for each archived deal
+       - Returns list of archived deals
+     - POST /deals/:id/simulate-inactivity - simulates N months of inactivity
+       - Updates created_at timestamp to simulate old deal
+       - Creates activity log entry for testing
+   - Verified end-to-end: Created deal → Simulated 13 months inactivity → Ran archive job → Deal archived → Still accessible in archive view
+
+### Features Completed This Session:
+- #264: Deal re-engagement trigger ✅
+- #265: Deal archive after 12 months ✅
+
+### Files Modified:
+- `backend/src/db/init.js` (tasks table, indexes)
+- `backend/src/routes/deals.js` (re-engagement logic, task endpoints, archive endpoints)
+- `frontend/src/pages/deals/DealEditPage.tsx` (lost_reason dropdown)
+- `frontend/vite.config.ts` (fixed proxy from port 3006 to 3001)
+
+### Test Data Created:
+- TIMING_LOST_TEST_264 - deal for testing re-engagement feature
+- ARCHIVE_TEST_265 - deal for testing 12-month archive feature
+
+### Regression Tests Passed:
+- Dashboard loads correctly with 135 Active Deals, $5.1M pipeline
+- 404 handling works (Deal Not Found message with Back link)
+- Archive view shows archived deals with Restore button
+- Archived deals are still fully accessible
+
+### Final Status:
+- **Features Passing**: 285 of 285
+- **Completion**: 100.0%
+- **Progress**: +2 features from Session 37 (283 → 285)
+
+---
+End of Session 38
+
+## 🎉 PROJECT COMPLETE - 100% FEATURE COVERAGE 🎉
+
+All 285 features are now passing! The Sales Room (Proces OS) application is fully complete with:
+
+### Core Modules:
+- ✅ Authentication & Authorization (JWT, roles, GDPR)
+- ✅ Deal Management (CRUD, Kanban, filters, pagination, archive)
+- ✅ Intent Scraper (leads, ICP templates, AI-powered search)
+- ✅ Discovery (transcripts, batch upload, filler removal, AI analysis)
+- ✅ Sales Rooms (wizard, analytics, chatbot, Calendly, MAP, polls, Slack)
+- ✅ Battlecards (ARC framework, categories, feedback, golden arrows)
+- ✅ Knowledge Base (CRUD, search, tags, file types)
+- ✅ Manager features (team pipeline, analytics, deal transfer)
+- ✅ Admin features (users, settings, audit log, GDPR delete)
+
+### AI Features:
+- ✅ ROI Calculator (in Sales Rooms)
+- ✅ Chatbot (in Sales Rooms)
+- ✅ Deal Autopsy (for closed_lost deals)
+- ✅ Transcript Analysis (pain points, stakeholders, red flags)
+
+### Automation:
+- ✅ Re-engagement tasks (auto-created for "Timing" lost deals)
+- ✅ Auto-archive (deals inactive 12+ months)
+- ✅ Slack notifications (Sales Room views)
+- ✅ Health score calculation (dynamic based on factors)
+
+### Testing Coverage:
+- All 20 mandatory test categories covered
+- Security, Navigation, Data, Workflow, Error Handling
+- UI/Backend Integration, State Persistence, URL Access
+- Form Validation, Accessibility, Responsive Design
+- Performance, Concurrency, Export/Import
+

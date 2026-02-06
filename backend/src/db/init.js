@@ -62,6 +62,7 @@ async function initDatabase() {
         name TEXT NOT NULL,
         role TEXT CHECK(role IN ('rep', 'sdr', 'ae', 'manager', 'admin')) DEFAULT 'rep',
         avatar_url TEXT,
+        notification_preferences TEXT,
         is_active INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
@@ -338,6 +339,22 @@ async function initDatabase() {
         value TEXT NOT NULL,
         updated_at TEXT DEFAULT (datetime('now'))
       );
+
+      -- Tasks table (for re-engagement, follow-ups, etc.)
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        deal_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        type TEXT CHECK(type IN ('re_engagement', 'follow_up', 'reminder', 'other')) NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        due_date TEXT NOT NULL,
+        is_completed INTEGER DEFAULT 0,
+        completed_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
     `);
 
     // Create indexes
@@ -353,6 +370,9 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+      CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id);
+      CREATE INDEX IF NOT EXISTS idx_tasks_deal ON tasks(deal_id);
+      CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
     `);
 
     // Check if admin user exists
