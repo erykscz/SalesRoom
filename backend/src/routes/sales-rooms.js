@@ -506,7 +506,7 @@ router.get('/public/:slug', async (req, res) => {
     const { role, password } = req.query;
 
     const salesRoom = await get(
-      `SELECT sr.*, d.company_name as deal_company
+      `SELECT sr.*, d.company_name as deal_company, d.id as deal_id
        FROM sales_rooms sr
        LEFT JOIN deals d ON sr.deal_id = d.id
        WHERE sr.public_url_slug = ?`,
@@ -557,6 +557,61 @@ router.get('/public/:slug', async (req, res) => {
     if (salesRoom.mutual_action_plan) {
       salesRoom.mutual_action_plan = JSON.parse(salesRoom.mutual_action_plan);
     }
+
+    // Fetch financial data from transcripts for auto-ROI calculation
+    let financialData = null;
+    if (salesRoom.deal_id) {
+      const transcripts = await all(
+        `SELECT insights FROM transcripts WHERE deal_id = ? AND processed = 1 AND insights IS NOT NULL`,
+        [salesRoom.deal_id]
+      );
+
+      // Aggregate financial data from all transcripts
+      const aggregatedFinancials = {
+        pains: [],
+        totalMonthlyLoss: 0,
+        totalYearlyLoss: 0,
+        estimatedMonthlySavings: 0,
+        estimatedYearlySavings: 0,
+        hasFinancialData: false
+      };
+
+      for (const t of transcripts) {
+        try {
+          const insights = JSON.parse(t.insights);
+          if (insights.financial_data && insights.financial_data.hasFinancialData) {
+            aggregatedFinancials.hasFinancialData = true;
+            aggregatedFinancials.pains = aggregatedFinancials.pains.concat(insights.financial_data.pains || []);
+            aggregatedFinancials.totalMonthlyLoss += insights.financial_data.totalMonthlyLoss || 0;
+            aggregatedFinancials.totalYearlyLoss += insights.financial_data.totalYearlyLoss || 0;
+            aggregatedFinancials.estimatedMonthlySavings += insights.financial_data.estimatedMonthlySavings || 0;
+            aggregatedFinancials.estimatedYearlySavings += insights.financial_data.estimatedYearlySavings || 0;
+          }
+        } catch (e) {
+          // Skip invalid JSON
+        }
+      }
+
+      if (aggregatedFinancials.hasFinancialData) {
+        // Deduplicate pains by monthlyValue
+        const uniquePains = aggregatedFinancials.pains.filter((pain, index, self) =>
+          index === self.findIndex(p => p.monthlyValue === pain.monthlyValue)
+        ).slice(0, 5);
+
+        financialData = {
+          ...aggregatedFinancials,
+          pains: uniquePains,
+          // Calculate 3-year ROI projection
+          threeYearSavings: Math.round(aggregatedFinancials.estimatedYearlySavings * 3),
+          roiPercentage: aggregatedFinancials.totalYearlyLoss > 0
+            ? Math.round((aggregatedFinancials.estimatedYearlySavings / (aggregatedFinancials.totalYearlyLoss * 0.3)) * 100)
+            : 0
+        };
+      }
+    }
+
+    // Attach financial data to salesRoom for frontend
+    salesRoom.roiData = financialData;
 
     // Remove sensitive fields
     delete salesRoom.password_hash;
@@ -614,6 +669,40 @@ router.get('/:id/analytics', async (req, res) => {
   } catch (error) {
     console.error('Error fetching analytics:', error);
     res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+// GET /api/sales-rooms/:id/chatbot-logs - Get chatbot conversation logs for a sales room
+router.get('/:id/chatbot-logs', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const salesRoom = await get(
+      `SELECT sr.*, d.owner_id
+       FROM sales_rooms sr
+       LEFT JOIN deals d ON sr.deal_id = d.id
+       WHERE sr.id = ?`,
+      [id]
+    );
+
+    if (!salesRoom) {
+      return res.status(404).json({ error: 'Sales Room not found' });
+    }
+
+    // Check authorization
+    if (req.user.role !== 'admin' && req.user.role !== 'manager' && salesRoom.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const logs = await all(
+      `SELECT * FROM chatbot_logs WHERE sales_room_id = ? ORDER BY asked_at DESC`,
+      [id]
+    );
+
+    res.json({ logs, totalConversations: logs.length });
+  } catch (error) {
+    console.error('Error fetching chatbot logs:', error);
+    res.status(500).json({ error: 'Failed to fetch chatbot logs' });
   }
 });
 

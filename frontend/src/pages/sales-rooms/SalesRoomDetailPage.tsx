@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, ArrowLeft, ExternalLink, Eye, Clock, Users, BarChart3, Copy, CheckCircle2, CopyPlus, Edit3 } from 'lucide-react';
+import { Loader2, ArrowLeft, ExternalLink, Eye, Clock, Users, BarChart3, Copy, CheckCircle2, CopyPlus, Edit3, MessageCircle } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -46,12 +46,20 @@ interface AnalyticsStats {
   totalTimeSpent: number;
 }
 
+interface ChatbotLog {
+  id: string;
+  question: string;
+  answer: string;
+  asked_at: string;
+}
+
 export default function SalesRoomDetailPage() {
   const { id } = useParams();
   const { toast } = useToast();
   const [salesRoom, setSalesRoom] = useState<SalesRoom | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsEntry[]>([]);
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
+  const [chatbotLogs, setChatbotLogs] = useState<ChatbotLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -91,6 +99,16 @@ export default function SalesRoomDetailPage() {
         if (analyticsResponse.ok) {
           const analyticsData = await analyticsResponse.json();
           setStats(analyticsData.stats);
+        }
+
+        // Fetch chatbot logs
+        const chatbotLogsResponse = await fetch(`/api/sales-rooms/${id}/chatbot-logs`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (chatbotLogsResponse.ok) {
+          const chatbotData = await chatbotLogsResponse.json();
+          setChatbotLogs(chatbotData.logs || []);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
@@ -532,6 +550,46 @@ export default function SalesRoomDetailPage() {
                   <p className="text-sm text-muted-foreground">
                     {new Date(entry.visited_at).toLocaleString()}
                   </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Chatbot Conversation Logs */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageCircle className="h-5 w-5" />
+            Chatbot Conversations
+          </CardTitle>
+          <CardDescription>See what visitors asked the chatbot</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {chatbotLogs.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">
+              No chatbot conversations yet.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {chatbotLogs.slice(0, 10).map((log) => (
+                <div key={log.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-blue-600">Visitor asked:</p>
+                      <p className="mt-1">{log.question}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground whitespace-nowrap ml-4">
+                      {new Date(log.asked_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="bg-muted/50 rounded p-3">
+                    <p className="text-sm font-medium text-green-600">Bot response:</p>
+                    <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
+                      {log.answer.length > 200 ? log.answer.substring(0, 200) + '...' : log.answer}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>

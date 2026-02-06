@@ -3001,3 +3001,82 @@ The application is fully functional for its core use cases. Additional features 
 - New UI components (Kanban board, avatar upload)
 - Scheduled job infrastructure
 
+---
+
+## Session 35: Sales Room AI Features
+
+### Date: 2026-02-06
+
+### Accomplishments:
+
+1. **Fixed Sales Room Auto-ROI Calculation (Feature #227)**
+   - Issue: roiData was not being returned from the public Sales Room API
+   - Root cause: There were two separate files handling the same route (`sales-rooms.js` and `sales-rooms-public.js`)
+   - Fix: Added the ROI data fetching logic to `sales-rooms-public.js` which was the actual route handler
+   - Result: CFO section now displays:
+     - Extracted pain points with financial values ($50k/mo, $30k/mo, $100k/yr)
+     - Total Identified Loss: $1.1M/year
+     - Estimated Savings Potential: $530K/year
+     - 3-Year ROI Projection: $1.6M
+     - ROI Percentage: 167%
+
+2. **Implemented Sales Room RAG Chatbot (Feature #228)**
+   - Added POST `/api/sales-rooms/public/:slug/chat` endpoint
+   - Implemented simple keyword-based RAG that searches offer_content for relevant paragraphs
+   - Scores paragraphs by keyword matches and returns top 3 relevant sections
+   - Contextual responses based on question type (pricing, features, timeline, support, contact)
+   - Frontend: Created full chatbot widget with:
+     - Floating button that opens chat dialog
+     - Message history display (user/assistant)
+     - Input field with send button
+     - Loading state with spinner
+     - Auto-scroll to new messages
+
+3. **Implemented Chatbot Conversation Logs (Feature #234)**
+   - Added logging of all chat messages to `chatbot_logs` table
+   - Created GET `/api/sales-rooms/:id/chatbot-logs` endpoint for owners to view logs
+   - Added "Chatbot Conversations" section to Sales Room detail page
+   - Displays visitor questions and bot responses with timestamps
+   - Shows truncated response previews (200 chars max)
+
+### Files Modified:
+- `backend/src/routes/sales-rooms-public.js` - Added ROI data fetching and chat endpoint
+- `backend/src/routes/sales-rooms.js` - Added chatbot logs endpoint
+- `frontend/src/pages/public/SalesRoomPublicPage.tsx` - Added full chatbot widget UI
+- `frontend/src/pages/sales-rooms/SalesRoomDetailPage.tsx` - Added chatbot logs section
+
+### Test Artifacts:
+- `test-roi-transcript.txt` - Test transcript with financial data
+- `upload-payload.json` - API payload for transcript upload
+- `update-offer.json` - Sales Room offer content for chatbot testing
+- Screenshots: `session35-dashboard-regression.png`, `session35-feature227-roi-calculator.png`, `session35-feature228-chatbot-working.png`, `session35-feature234-chatbot-logs.png`
+
+### Features Completed This Session:
+- #227: Sales Room auto-ROI calculation ✓
+- #228: Sales Room RAG chatbot works ✓
+- #234: Sales Room chatbot logs viewable ✓
+
+### Final Status:
+- **Features Passing**: 275 of 285
+- **Completion**: 96.5%
+- **Progress**: +3 features from Session 34
+
+---
+End of Session 35
+
+### Remaining Features (10):
+1. **Kanban Board** (#39, #135, #189, #278) - 4 features
+   - Requires building horizontal scrollable columns with drag-and-drop
+
+2. **Slack Integration** (#233) - 1 feature
+   - Requires Slack webhook configuration
+
+3. **AI-Powered Deal Features** (#263, #264, #265) - 3 features
+   - Deal autopsy: Requires external AI API
+   - Re-engagement trigger: Requires scheduled jobs
+   - Auto-archive: Requires time simulation
+
+4. **Other** (#58, #285) - 2 features
+   - Dynamic Health Score algorithm
+   - Avatar upload with file handling
+
