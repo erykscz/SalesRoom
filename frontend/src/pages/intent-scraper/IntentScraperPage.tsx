@@ -59,6 +59,7 @@ export default function IntentScraperPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [icpTemplateFilter, setICPTemplateFilter] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState({
@@ -493,12 +494,10 @@ export default function IntentScraperPage() {
     setShowICPForm(true);
   };
 
-  // Fetch ICP templates when section is opened
+  // Fetch ICP templates on page load (for dropdown filter) and when section is opened
   useEffect(() => {
-    if (showICPTemplates && icpTemplates.length === 0) {
-      fetchICPTemplates();
-    }
-  }, [showICPTemplates]);
+    fetchICPTemplates();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -715,6 +714,20 @@ export default function IntentScraperPage() {
                 <option value="qualified">Qualified</option>
                 <option value="nurturing">Nurturing</option>
                 <option value="not_interested">Not Interested</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-muted-foreground" />
+              <select
+                value={icpTemplateFilter}
+                onChange={(e) => setICPTemplateFilter(e.target.value)}
+                className="h-11 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                aria-label="ICP Template"
+              >
+                <option value="">All ICP Templates</option>
+                {icpTemplates.map(template => (
+                  <option key={template.id} value={template.id}>{template.name}</option>
+                ))}
               </select>
             </div>
           </div>
