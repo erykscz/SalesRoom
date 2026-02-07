@@ -6986,3 +6986,67 @@ End of Session 83
 
 ---
 End of Session 84
+
+## Session 85: Regression Verification
+
+### Date: 2026-02-07
+
+### Starting Point:
+- Features: 285/285 (100.0%)
+- Backend: Running on port 3001
+- Frontend: Running on port 5174
+
+### Accomplishments:
+
+1. **Server Status Verified**
+   - Backend health check: OK
+   - Frontend serving on port 5174
+   - Both servers running and healthy
+
+2. **Comprehensive Regression Testing Completed**
+
+   **Feature #21: Sidebar navigation to Dashboard** ✅
+   - Navigated from Deals page to Dashboard via sidebar
+   - URL correctly changed to /dashboard
+   - Dashboard content loaded with real data (135 deals, $5.1M pipeline)
+   - PASS ✅
+
+   **Feature #113: URL with malformed params handled** ✅
+   - Navigated to /deals?page=abc (invalid page parameter)
+   - Page did NOT crash
+   - Correctly defaulted to page 1
+   - Zero console errors
+   - PASS ✅
+
+   **Feature #196: List updates while on page 2** ✅
+   - Step 1: Navigated to page 2 of deals (21-40 of 135)
+   - Step 2: Created new deal via API (PAGINATION_STABILITY_TEST_85)
+   - Step 3: Verified page 2 still shows correct items (21-40 of 136)
+   - Step 4: Total count updated from 135 to 136
+   - Test deal deleted after verification
+   - PASS ✅
+
+3. **Console Error Check**
+   - Zero JavaScript errors in console
+   - Only React Router future flag warnings (expected, non-breaking)
+
+### Screenshots Captured:
+- session85-page2-before-create.png - Page 2 before creating new deal
+- session85-pagination-stability-verified.png - Page 2 showing updated count
+
+### Final Status:
+- **Features Passing**: 285 of 285
+- **Completion**: 100.0%
+- **Regression Tests**: ALL PASSED (3/3)
+- **Application Health**: EXCELLENT
+
+### Technical Notes:
+- Backend running on port 3001
+- Frontend running on port 5174
+- Pagination stability working correctly
+- Malformed URL parameters handled gracefully
+- Sidebar navigation functioning properly
+- All data from SQLite database (no mock data)
+
+---
+End of Session 85
