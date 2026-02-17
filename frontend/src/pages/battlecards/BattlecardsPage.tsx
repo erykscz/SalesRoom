@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -369,7 +370,7 @@ Best regards`;
       try {
         setLoadingDeal(true);
         const token = localStorage.getItem('token');
-        const response = await fetch(`/api/deals/${dealId}`, {
+        const response = await fetch(`${API_URL}/deals/${dealId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -407,7 +408,7 @@ Best regards`;
       if (searchQuery) params.append('search', searchQuery);
       if (selectedCategory) params.append('category', selectedCategory);
 
-      const response = await fetch(`/api/battlecards?${params}`, {
+      const response = await fetch(`${API_URL}/battlecards?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -456,7 +457,7 @@ Best regards`;
       setSaving(true);
       const token = localStorage.getItem('token');
 
-      const response = await fetch('/api/battlecards', {
+      const response = await fetch(`${API_URL}/battlecards`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -498,7 +499,7 @@ Best regards`;
       setSaving(true);
       const token = localStorage.getItem('token');
 
-      const response = await fetch(`/api/battlecards/${editingItem.id}`, {
+      const response = await fetch(`${API_URL}/battlecards/${editingItem.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -538,7 +539,7 @@ Best regards`;
       setDeleting(id);
       const token = localStorage.getItem('token');
 
-      const response = await fetch(`/api/battlecards/${id}`, {
+      const response = await fetch(`${API_URL}/battlecards/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -561,7 +562,7 @@ Best regards`;
     try {
       const token = localStorage.getItem('token');
 
-      const response = await fetch(`/api/battlecards/${id}/feedback`, {
+      const response = await fetch(`${API_URL}/battlecards/${id}/feedback`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

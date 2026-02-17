@@ -3,8 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Briefcase, Search, FileText, Building2, TrendingUp, Users, Clock, AlertCircle, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+import { API_URL } from '@/lib/api';
 
 interface DashboardStats {
   deals: {

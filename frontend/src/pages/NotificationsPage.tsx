@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Bell, Check, Trash2, CheckCheck, ArrowRight } from 'lucide-react';
@@ -24,7 +25,7 @@ export default function NotificationsPage() {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/notifications', {
+      const response = await fetch(`${API_URL}/notifications`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -49,7 +50,7 @@ export default function NotificationsPage() {
   const markAsRead = async (id: string) => {
     try {
       const token = localStorage.getItem('token');
-      await fetch(`/api/notifications/${id}/read`, {
+      await fetch(`${API_URL}/notifications/${id}/read`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -66,7 +67,7 @@ export default function NotificationsPage() {
   const markAllAsRead = async () => {
     try {
       const token = localStorage.getItem('token');
-      await fetch('/api/notifications/read-all', {
+      await fetch(`${API_URL}/notifications/read-all`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -81,7 +82,7 @@ export default function NotificationsPage() {
   const deleteNotification = async (id: string) => {
     try {
       const token = localStorage.getItem('token');
-      await fetch(`/api/notifications/${id}`, {
+      await fetch(`${API_URL}/notifications/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });

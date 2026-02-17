@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -98,7 +99,7 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/users', {
+      const response = await fetch(`${API_URL}/users`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -139,7 +140,7 @@ export default function UsersPage() {
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/users', {
+      const response = await fetch(`${API_URL}/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -178,7 +179,7 @@ export default function UsersPage() {
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/users/${selectedUser.id}`, {
+      const response = await fetch(`${API_URL}/users/${selectedUser.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -222,7 +223,7 @@ export default function UsersPage() {
     setDeleting(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/users/${selectedUser.id}`, {
+      const response = await fetch(`${API_URL}/users/${selectedUser.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -256,7 +257,7 @@ export default function UsersPage() {
   const handleGDPRPreview = async (user: User) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/admin/gdpr-preview/${user.id}`, {
+      const response = await fetch(`${API_URL}/admin/gdpr-preview/${user.id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -294,7 +295,7 @@ export default function UsersPage() {
     setDeleting(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/gdpr-delete', {
+      const response = await fetch(`${API_URL}/admin/gdpr-delete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

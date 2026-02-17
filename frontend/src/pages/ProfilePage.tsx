@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { User, Bell, Loader2, CheckCircle, XCircle, Camera, Upload } from 'lucide-react';
@@ -51,7 +52,7 @@ export default function ProfilePage() {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/auth/preferences', {
+      const response = await fetch(`${API_URL}/auth/preferences`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -107,7 +108,7 @@ export default function ProfilePage() {
       setError(null);
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/users/${user.id}`, {
+      const response = await fetch(`${API_URL}/users/${user.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -148,7 +149,7 @@ export default function ProfilePage() {
       setSuccess(null);
 
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/auth/preferences', {
+      const response = await fetch(`${API_URL}/auth/preferences`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

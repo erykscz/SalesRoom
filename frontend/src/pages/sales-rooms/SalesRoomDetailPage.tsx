@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, ArrowLeft, ExternalLink, Eye, Clock, Users, BarChart3, Copy, CheckCircle2, CopyPlus, Edit3, MessageCircle } from 'lucide-react';
@@ -79,7 +80,7 @@ export default function SalesRoomDetailPage() {
         const token = localStorage.getItem('token');
 
         // Fetch sales room details
-        const response = await fetch(`/api/sales-rooms/${id}`, {
+        const response = await fetch(`${API_URL}/sales-rooms/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -92,7 +93,7 @@ export default function SalesRoomDetailPage() {
         setAnalytics(data.analytics || []);
 
         // Fetch analytics stats
-        const analyticsResponse = await fetch(`/api/sales-rooms/${id}/analytics`, {
+        const analyticsResponse = await fetch(`${API_URL}/sales-rooms/${id}/analytics`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -102,7 +103,7 @@ export default function SalesRoomDetailPage() {
         }
 
         // Fetch chatbot logs
-        const chatbotLogsResponse = await fetch(`/api/sales-rooms/${id}/chatbot-logs`, {
+        const chatbotLogsResponse = await fetch(`${API_URL}/sales-rooms/${id}/chatbot-logs`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -133,7 +134,7 @@ export default function SalesRoomDetailPage() {
   const fetchAvailableDeals = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/deals?has_sales_room=false', {
+      const response = await fetch(`${API_URL}/deals?has_sales_room=false`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -155,7 +156,7 @@ export default function SalesRoomDetailPage() {
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/sales-rooms/${id}`, {
+      const response = await fetch(`${API_URL}/sales-rooms/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -217,7 +218,7 @@ export default function SalesRoomDetailPage() {
     setCloning(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/sales-rooms/${id}/clone`, {
+      const response = await fetch(`${API_URL}/sales-rooms/${id}/clone`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

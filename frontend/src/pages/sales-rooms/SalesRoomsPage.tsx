@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Plus, ExternalLink, Eye, Building2 } from 'lucide-react';
@@ -24,7 +25,7 @@ export default function SalesRoomsPage() {
     const fetchSalesRooms = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch('/api/sales-rooms', {
+        const response = await fetch(`${API_URL}/sales-rooms`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 

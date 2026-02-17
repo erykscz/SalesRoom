@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Users, DollarSign, ExternalLink, Filter } from 'lucide-react';
@@ -36,7 +37,7 @@ export default function TeamPipelinePage() {
       try {
         setLoading(true);
         const token = localStorage.getItem('token');
-        const response = await fetch('/api/manager/team-pipeline', {
+        const response = await fetch(`${API_URL}/manager/team-pipeline`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 

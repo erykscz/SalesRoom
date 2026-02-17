@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban } from 'lucide-react';
 import KanbanBoard from '@/components/deals/KanbanBoard';
+import { API_URL } from '@/lib/api';
 
 interface Deal {
   id: string;
@@ -56,8 +57,6 @@ const priorityColors: Record<string, string> = {
   medium: 'text-yellow-500',
   high: 'text-red-500',
 };
-
-const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function DealsPage() {
   const { token } = useAuth();

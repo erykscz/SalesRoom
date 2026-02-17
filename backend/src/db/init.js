@@ -8,13 +8,14 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Ensure data directory exists
-const dataDir = path.resolve(__dirname, '../../../data');
+// Determine database path
+const dbPath = process.env.DATABASE_URL || path.resolve(__dirname, '../../../data/salesroom.db');
+
+// Ensure the directory for the database file exists
+const dataDir = path.dirname(dbPath);
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
-
-const dbPath = process.env.DATABASE_URL || path.resolve(dataDir, 'salesroom.db');
 const db = new sqlite3.Database(dbPath);
 
 console.log('Initializing database...');

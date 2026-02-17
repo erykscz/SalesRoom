@@ -26,8 +26,7 @@ import {
   FileText,
   Presentation
 } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+import { API_URL } from '@/lib/api';
 
 interface Deal {
   id: string;

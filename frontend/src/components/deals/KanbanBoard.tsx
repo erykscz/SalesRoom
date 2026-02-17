@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { TrendingUp, Calendar, AlertTriangle, AlertCircle, Clock, Building2 } from 'lucide-react';
+import { API_URL } from '@/lib/api';
 
 interface Deal {
   id: string;
@@ -45,8 +46,6 @@ const stageColors: Record<string, string> = {
   closed_won: 'bg-green-500',
   closed_lost: 'bg-red-500',
 };
-
-const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function KanbanBoard() {
   const { token } = useAuth();

@@ -1,6 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import db from '../db/database.js';
+import db, { run, get, all } from '../db/database.js';
 
 const router = express.Router();
 
@@ -8,7 +8,7 @@ const router = express.Router();
 const searchJobs = new Map();
 
 // List all searches for the current user
-router.get('/searches', (req, res) => {
+router.get('/searches', async (req, res) => {
   try {
     const userId = req.user.id;
     const isAdmin = req.user.role === 'admin';
@@ -27,8 +27,8 @@ router.get('/searches', (req, res) => {
     query += ` ORDER BY s.created_at DESC`;
 
     const searches = isAdmin || isManager
-      ? db.prepare(query).all()
-      : db.prepare(query).all(userId);
+      ? await all(query)
+      : await all(query, [userId]);
 
     // Handle null/empty results
     if (!searches || !Array.isArray(searches) || searches.length === 0) {
@@ -55,19 +55,19 @@ router.get('/searches', (req, res) => {
 });
 
 // Get search by ID with results
-router.get('/searches/:id', (req, res) => {
+router.get('/searches/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
     const isAdmin = req.user.role === 'admin';
     const isManager = req.user.role === 'manager';
 
-    const search = db.prepare(`
+    const search = await get(`
       SELECT s.*, u.name as owner_name
       FROM intent_searches s
       LEFT JOIN users u ON s.owner_id = u.id
       WHERE s.id = ?
-    `).get(id);
+    `, [id]);
 
     if (!search) {
       return res.status(404).json({ error: 'Search not found' });
@@ -85,13 +85,13 @@ router.get('/searches/:id', (req, res) => {
     }
 
     // Get leads from this search
-    const leads = db.prepare(`
+    const leads = await all(`
       SELECT l.*, u.name as owner_name
       FROM leads l
       LEFT JOIN users u ON l.owner_id = u.id
       WHERE l.search_id = ?
       ORDER BY l.confidence_score DESC
-    `).all(id);
+    `, [id]);
 
     res.json({ search, leads });
   } catch (error) {
@@ -101,7 +101,7 @@ router.get('/searches/:id', (req, res) => {
 });
 
 // Start a new search
-router.post('/search', (req, res) => {
+router.post('/search', async (req, res) => {
   try {
     const userId = req.user.id;
     const { mission_objective, icp_template_id } = req.body;
@@ -114,10 +114,10 @@ router.post('/search', (req, res) => {
     const now = new Date().toISOString();
 
     // Create search record
-    db.prepare(`
+    await run(`
       INSERT INTO intent_searches (id, mission_objective, icp_template_id, status, owner_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(searchId, mission_objective.trim(), icp_template_id || null, 'queued', userId, now);
+    `, [searchId, mission_objective.trim(), icp_template_id || null, 'queued', userId, now]);
 
     // Store job status in memory
     searchJobs.set(searchId, {
@@ -139,20 +139,23 @@ router.post('/search', (req, res) => {
   }
 });
 
-// Simulate search execution (in production, this would use actual search APIs)
+// Search for leads using Tavily API
 async function executeSearch(searchId, missionObjective, icpTemplateId, userId) {
   try {
+    // Check for Tavily API key
+    const tavilyApiKey = process.env.TAVILY_API_KEY;
+    if (!tavilyApiKey || tavilyApiKey === 'your_tavily_key_here') {
+      throw new Error('TAVILY_API_KEY not configured. Please set it in .env file.');
+    }
+
     // Update status to running
     searchJobs.set(searchId, { status: 'running' });
-    db.prepare('UPDATE intent_searches SET status = ? WHERE id = ?').run('running', searchId);
-
-    // Simulate processing time (1-3 seconds)
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500));
+    await run('UPDATE intent_searches SET status = ? WHERE id = ?', ['running', searchId]);
 
     // Get ICP criteria if template provided
     let icpCriteria = null;
     if (icpTemplateId) {
-      const template = db.prepare('SELECT criteria FROM icp_templates WHERE id = ?').get(icpTemplateId);
+      const template = await get('SELECT criteria FROM icp_templates WHERE id = ?', [icpTemplateId]);
       if (template) {
         try {
           icpCriteria = JSON.parse(template.criteria);
@@ -162,29 +165,62 @@ async function executeSearch(searchId, missionObjective, icpTemplateId, userId) 
       }
     }
 
-    // Parse mission objective for keywords
-    const keywords = missionObjective.toLowerCase();
+    // Build search query from mission objective and ICP criteria
+    let searchQuery = `companies ${missionObjective}`;
+    if (icpCriteria) {
+      if (icpCriteria.industries?.length > 0) {
+        searchQuery += ` industry:${icpCriteria.industries.join(' OR ')}`;
+      }
+      if (icpCriteria.company_size) {
+        searchQuery += ` ${icpCriteria.company_size} employees`;
+      }
+    }
 
-    // Generate simulated results based on keywords
-    const results = generateSimulatedResults(keywords, icpCriteria);
+    console.log(`Searching Tavily for: ${searchQuery}`);
 
-    // Insert leads into database with hook suggestions and competitor info
+    // Call Tavily API
+    const tavilyResponse = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        api_key: tavilyApiKey,
+        query: searchQuery,
+        search_depth: 'advanced',
+        include_answer: true,
+        include_domains: [],
+        exclude_domains: [],
+        max_results: 10
+      })
+    });
+
+    if (!tavilyResponse.ok) {
+      const errorText = await tavilyResponse.text();
+      throw new Error(`Tavily API error: ${tavilyResponse.status} - ${errorText}`);
+    }
+
+    const tavilyData = await tavilyResponse.json();
+    console.log(`Tavily returned ${tavilyData.results?.length || 0} results`);
+
+    // Parse Tavily results into leads
+    const results = parseSearchResults(tavilyData.results || [], missionObjective, icpCriteria);
+
+    // Insert leads into database
     const now = new Date().toISOString();
     for (const result of results) {
       const leadId = uuidv4();
-      // Generate hook suggestions for this lead
       const hookSuggestions = generateHookSuggestions(result.company_name, result.industry, result.identified_pain, result.tech_stack);
-      // Generate competitor/tool analysis for this lead
       const competitorInfo = generateCompetitorInfo(result.industry, result.tech_stack);
 
-      db.prepare(`
+      await run(`
         INSERT INTO leads (id, company_name, industry, tech_stack, identified_pain, confidence_score, source_link, status, search_id, owner_id, hook_suggestions, competitor_info, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `, [
         leadId,
         result.company_name,
         result.industry,
-        JSON.stringify(result.tech_stack),
+        JSON.stringify(result.tech_stack || []),
         result.identified_pain,
         result.confidence_score,
         result.source_link,
@@ -195,15 +231,15 @@ async function executeSearch(searchId, missionObjective, icpTemplateId, userId) 
         JSON.stringify(competitorInfo),
         now,
         now
-      );
+      ]);
     }
 
     // Update search as completed
     const completedAt = new Date().toISOString();
-    db.prepare(`
+    await run(`
       UPDATE intent_searches SET status = ?, completed_at = ?, results_count = ?
       WHERE id = ?
-    `).run('completed', completedAt, results.length, searchId);
+    `, ['completed', completedAt, results.length, searchId]);
 
     searchJobs.set(searchId, { status: 'completed', resultsCount: results.length });
 
@@ -213,88 +249,241 @@ async function executeSearch(searchId, missionObjective, icpTemplateId, userId) 
     console.log(`Search ${searchId} completed with ${results.length} results`);
   } catch (error) {
     console.error('Search execution error:', error);
-    db.prepare('UPDATE intent_searches SET status = ? WHERE id = ?').run('failed', searchId);
+    await run('UPDATE intent_searches SET status = ?, error_message = ? WHERE id = ?', ['failed', error.message, searchId]);
     searchJobs.set(searchId, { status: 'failed', error: error.message });
   }
 }
 
-// Generate simulated search results based on keywords
-function generateSimulatedResults(keywords, icpCriteria) {
-  const results = [];
+// Excluded domains - platforms, not actual companies to prospect
+const EXCLUDED_DOMAINS = [
+  'youtube.com', 'linkedin.com', 'medium.com', 'twitter.com', 'x.com',
+  'facebook.com', 'instagram.com', 'tiktok.com', 'reddit.com',
+  'wikipedia.org', 'google.com', 'bing.com',
+  'github.com', 'stackoverflow.com', 'quora.com',
+  'forbes.com', 'businessinsider.com', 'techcrunch.com', 'venturebeat.com',
+  'g2.com', 'capterra.com', 'trustradius.com', 'gartner.com',
+  'crunchbase.com', 'pitchbook.com', 'cbinsights.com',
+  'hubspot.com', 'salesforce.com', // Big platforms often appear in results
+];
 
-  // Determine industry focus
-  let industries = ['Technology', 'Healthcare', 'Finance', 'Manufacturing', 'Retail'];
-  if (icpCriteria?.industries?.length > 0) {
-    industries = icpCriteria.industries;
-  } else if (keywords.includes('healthcare') || keywords.includes('medical')) {
-    industries = ['Healthcare', 'Biotech', 'Pharmaceuticals'];
-  } else if (keywords.includes('finance') || keywords.includes('bank')) {
-    industries = ['Finance', 'Banking', 'Insurance'];
-  } else if (keywords.includes('tech') || keywords.includes('software')) {
-    industries = ['Technology', 'Software', 'SaaS'];
-  }
+// Title patterns that indicate list/article, not a company
+const LIST_ARTICLE_PATTERNS = [
+  /^\d+\s+(top|best|leading)/i,
+  /^(top|best|leading)\s+\d+/i,
+  /^list of/i,
+  /^(the\s+)?(complete|ultimate|definitive)\s+guide/i,
+  /^how to/i,
+  /^\d+\s+(ways|tips|strategies|steps)/i,
+];
 
-  // Determine tech stack focus
-  let techStacks = [
-    ['AWS', 'Java', 'PostgreSQL'],
-    ['Azure', '.NET', 'SQL Server'],
-    ['GCP', 'Python', 'MongoDB'],
-    ['React', 'Node.js', 'PostgreSQL'],
-    ['Angular', 'Java', 'MySQL']
-  ];
-  if (icpCriteria?.tech_stack?.length > 0) {
-    techStacks = [icpCriteria.tech_stack];
-  }
+// Parse Tavily search results into lead format
+function parseSearchResults(results, missionObjective, icpCriteria) {
+  const leads = [];
+  const seenCompanies = new Set();
 
-  // Determine pain points
-  let painPoints = [
-    'Legacy system modernization needed',
-    'Scaling challenges with current infrastructure',
-    'Manual processes causing inefficiencies',
-    'Data silos preventing insights',
-    'Security compliance requirements'
-  ];
-  if (icpCriteria?.pain_points?.length > 0) {
-    painPoints = icpCriteria.pain_points;
-  } else if (keywords.includes('legacy') || keywords.includes('moderniz')) {
-    painPoints = ['Legacy system migration needed', 'Technical debt accumulating', 'Outdated technology stack'];
-  } else if (keywords.includes('scale') || keywords.includes('growth')) {
-    painPoints = ['Scaling infrastructure challenges', 'Performance bottlenecks', 'Growth planning difficulties'];
-  } else if (keywords.includes('ai') || keywords.includes('automat')) {
-    painPoints = ['Manual processes need automation', 'AI integration opportunities', 'Process optimization needed'];
-  }
+  for (const result of results) {
+    // Skip excluded domains
+    if (isExcludedDomain(result.url)) {
+      continue;
+    }
 
-  // Company name prefixes for variety
-  const companyPrefixes = ['Global', 'Advanced', 'Dynamic', 'Innovative', 'Premier', 'Strategic', 'Enterprise', 'Digital', 'Smart', 'Next'];
-  const companySuffixes = ['Solutions', 'Technologies', 'Systems', 'Corp', 'Industries', 'Group', 'Partners', 'Labs', 'Dynamics', 'Tech'];
+    // Try to extract company name
+    let companyName = extractCompanyName(result.title, result.url, result.content);
+    if (!companyName) continue;
 
-  // Generate 3-8 results
-  const numResults = 3 + Math.floor(Math.random() * 6);
+    // Skip duplicates
+    const normalizedName = companyName.toLowerCase();
+    if (seenCompanies.has(normalizedName)) continue;
+    seenCompanies.add(normalizedName);
 
-  for (let i = 0; i < numResults; i++) {
-    const prefix = companyPrefixes[Math.floor(Math.random() * companyPrefixes.length)];
-    const suffix = companySuffixes[Math.floor(Math.random() * companySuffixes.length)];
-    const industry = industries[Math.floor(Math.random() * industries.length)];
-    const techStack = techStacks[Math.floor(Math.random() * techStacks.length)];
-    const painPoint = painPoints[Math.floor(Math.random() * painPoints.length)];
+    // Determine industry from content
+    const industry = detectIndustry(result.content, icpCriteria);
 
-    // Confidence score based on keyword match
-    let confidence = 50 + Math.floor(Math.random() * 30);
-    if (keywords.length > 50) confidence += 10;
-    if (icpCriteria) confidence += 10;
-    confidence = Math.min(confidence, 95);
+    // Extract pain points from content
+    const identifiedPain = extractPainPoint(result.content, missionObjective);
 
-    results.push({
-      company_name: `${prefix} ${industry} ${suffix}`,
+    // Calculate confidence score based on relevance
+    const confidenceScore = calculateConfidence(result, missionObjective, icpCriteria);
+
+    leads.push({
+      company_name: companyName,
       industry: industry,
-      tech_stack: techStack,
-      identified_pain: painPoint,
-      confidence_score: confidence,
-      source_link: `https://example.com/company/${prefix.toLowerCase()}-${suffix.toLowerCase()}`
+      tech_stack: [],
+      identified_pain: identifiedPain,
+      confidence_score: confidenceScore,
+      source_link: result.url
     });
   }
 
-  return results;
+  return leads;
+}
+
+// Check if URL is from an excluded domain
+function isExcludedDomain(url) {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return EXCLUDED_DOMAINS.some(domain =>
+      hostname === domain || hostname.endsWith('.' + domain)
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Common words that are NOT company names
+const INVALID_COMPANY_NAMES = [
+  'window', 'document', 'the', 'a', 'an', 'this', 'that', 'industry',
+  'companies', 'company', 'business', 'businesses', 'startup', 'startups',
+  'guide', 'article', 'blog', 'post', 'news', 'top', 'best', 'list',
+  'how', 'what', 'why', 'when', 'where', 'lesson', 'chapter', 'part',
+  'strategies', 'strategy', 'tips', 'ways', 'steps', 'insights'
+];
+
+// Extract company name from search result - use URL domain as primary source
+function extractCompanyName(title, url, content) {
+  // First check if title is a list/article pattern - skip these
+  if (LIST_ARTICLE_PATTERNS.some(pattern => pattern.test(title))) {
+    return null;
+  }
+
+  // Primary: Extract from URL domain (most reliable)
+  let name = extractCompanyFromUrl(url);
+
+  // Validate the name
+  if (!name) return null;
+  if (name.length < 3 || name.length > 40) return null;
+
+  // Check if name is a common invalid word
+  const nameLower = name.toLowerCase();
+  if (INVALID_COMPANY_NAMES.includes(nameLower)) return null;
+
+  // Check if name starts with number or contains only numbers
+  if (/^\d/.test(name) || /^\d+$/.test(name)) return null;
+
+  // Format name nicely
+  // Keep acronyms uppercase (2-4 chars all caps)
+  if (name.length <= 4 && name === name.toUpperCase()) {
+    return name.toUpperCase();
+  }
+
+  // Title case for regular names
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+// Extract company name from URL domain
+function extractCompanyFromUrl(url) {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+
+    // Remove common prefixes
+    let domain = hostname
+      .replace(/^www\./, '')
+      .replace(/^blog\./, '')
+      .replace(/^app\./, '')
+      .replace(/^docs\./, '')
+      .replace(/^help\./, '');
+
+    // Get the main domain part (before TLD)
+    const parts = domain.split('.');
+    if (parts.length < 2) return null;
+
+    // Get domain name (second to last part for .co.uk style, or first part for .com)
+    let name;
+    if (parts.length >= 3 && ['co', 'com', 'org', 'net'].includes(parts[parts.length - 2])) {
+      name = parts[parts.length - 3]; // e.g., example from example.co.uk
+    } else {
+      name = parts[0]; // e.g., example from example.com
+    }
+
+    // Clean up the name
+    name = name.replace(/[-_]/g, ''); // Remove dashes and underscores
+
+    if (name.length < 3) return null;
+
+    return name;
+  } catch {
+    return null;
+  }
+}
+
+// Detect industry from content
+function detectIndustry(content, icpCriteria) {
+  const contentLower = (content || '').toLowerCase();
+
+  const industryKeywords = {
+    'Technology': ['software', 'saas', 'tech', 'digital', 'app', 'platform', 'cloud'],
+    'Healthcare': ['health', 'medical', 'hospital', 'patient', 'clinical', 'pharma'],
+    'Finance': ['finance', 'bank', 'investment', 'fintech', 'payment', 'insurance'],
+    'E-commerce': ['ecommerce', 'e-commerce', 'retail', 'shop', 'store', 'marketplace'],
+    'Manufacturing': ['manufacturing', 'factory', 'production', 'industrial'],
+    'Education': ['education', 'learning', 'school', 'university', 'training'],
+    'Real Estate': ['real estate', 'property', 'housing', 'realty'],
+    'Marketing': ['marketing', 'advertising', 'agency', 'media', 'content']
+  };
+
+  for (const [industry, keywords] of Object.entries(industryKeywords)) {
+    if (keywords.some(kw => contentLower.includes(kw))) {
+      return industry;
+    }
+  }
+
+  // Use ICP criteria as fallback
+  if (icpCriteria?.industries?.length > 0) {
+    return icpCriteria.industries[0];
+  }
+
+  return 'Technology';
+}
+
+// Extract pain point from content based on mission objective
+function extractPainPoint(content, missionObjective) {
+  if (!content) return 'Potential fit based on search criteria';
+
+  // Truncate content to first meaningful part
+  const snippet = content.substring(0, 200);
+
+  // Look for pain-related keywords
+  const painIndicators = ['challenge', 'problem', 'struggle', 'need', 'looking for', 'seeking', 'scaling', 'growth'];
+
+  for (const indicator of painIndicators) {
+    const idx = content.toLowerCase().indexOf(indicator);
+    if (idx !== -1) {
+      // Extract sentence containing the indicator
+      const start = Math.max(0, content.lastIndexOf('.', idx) + 1);
+      const end = content.indexOf('.', idx + indicator.length);
+      if (end > start) {
+        return content.substring(start, end + 1).trim();
+      }
+    }
+  }
+
+  return snippet.length > 50 ? snippet + '...' : snippet;
+}
+
+// Calculate confidence score
+function calculateConfidence(result, missionObjective, icpCriteria) {
+  let score = 50; // Base score
+
+  const content = (result.content || '').toLowerCase();
+  const missionLower = missionObjective.toLowerCase();
+
+  // Check for mission keywords in content
+  const missionWords = missionLower.split(/\s+/).filter(w => w.length > 3);
+  const matchedWords = missionWords.filter(w => content.includes(w));
+  score += Math.min(30, matchedWords.length * 5);
+
+  // Bonus for ICP criteria match
+  if (icpCriteria?.industries) {
+    for (const industry of icpCriteria.industries) {
+      if (content.includes(industry.toLowerCase())) {
+        score += 10;
+        break;
+      }
+    }
+  }
+
+  // Cap at 95
+  return Math.min(95, score);
 }
 
 // Generate personalized hook/icebreaker suggestions for a lead
@@ -434,14 +623,14 @@ function generateCompetitorInfo(industry, techStack) {
 async function sendSlackNotification(missionObjective, resultsCount, searchId) {
   try {
     // Check if Slack notifications are enabled
-    const slackEnabled = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('slack_notifications_enabled');
+    const slackEnabled = await get('SELECT value FROM system_settings WHERE key = ?', ['slack_notifications_enabled']);
     if (!slackEnabled || slackEnabled.value !== 'true') {
       console.log('Slack notifications not enabled, skipping notification');
       return;
     }
 
     // Get Slack webhook URL
-    const slackSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('slack_webhook_url');
+    const slackSetting = await get('SELECT value FROM system_settings WHERE key = ?', ['slack_webhook_url']);
     if (!slackSetting || !slackSetting.value) {
       console.log('Slack webhook URL not configured, skipping notification');
       return;

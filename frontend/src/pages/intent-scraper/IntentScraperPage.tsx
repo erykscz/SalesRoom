@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -130,7 +131,7 @@ export default function IntentScraperPage() {
       if (statusFilter) params.set('status', statusFilter);
       if (confidenceFilter) params.set('min_confidence', confidenceFilter);
 
-      const res = await fetch(`/api/leads?${params.toString()}`, {
+      const res = await fetch(`${API_URL}/leads?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -183,7 +184,7 @@ export default function IntentScraperPage() {
         .map(t => t.trim())
         .filter(t => t.length > 0);
 
-      const res = await fetch('/api/leads', {
+      const res = await fetch(`${API_URL}/leads`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -230,7 +231,7 @@ export default function IntentScraperPage() {
         .map(t => t.trim())
         .filter(t => t.length > 0);
 
-      const res = await fetch(`/api/leads/${editingLead.id}`, {
+      const res = await fetch(`${API_URL}/leads/${editingLead.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -270,7 +271,7 @@ export default function IntentScraperPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/leads/${id}`, {
+      const res = await fetch(`${API_URL}/leads/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -297,7 +298,7 @@ export default function IntentScraperPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/leads/${id}/convert-to-deal`, {
+      const res = await fetch(`${API_URL}/leads/${id}/convert-to-deal`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -352,7 +353,7 @@ export default function IntentScraperPage() {
     setLoadingTemplates(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/icp-templates', {
+      const res = await fetch(`${API_URL}/icp-templates`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch ICP templates');
@@ -397,7 +398,7 @@ export default function IntentScraperPage() {
         pain_points: icpFormData.pain_points.split(',').map(s => s.trim()).filter(s => s)
       };
 
-      const res = await fetch('/api/icp-templates', {
+      const res = await fetch(`${API_URL}/icp-templates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -448,7 +449,7 @@ export default function IntentScraperPage() {
         pain_points: icpFormData.pain_points.split(',').map(s => s.trim()).filter(s => s)
       };
 
-      const res = await fetch(`/api/icp-templates/${editingTemplate.id}`, {
+      const res = await fetch(`${API_URL}/icp-templates/${editingTemplate.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -490,7 +491,7 @@ export default function IntentScraperPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/icp-templates/${id}`, {
+      const res = await fetch(`${API_URL}/icp-templates/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -548,7 +549,7 @@ export default function IntentScraperPage() {
   const fetchSearchHistory = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/intent-scraper/searches', {
+      const res = await fetch(`${API_URL}/intent-scraper/searches`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch searches');
@@ -574,7 +575,7 @@ export default function IntentScraperPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/intent-scraper/search', {
+      const res = await fetch(`${API_URL}/intent-scraper/search`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -620,7 +621,7 @@ export default function IntentScraperPage() {
     const poll = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`/api/intent-scraper/searches/${searchId}`, {
+        const res = await fetch(`${API_URL}/intent-scraper/searches/${searchId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 

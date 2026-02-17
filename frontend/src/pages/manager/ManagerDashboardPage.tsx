@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Loader2, Users, DollarSign, TrendingUp, Target, AlertTriangle, Award, BarChart3 } from 'lucide-react';
 
@@ -56,7 +57,7 @@ export default function ManagerDashboardPage() {
       try {
         setLoading(true);
         const token = localStorage.getItem('token');
-        const response = await fetch('/api/manager/dashboard', {
+        const response = await fetch(`${API_URL}/manager/dashboard`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 

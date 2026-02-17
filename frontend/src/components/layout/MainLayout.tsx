@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { API_URL } from '@/lib/api';
 
 interface SearchResult {
   type: 'deal' | 'lead' | 'knowledge';
@@ -80,7 +81,7 @@ export default function MainLayout() {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const response = await fetch('/api/notifications?limit=1', {
+        const response = await fetch(`${API_URL}/notifications?limit=1`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -124,7 +125,7 @@ export default function MainLayout() {
         const results: SearchResult[] = [];
 
         // Search deals
-        const dealsResponse = await fetch(`/api/deals?search=${encodeURIComponent(searchQuery)}&limit=5`, {
+        const dealsResponse = await fetch(`${API_URL}/deals?search=${encodeURIComponent(searchQuery)}&limit=5`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (dealsResponse.ok) {
@@ -141,7 +142,7 @@ export default function MainLayout() {
         }
 
         // Search leads
-        const leadsResponse = await fetch(`/api/leads?search=${encodeURIComponent(searchQuery)}&limit=3`, {
+        const leadsResponse = await fetch(`${API_URL}/leads?search=${encodeURIComponent(searchQuery)}&limit=3`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (leadsResponse.ok) {
@@ -158,7 +159,7 @@ export default function MainLayout() {
         }
 
         // Search knowledge base
-        const kbResponse = await fetch(`/api/knowledge?search=${encodeURIComponent(searchQuery)}&limit=3`, {
+        const kbResponse = await fetch(`${API_URL}/knowledge?search=${encodeURIComponent(searchQuery)}&limit=3`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (kbResponse.ok) {

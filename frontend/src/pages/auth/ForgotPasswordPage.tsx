@@ -6,8 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Building2, Loader2, ArrowLeft, CheckCircle } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+import { API_URL } from '@/lib/api';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');

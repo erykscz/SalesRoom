@@ -1,5 +1,6 @@
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -773,7 +774,7 @@ export default function SalesRoomPublicPage() {
     setChatLoading(true);
 
     try {
-      const response = await fetch(`/api/sales-rooms/public/${slug}/chat`, {
+      const response = await fetch(`${API_URL}/sales-rooms/public/${slug}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMessage }),
@@ -798,7 +799,7 @@ export default function SalesRoomPublicPage() {
       setError(null);
       setPasswordError(null);
 
-      let url = `/api/sales-rooms/public/${slug}`;
+      let url = `${API_URL}/sales-rooms/public/${slug}`;
       const params = new URLSearchParams();
       if (role) params.append('role', role);
       if (pwd) params.append('password', pwd);
@@ -840,7 +841,7 @@ export default function SalesRoomPublicPage() {
   const trackSectionView = async (section: string) => {
     if (!slug) return;
     try {
-      await fetch(`/api/sales-rooms/public/${slug}/track`, {
+      await fetch(`${API_URL}/sales-rooms/public/${slug}/track`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ section, role: role || undefined, time_spent_seconds: 0 })
@@ -865,7 +866,7 @@ export default function SalesRoomPublicPage() {
   const fetchPollResults = async () => {
     if (!slug) return;
     try {
-      const response = await fetch(`/api/sales-rooms/public/${slug}/poll/results`);
+      const response = await fetch(`${API_URL}/sales-rooms/public/${slug}/poll/results`);
       if (response.ok) {
         const data = await response.json();
         setPollResults(data);
@@ -880,7 +881,7 @@ export default function SalesRoomPublicPage() {
 
     setPollSubmitting(true);
     try {
-      const response = await fetch(`/api/sales-rooms/public/${slug}/poll`, {
+      const response = await fetch(`${API_URL}/sales-rooms/public/${slug}/poll`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1183,7 +1184,7 @@ export default function SalesRoomPublicPage() {
                       const handleToggle = async () => {
                         if (!isClientTask || !slug) return;
                         try {
-                          const response = await fetch(`/api/sales-rooms/public/${slug}/map/${item.id}`, {
+                          const response = await fetch(`${API_URL}/sales-rooms/public/${slug}/map/${item.id}`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ completed: !item.completed })

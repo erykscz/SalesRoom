@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,7 +55,7 @@ export default function SalesRoomCreatePage() {
     const fetchDeals = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch('/api/deals?has_sales_room=false', {
+        const response = await fetch(`${API_URL}/deals?has_sales_room=false`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -96,7 +97,7 @@ export default function SalesRoomCreatePage() {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/sales-rooms', {
+      const response = await fetch(`${API_URL}/sales-rooms`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

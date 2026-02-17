@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -133,7 +134,7 @@ export default function KnowledgeBasePage() {
         tags.push(extension.toUpperCase());
       }
 
-      const response = await fetch('/api/knowledge', {
+      const response = await fetch(`${API_URL}/knowledge`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -196,7 +197,7 @@ export default function KnowledgeBasePage() {
       if (searchQuery) params.append('search', searchQuery);
       if (selectedType) params.append('type', selectedType);
 
-      const response = await fetch(`/api/knowledge?${params}`, {
+      const response = await fetch(`${API_URL}/knowledge?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -251,7 +252,7 @@ export default function KnowledgeBasePage() {
       const token = localStorage.getItem('token');
       const tags = formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(t => t) : [];
 
-      const response = await fetch('/api/knowledge', {
+      const response = await fetch(`${API_URL}/knowledge`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -307,7 +308,7 @@ export default function KnowledgeBasePage() {
       const token = localStorage.getItem('token');
       const tags = formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(t => t) : [];
 
-      const response = await fetch(`/api/knowledge/${editingItem.id}`, {
+      const response = await fetch(`${API_URL}/knowledge/${editingItem.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -351,7 +352,7 @@ export default function KnowledgeBasePage() {
       setDeleting(id);
       const token = localStorage.getItem('token');
 
-      const response = await fetch(`/api/knowledge/${id}`, {
+      const response = await fetch(`${API_URL}/knowledge/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

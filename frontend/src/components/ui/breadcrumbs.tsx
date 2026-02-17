@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronRight, Home } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { API_URL } from '@/lib/api';
 
 interface BreadcrumbItem {
   label: string;
@@ -53,7 +54,7 @@ export function Breadcrumbs() {
           if (entityType === 'deals') {
             try {
               const token = localStorage.getItem('token');
-              const response = await fetch(`/api/deals/${part}`, {
+              const response = await fetch(`${API_URL}/deals/${part}`, {
                 headers: {
                   'Authorization': `Bearer ${token}`,
                 },
@@ -71,7 +72,7 @@ export function Breadcrumbs() {
           } else if (entityType === 'sales-rooms') {
             try {
               const token = localStorage.getItem('token');
-              const response = await fetch(`/api/sales-rooms/${part}`, {
+              const response = await fetch(`${API_URL}/sales-rooms/${part}`, {
                 headers: {
                   'Authorization': `Bearer ${token}`,
                 },

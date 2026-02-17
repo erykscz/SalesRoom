@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +48,7 @@ export default function SettingsPage() {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/settings', {
+      const response = await fetch(`${API_URL}/admin/settings`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -80,7 +81,7 @@ export default function SettingsPage() {
       setSuccess(null);
 
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/settings', {
+      const response = await fetch(`${API_URL}/admin/settings`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -112,7 +113,7 @@ export default function SettingsPage() {
       setSuccess(null);
 
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/settings/test-slack', {
+      const response = await fetch(`${API_URL}/admin/settings/test-slack`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -149,7 +150,7 @@ export default function SettingsPage() {
       setSuccess(null);
 
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/export-data', {
+      const response = await fetch(`${API_URL}/admin/export-data`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });

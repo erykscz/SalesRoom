@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertTriangle, Clock, ExternalLink, TrendingDown } from 'lucide-react';
@@ -28,7 +29,7 @@ export default function AnalyticsPage() {
       try {
         setLoading(true);
         const token = localStorage.getItem('token');
-        const response = await fetch(`/api/manager/stagnation?min_days=${minDays}`, {
+        const response = await fetch(`${API_URL}/manager/stagnation?min_days=${minDays}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 

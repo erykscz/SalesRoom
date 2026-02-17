@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: salesroom-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node src/db/init.js && node src/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        value: /data/salesroom.db
+      - key: FRONTEND_URL
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+    disk:
+      name: salesroom-data
+      mountPath: /data
+      sizeGB: 1

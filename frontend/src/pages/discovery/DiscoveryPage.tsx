@@ -10,8 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Upload, FileText, CheckCircle, AlertCircle, Trash2, Eye, Loader2, X, Cloud, Pencil, Plus, Save, Clock, TrendingUp, ChevronRight, Download, Search } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+import { API_URL } from '@/lib/api';
 
 interface Deal {
   id: string;
