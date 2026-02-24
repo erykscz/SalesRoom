@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban } from 'lucide-react';
@@ -364,19 +364,16 @@ export default function DealsPage() {
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
-          <label>
-            <input
-              type="file"
-              accept=".csv"
-              onChange={importFromCsv}
-              className="hidden"
-            />
-            <Button variant="outline" asChild>
-              <span>
-                <Upload className="w-4 h-4 mr-2" />
-                Import CSV
-              </span>
-            </Button>
+          <input
+            id="csv-file-input"
+            type="file"
+            accept=".csv"
+            onChange={importFromCsv}
+            className="hidden"
+          />
+          <label htmlFor="csv-file-input" className={buttonVariants({ variant: 'outline' }) + ' cursor-pointer'}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import CSV
           </label>
           <Link to="/deals/new">
             <Button>
