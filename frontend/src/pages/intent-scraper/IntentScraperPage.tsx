@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Search, Trash2, Edit2, ArrowRight, X, Filter, Building2, Target, Zap, RotateCcw, Settings, ChevronDown, ChevronUp, FileText, Sparkles, Loader2, Clock, CheckCircle, XCircle, History, MessageSquare, Copy, Shield } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2, ArrowRight, X, Filter, Building2, Target, Zap, RotateCcw, Settings, ChevronDown, ChevronUp, FileText, Sparkles, Loader2, Clock, CheckCircle, XCircle, History, MessageSquare, Copy, Shield, Microscope } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import DeepResearchTab from './components/DeepResearchTab';
 
 interface IntentSearch {
   id: string;
@@ -709,6 +711,27 @@ export default function IntentScraperPage() {
             AI-powered lead discovery and management
           </p>
         </div>
+      </div>
+
+      <Tabs defaultValue="discovery" className="w-full">
+        <TabsList>
+          <TabsTrigger value="discovery" className="flex items-center gap-2">
+            <Search className="h-4 w-4" />
+            Lead Discovery
+          </TabsTrigger>
+          <TabsTrigger value="research" className="flex items-center gap-2">
+            <Microscope className="h-4 w-4" />
+            Deep Research
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="research" className="mt-4">
+          <DeepResearchTab leads={leads} />
+        </TabsContent>
+
+        <TabsContent value="discovery" className="mt-4">
+      <div className="flex items-center justify-between">
+        <div></div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowSearchHistory(!showSearchHistory)}>
             <History className="mr-2 h-4 w-4" />
@@ -1412,6 +1435,8 @@ export default function IntentScraperPage() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

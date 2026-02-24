@@ -1,0 +1,295 @@
+import express from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import { run, get, all } from '../db/database.js';
+import { executeResearch, getAvailablePlatforms } from '../services/research/orchestrator.js';
+import { generateMessage } from '../services/ai/claude.js';
+
+const router = express.Router();
+
+// GET /api/research/platforms - List available platforms (those with API keys configured)
+router.get('/platforms', (req, res) => {
+  const platforms = getAvailablePlatforms();
+  res.json({ platforms });
+});
+
+// POST /api/research/:leadId/start - Start deep research for a lead
+router.post('/:leadId/start', async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const userId = req.user.id;
+    const { platforms, linkedin_url, twitter_handle, github_username, facebook_page_id } = req.body;
+
+    // Validate lead exists and user has access
+    const lead = await get('SELECT * FROM leads WHERE id = ?', [leadId]);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Determine platforms to search
+    const available = getAvailablePlatforms();
+    const selectedPlatforms = platforms && platforms.length > 0
+      ? platforms.filter(p => available.includes(p))
+      : available;
+
+    if (selectedPlatforms.length === 0) {
+      return res.status(400).json({ error: 'No platforms available. Configure API keys in environment variables.' });
+    }
+
+    // Create research profile
+    const researchId = uuidv4();
+    await run(
+      `INSERT INTO research_profiles (id, lead_id, status, platforms_searched, requested_by)
+       VALUES (?, ?, 'pending', ?, ?)`,
+      [researchId, leadId, JSON.stringify(selectedPlatforms), userId]
+    );
+
+    // Build hints from user-provided data
+    const hints = {};
+    if (linkedin_url) hints.linkedin_company_url = linkedin_url;
+    if (twitter_handle) hints.twitter_handle = twitter_handle;
+    if (github_username) hints.github_username = github_username;
+    if (facebook_page_id) hints.facebook_page_id = facebook_page_id;
+
+    // Start async research (non-blocking)
+    executeResearch(researchId, leadId, selectedPlatforms, hints, userId);
+
+    res.json({
+      id: researchId,
+      status: 'pending',
+      platforms: selectedPlatforms,
+      message: 'Research started. Poll /status for progress.',
+    });
+  } catch (error) {
+    console.error('Error starting research:', error);
+    res.status(500).json({ error: 'Failed to start research' });
+  }
+});
+
+// GET /api/research/:leadId/status - Lightweight status polling
+router.get('/:leadId/status', async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const profile = await get(
+      'SELECT id, status, platforms_searched, platforms_succeeded, error_log, created_at, completed_at FROM research_profiles WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1',
+      [leadId]
+    );
+
+    if (!profile) {
+      return res.json({ status: 'none', message: 'No research found for this lead' });
+    }
+
+    res.json({
+      id: profile.id,
+      status: profile.status,
+      platforms_searched: JSON.parse(profile.platforms_searched || '[]'),
+      platforms_succeeded: JSON.parse(profile.platforms_succeeded || '[]'),
+      errors: JSON.parse(profile.error_log || '[]'),
+      created_at: profile.created_at,
+      completed_at: profile.completed_at,
+    });
+  } catch (error) {
+    console.error('Error fetching research status:', error);
+    res.status(500).json({ error: 'Failed to fetch research status' });
+  }
+});
+
+// GET /api/research/:leadId - Full research results
+router.get('/:leadId', async (req, res) => {
+  try {
+    const { leadId } = req.params;
+
+    const research = await get(
+      'SELECT * FROM research_profiles WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1',
+      [leadId]
+    );
+
+    if (!research) {
+      return res.json({ research: null, socialProfiles: [], messages: [] });
+    }
+
+    const socialProfiles = await all(
+      'SELECT * FROM social_profiles WHERE lead_id = ? ORDER BY platform',
+      [leadId]
+    );
+
+    const messages = await all(
+      'SELECT * FROM generated_messages WHERE lead_id = ? ORDER BY created_at DESC',
+      [leadId]
+    );
+
+    // Parse JSON fields
+    const parsed = {
+      ...research,
+      linkedin_data: research.linkedin_data ? JSON.parse(research.linkedin_data) : null,
+      twitter_data: research.twitter_data ? JSON.parse(research.twitter_data) : null,
+      github_data: research.github_data ? JSON.parse(research.github_data) : null,
+      reddit_data: research.reddit_data ? JSON.parse(research.reddit_data) : null,
+      facebook_data: research.facebook_data ? JSON.parse(research.facebook_data) : null,
+      platforms_searched: JSON.parse(research.platforms_searched || '[]'),
+      platforms_succeeded: JSON.parse(research.platforms_succeeded || '[]'),
+      error_log: JSON.parse(research.error_log || '[]'),
+    };
+
+    const parsedProfiles = socialProfiles.map(sp => ({
+      ...sp,
+      profile_data: sp.profile_data ? JSON.parse(sp.profile_data) : null,
+    }));
+
+    res.json({
+      research: parsed,
+      socialProfiles: parsedProfiles,
+      messages,
+    });
+  } catch (error) {
+    console.error('Error fetching research results:', error);
+    res.status(500).json({ error: 'Failed to fetch research results' });
+  }
+});
+
+// POST /api/research/:leadId/generate-message - Generate AI outreach message
+router.post('/:leadId/generate-message', async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const userId = req.user.id;
+    const { channel, tone, additional_context } = req.body;
+
+    // Validate inputs
+    const validChannels = ['cold_email', 'linkedin_inmail', 'linkedin_connection', 'twitter_dm', 'generic'];
+    const validTones = ['formal', 'casual', 'provocative', 'consultative'];
+
+    if (!channel || !validChannels.includes(channel)) {
+      return res.status(400).json({ error: `Invalid channel. Must be one of: ${validChannels.join(', ')}` });
+    }
+    if (!tone || !validTones.includes(tone)) {
+      return res.status(400).json({ error: `Invalid tone. Must be one of: ${validTones.join(', ')}` });
+    }
+
+    // Fetch lead
+    const lead = await get('SELECT * FROM leads WHERE id = ?', [leadId]);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Fetch latest research
+    const research = await get(
+      'SELECT * FROM research_profiles WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1',
+      [leadId]
+    );
+
+    // Fetch social profiles
+    const socialProfiles = await all(
+      'SELECT * FROM social_profiles WHERE lead_id = ?',
+      [leadId]
+    );
+
+    // Parse lead data
+    const leadData = {
+      company_name: lead.company_name,
+      industry: lead.industry,
+      tech_stack: lead.tech_stack,
+      identified_pain: lead.identified_pain,
+      notes: lead.notes,
+    };
+
+    // Generate message via Claude
+    const result = await generateMessage({
+      leadData,
+      researchData: research,
+      socialProfiles,
+      channel,
+      tone,
+      additionalContext: additional_context,
+    });
+
+    // Store generated message
+    const messageId = uuidv4();
+    await run(
+      `INSERT INTO generated_messages (id, lead_id, research_profile_id, channel, tone, subject_line, message_body, message_length, prompt_used, model_used, generated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        messageId, leadId,
+        research ? research.id : null,
+        channel, tone,
+        result.subject_line,
+        result.message_body,
+        result.message_body.length,
+        result.prompt_used,
+        result.model_used,
+        userId,
+      ]
+    );
+
+    res.json({
+      id: messageId,
+      channel,
+      tone,
+      subject_line: result.subject_line,
+      message_body: result.message_body,
+      message_length: result.message_body.length,
+      personalization_points: result.personalization_points,
+      created_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error generating message:', error);
+    res.status(500).json({ error: `Failed to generate message: ${error.message}` });
+  }
+});
+
+// GET /api/research/:leadId/messages - List generated messages
+router.get('/:leadId/messages', async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const messages = await all(
+      'SELECT * FROM generated_messages WHERE lead_id = ? ORDER BY created_at DESC',
+      [leadId]
+    );
+    res.json({ messages });
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// DELETE /api/research/messages/:messageId - Delete a message
+router.delete('/messages/:messageId', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+
+    const message = await get('SELECT * FROM generated_messages WHERE id = ?', [messageId]);
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    if (message.generated_by !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized to delete this message' });
+    }
+
+    await run('DELETE FROM generated_messages WHERE id = ?', [messageId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting message:', error);
+    res.status(500).json({ error: 'Failed to delete message' });
+  }
+});
+
+// POST /api/research/messages/:messageId/favorite - Toggle favorite
+router.post('/messages/:messageId/favorite', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+
+    const message = await get('SELECT * FROM generated_messages WHERE id = ?', [messageId]);
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    const newFavorite = message.is_favorite ? 0 : 1;
+    await run('UPDATE generated_messages SET is_favorite = ? WHERE id = ?', [newFavorite, messageId]);
+
+    res.json({ id: messageId, is_favorite: newFavorite === 1 });
+  } catch (error) {
+    console.error('Error toggling favorite:', error);
+    res.status(500).json({ error: 'Failed to toggle favorite' });
+  }
+});
+
+export default router;
