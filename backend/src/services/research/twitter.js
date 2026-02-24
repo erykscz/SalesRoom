@@ -61,11 +61,22 @@ export async function research(companyName, hints = {}) {
       if (result.ok) user = result.data;
     }
 
+    // Try company search
     if (!user) {
       user = await searchUser(companyName, token);
     }
 
-    if (!user) {
+    // Try person search if first_name + last_name provided
+    let personUser = null;
+    if (hints.first_name && hints.last_name) {
+      const personHandle = `${hints.first_name}${hints.last_name}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const personResult = await lookupByUsername(personHandle, token);
+      if (personResult.ok && personResult.data) {
+        personUser = personResult.data;
+      }
+    }
+
+    if (!user && !personUser) {
       return {
         success: false,
         data: null,
@@ -74,19 +85,21 @@ export async function research(companyName, hints = {}) {
       };
     }
 
-    const tweets = await getRecentTweets(user.id, token);
+    // Prefer person account if found, fall back to company
+    const primaryUser = personUser || user;
+    const tweets = await getRecentTweets(primaryUser.id, token);
 
-    const metrics = user.public_metrics || {};
+    const metrics = primaryUser.public_metrics || {};
     const data = {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      description: user.description,
-      location: user.location,
-      url: user.url,
-      profile_image_url: user.profile_image_url,
-      verified: user.verified,
-      created_at: user.created_at,
+      id: primaryUser.id,
+      username: primaryUser.username,
+      name: primaryUser.name,
+      description: primaryUser.description,
+      location: primaryUser.location,
+      url: primaryUser.url,
+      profile_image_url: primaryUser.profile_image_url,
+      verified: primaryUser.verified,
+      created_at: primaryUser.created_at,
       followers_count: metrics.followers_count,
       following_count: metrics.following_count,
       tweet_count: metrics.tweet_count,
@@ -100,16 +113,26 @@ export async function research(companyName, hints = {}) {
       })),
     };
 
+    // If we found both person and company, include company as secondary context
+    if (personUser && user && personUser.id !== user.id) {
+      data.company_account = {
+        username: user.username,
+        name: user.name,
+        description: user.description,
+        followers_count: user.public_metrics?.followers_count,
+      };
+    }
+
     return {
       success: true,
       data,
       error: null,
       profile: {
         platform: 'twitter',
-        profile_url: `https://twitter.com/${user.username}`,
-        username: user.username,
-        display_name: user.name,
-        bio: user.description || null,
+        profile_url: `https://twitter.com/${primaryUser.username}`,
+        username: primaryUser.username,
+        display_name: primaryUser.name,
+        bio: primaryUser.description || null,
         followers_count: metrics.followers_count || null,
       },
     };

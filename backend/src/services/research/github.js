@@ -130,17 +130,41 @@ export async function research(companyName, hints = {}) {
       })),
     };
 
+    // Try person GitHub search if first_name + last_name provided
+    if (hints.first_name && hints.last_name) {
+      const personQuery = `${hints.first_name} ${hints.last_name}`;
+      const searchResult = await fetchJson(`${GITHUB_BASE}/search/users?q=${encodeURIComponent(personQuery)}+type:user&per_page=3`);
+      if (searchResult.ok && searchResult.data.total_count > 0) {
+        const personLogin = searchResult.data.items[0].login;
+        const personProfile = await getUserProfile(personLogin);
+        if (personProfile) {
+          data.person = {
+            login: personProfile.login,
+            name: personProfile.name,
+            bio: personProfile.bio,
+            company: personProfile.company,
+            location: personProfile.location,
+            public_repos: personProfile.public_repos,
+            followers: personProfile.followers,
+            html_url: personProfile.html_url,
+          };
+        }
+      }
+    }
+
+    // Use person profile for social_profiles entry if available
+    const displayProfile = data.person || profile;
     return {
       success: true,
       data,
       error: null,
       profile: {
         platform: 'github',
-        profile_url: profile.html_url,
-        username: profile.login,
-        display_name: profile.name || profile.login,
-        bio: profile.bio || profile.description || null,
-        followers_count: profile.followers || null,
+        profile_url: displayProfile.html_url || profile.html_url,
+        username: displayProfile.login || profile.login,
+        display_name: displayProfile.name || displayProfile.login || profile.name || profile.login,
+        bio: displayProfile.bio || profile.bio || profile.description || null,
+        followers_count: displayProfile.followers || profile.followers || null,
       },
     };
   } catch (err) {

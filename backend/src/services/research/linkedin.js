@@ -153,10 +153,10 @@ export async function research(companyName, hints = {}) {
     results.company = companyResult.data;
   }
 
-  if (hints.contact_first_name && hints.contact_last_name) {
+  if (hints.first_name && hints.last_name) {
     const personResult = await lookupPerson(
-      hints.contact_first_name,
-      hints.contact_last_name,
+      hints.first_name,
+      hints.last_name,
       companyName,
       hints.linkedin_person_url
     );
@@ -166,17 +166,20 @@ export async function research(companyName, hints = {}) {
   }
 
   const hasData = results.company || results.person;
+
+  // Prioritize person data in the profile when available
+  const hasPerson = results.person;
   return {
     success: hasData ? true : false,
     data: hasData ? results : null,
     error: hasData ? null : (companyResult.error || 'No LinkedIn data found'),
     profile: {
       platform: 'linkedin',
-      profile_url: results.company?.linkedin_url || hints.linkedin_company_url || null,
-      username: companyName,
-      display_name: results.company?.name || companyName,
-      bio: results.company?.description || null,
-      followers_count: results.company?.follower_count || null,
+      profile_url: hasPerson ? results.person.linkedin_url : (results.company?.linkedin_url || hints.linkedin_company_url || null),
+      username: hasPerson ? results.person.full_name : companyName,
+      display_name: hasPerson ? results.person.full_name : (results.company?.name || companyName),
+      bio: hasPerson ? (results.person.headline || results.person.summary) : (results.company?.description || null),
+      followers_count: hasPerson ? results.person.follower_count : (results.company?.follower_count || null),
     }
   };
 }

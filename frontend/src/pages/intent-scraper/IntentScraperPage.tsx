@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Search, Trash2, Edit2, ArrowRight, X, Filter, Building2, Target, Zap, RotateCcw, Settings, ChevronDown, ChevronUp, FileText, Sparkles, Loader2, Clock, CheckCircle, XCircle, History, MessageSquare, Copy, Shield, Microscope } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2, ArrowRight, X, Filter, Building2, Target, Zap, RotateCcw, Settings, ChevronDown, ChevronUp, FileText, Sparkles, Loader2, Clock, CheckCircle, XCircle, History, MessageSquare, Copy, Shield, Microscope, User } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import DeepResearchTab from './components/DeepResearchTab';
 
@@ -29,6 +29,12 @@ interface CompetitorInfo {
 
 interface Lead {
   id: string;
+  first_name: string;
+  last_name: string;
+  job_title: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
   company_name: string;
   industry: string | null;
   tech_stack: string[];
@@ -86,6 +92,12 @@ export default function IntentScraperPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
+    job_title: '',
+    email: '',
+    phone: '',
+    linkedin_url: '',
     company_name: '',
     industry: '',
     tech_stack: '',
@@ -158,6 +170,12 @@ export default function IntentScraperPage() {
 
   const resetFormFields = () => {
     setFormData({
+      first_name: '',
+      last_name: '',
+      job_title: '',
+      email: '',
+      phone: '',
+      linkedin_url: '',
       company_name: '',
       industry: '',
       tech_stack: '',
@@ -328,6 +346,12 @@ export default function IntentScraperPage() {
   const startEdit = (lead: Lead) => {
     setEditingLead(lead);
     setFormData({
+      first_name: lead.first_name || '',
+      last_name: lead.last_name || '',
+      job_title: lead.job_title || '',
+      email: lead.email || '',
+      phone: lead.phone || '',
+      linkedin_url: lead.linkedin_url || '',
       company_name: lead.company_name,
       industry: lead.industry || '',
       tech_stack: lead.tech_stack?.join(', ') || '',
@@ -1095,14 +1119,82 @@ export default function IntentScraperPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={editingLead ? handleUpdate : handleCreate} className="space-y-4">
+              {/* Contact Person Section */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Contact Person
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="first_name">First Name *</Label>
+                    <Input
+                      id="first_name"
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                      required
+                      placeholder="John"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="last_name">Last Name *</Label>
+                    <Input
+                      id="last_name"
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                      required
+                      placeholder="Smith"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lead_job_title">Job Title</Label>
+                    <Input
+                      id="lead_job_title"
+                      value={formData.job_title}
+                      onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
+                      placeholder="CTO"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lead_email">Email</Label>
+                    <Input
+                      id="lead_email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="john@example.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lead_phone">Phone</Label>
+                    <Input
+                      id="lead_phone"
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      placeholder="+1 555 000 0000"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lead_linkedin_url">LinkedIn URL</Label>
+                    <Input
+                      id="lead_linkedin_url"
+                      type="url"
+                      value={formData.linkedin_url}
+                      onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
+                      placeholder="https://linkedin.com/in/..."
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="company_name">Company Name *</Label>
+                  <Label htmlFor="company_name">Company Name</Label>
                   <Input
                     id="company_name"
                     value={formData.company_name}
                     onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                    required
                     placeholder="Acme Corp"
                   />
                 </div>

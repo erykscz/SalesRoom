@@ -214,10 +214,12 @@ async function executeSearch(searchId, missionObjective, icpTemplateId, userId) 
       const competitorInfo = generateCompetitorInfo(result.industry, result.tech_stack);
 
       await run(`
-        INSERT INTO leads (id, company_name, industry, tech_stack, identified_pain, confidence_score, source_link, status, search_id, owner_id, hook_suggestions, competitor_info, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO leads (id, first_name, last_name, company_name, industry, tech_stack, identified_pain, confidence_score, source_link, status, search_id, owner_id, hook_suggestions, competitor_info, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         leadId,
+        result.first_name || 'Unknown',
+        result.last_name || 'Contact',
         result.company_name,
         result.industry,
         JSON.stringify(result.tech_stack || []),

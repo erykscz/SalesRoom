@@ -90,10 +90,16 @@ async function initDatabase() {
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
 
-      -- Deals table
+      -- Deals table (person-centric: deal is about a person at a company)
       CREATE TABLE IF NOT EXISTS deals (
         id TEXT PRIMARY KEY,
-        company_name TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        job_title TEXT,
+        email TEXT,
+        phone TEXT,
+        linkedin_url TEXT,
+        company_name TEXT,
         industry TEXT,
         stage TEXT CHECK(stage IN ('new_signal', 'qualified', 'discovery', 'solution_design', 'negotiation', 'closed_won', 'closed_lost')) DEFAULT 'new_signal',
         estimated_value REAL,
@@ -102,6 +108,8 @@ async function initDatabase() {
         next_step_date TEXT NOT NULL,
         next_step_description TEXT,
         health_score INTEGER DEFAULT 50,
+        has_decision_maker INTEGER DEFAULT 0,
+        has_confirmed_budget INTEGER DEFAULT 0,
         owner_id TEXT NOT NULL,
         source TEXT CHECK(source IN ('intent_scraper', 'manual', 'import')) DEFAULT 'manual',
         priority TEXT CHECK(priority IN ('low', 'medium', 'high')) DEFAULT 'medium',
@@ -112,10 +120,16 @@ async function initDatabase() {
         FOREIGN KEY (owner_id) REFERENCES users(id)
       );
 
-      -- Leads table
+      -- Leads table (person-centric: lead is about a person at a company)
       CREATE TABLE IF NOT EXISTS leads (
         id TEXT PRIMARY KEY,
-        company_name TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        job_title TEXT,
+        email TEXT,
+        phone TEXT,
+        linkedin_url TEXT,
+        company_name TEXT,
         industry TEXT,
         tech_stack TEXT,
         identified_pain TEXT,
@@ -374,6 +388,10 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_deal ON tasks(deal_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+      CREATE INDEX IF NOT EXISTS idx_deals_person_name ON deals(first_name, last_name);
+      CREATE INDEX IF NOT EXISTS idx_deals_email ON deals(email);
+      CREATE INDEX IF NOT EXISTS idx_leads_person_name ON leads(first_name, last_name);
+      CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
     `);
 
     // Check if admin user exists

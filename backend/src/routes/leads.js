@@ -40,10 +40,10 @@ router.get('/', (req, res) => {
       }
     }
 
-    // Search by company name or industry
+    // Search by person name, company name, email, or industry
     if (search) {
-      query += ` AND (l.company_name LIKE ? OR l.industry LIKE ? OR l.identified_pain LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      query += ` AND (l.first_name LIKE ? OR l.last_name LIKE ? OR l.email LIKE ? OR l.company_name LIKE ? OR l.industry LIKE ? OR l.identified_pain LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     // Sorting
@@ -79,6 +79,12 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const {
+      first_name,
+      last_name,
+      job_title,
+      email,
+      phone,
+      linkedin_url,
       company_name,
       industry,
       tech_stack,
@@ -90,8 +96,8 @@ router.post('/', (req, res) => {
     } = req.body;
 
     // Validation
-    if (!company_name || company_name.trim().length === 0) {
-      return res.status(400).json({ error: 'Company name is required' });
+    if (!first_name || !last_name) {
+      return res.status(400).json({ error: 'First name and last name are required' });
     }
 
     const id = uuidv4();
@@ -100,13 +106,20 @@ router.post('/', (req, res) => {
 
     db.run(`
       INSERT INTO leads (
-        id, company_name, industry, tech_stack, identified_pain,
+        id, first_name, last_name, job_title, email, phone, linkedin_url,
+        company_name, industry, tech_stack, identified_pain,
         confidence_score, source_link, status, owner_id, notes,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
-      company_name.trim(),
+      first_name.trim(),
+      last_name.trim(),
+      job_title || null,
+      email || null,
+      phone || null,
+      linkedin_url || null,
+      company_name ? company_name.trim() : null,
       industry || null,
       tech_stack ? JSON.stringify(tech_stack) : null,
       identified_pain || null,
@@ -205,6 +218,12 @@ router.put('/:id', (req, res) => {
       }
 
       const {
+        first_name,
+        last_name,
+        job_title,
+        email,
+        phone,
+        linkedin_url,
         company_name,
         industry,
         tech_stack,
@@ -216,14 +235,23 @@ router.put('/:id', (req, res) => {
       } = req.body;
 
       // Validation
-      if (company_name !== undefined && company_name.trim().length === 0) {
-        return res.status(400).json({ error: 'Company name cannot be empty' });
+      if (first_name !== undefined && first_name.trim().length === 0) {
+        return res.status(400).json({ error: 'First name cannot be empty' });
+      }
+      if (last_name !== undefined && last_name.trim().length === 0) {
+        return res.status(400).json({ error: 'Last name cannot be empty' });
       }
 
       const now = new Date().toISOString();
 
       db.run(`
         UPDATE leads SET
+          first_name = COALESCE(?, first_name),
+          last_name = COALESCE(?, last_name),
+          job_title = COALESCE(?, job_title),
+          email = COALESCE(?, email),
+          phone = COALESCE(?, phone),
+          linkedin_url = COALESCE(?, linkedin_url),
           company_name = COALESCE(?, company_name),
           industry = COALESCE(?, industry),
           tech_stack = COALESCE(?, tech_stack),
@@ -235,6 +263,12 @@ router.put('/:id', (req, res) => {
           updated_at = ?
         WHERE id = ?
       `, [
+        first_name ? first_name.trim() : null,
+        last_name ? last_name.trim() : null,
+        job_title,
+        email,
+        phone,
+        linkedin_url,
         company_name ? company_name.trim() : null,
         industry,
         tech_stack ? JSON.stringify(tech_stack) : null,
@@ -340,15 +374,22 @@ router.post('/:id/convert-to-deal', (req, res) => {
       const nextStepDate = new Date();
       nextStepDate.setDate(nextStepDate.getDate() + 7); // Default 7 days
 
-      // Create the deal
+      // Create the deal - copy all person fields from lead
       db.run(`
         INSERT INTO deals (
-          id, company_name, industry, stage, estimated_value,
+          id, first_name, last_name, job_title, email, phone, linkedin_url,
+          company_name, industry, stage, estimated_value,
           next_step_date, next_step_description, health_score, owner_id,
           source, priority, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         dealId,
+        lead.first_name,
+        lead.last_name,
+        lead.job_title || null,
+        lead.email || null,
+        lead.phone || null,
+        lead.linkedin_url || null,
         lead.company_name,
         lead.industry,
         'qualified', // Start as qualified since it came from Intent Scraper
@@ -381,7 +422,7 @@ router.post('/:id/convert-to-deal', (req, res) => {
           db.run(`
             INSERT INTO activities (id, deal_id, activity_type, description, created_by, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
-          `, [activityId, dealId, 'deal_created', `Deal created from Intent Scraper lead: ${lead.company_name}`, userId, now], function(err) {
+          `, [activityId, dealId, 'deal_created', `Deal created from Intent Scraper lead: ${lead.first_name} ${lead.last_name}`, userId, now], function(err) {
             if (err) {
               console.error('Error creating activity:', err);
               // Don't fail the whole operation for this

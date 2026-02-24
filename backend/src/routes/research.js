@@ -74,8 +74,11 @@ router.post('/deal/:dealId/start', async (req, res) => {
     if (github_username) hints.github_username = github_username;
     if (facebook_page_id) hints.facebook_page_id = facebook_page_id;
 
-    // executeResearch uses lead_id to get company_name from leads table
-    // For deals, we pass dealId and the orchestrator will detect deal context
+    // Add person hints from deal
+    if (deal.first_name) hints.first_name = deal.first_name;
+    if (deal.last_name) hints.last_name = deal.last_name;
+    if (deal.linkedin_url) hints.linkedin_person_url = deal.linkedin_url;
+
     executeResearch(researchId, null, selectedPlatforms, hints, userId, dealId);
 
     res.json({
@@ -187,6 +190,10 @@ router.post('/deal/:dealId/generate-message', async (req, res) => {
 
     // Map deal data to leadData format expected by Claude service
     const leadData = {
+      first_name: deal.first_name || null,
+      last_name: deal.last_name || null,
+      job_title: deal.job_title || null,
+      email: deal.email || null,
       company_name: deal.company_name,
       industry: deal.industry,
       tech_stack: null,
@@ -273,6 +280,11 @@ router.post('/:leadId/start', async (req, res) => {
     if (twitter_handle) hints.twitter_handle = twitter_handle;
     if (github_username) hints.github_username = github_username;
     if (facebook_page_id) hints.facebook_page_id = facebook_page_id;
+
+    // Add person hints from lead
+    if (lead.first_name) hints.first_name = lead.first_name;
+    if (lead.last_name) hints.last_name = lead.last_name;
+    if (lead.linkedin_url) hints.linkedin_person_url = lead.linkedin_url;
 
     executeResearch(researchId, leadId, selectedPlatforms, hints, userId);
 
@@ -380,6 +392,10 @@ router.post('/:leadId/generate-message', async (req, res) => {
     );
 
     const leadData = {
+      first_name: lead.first_name || null,
+      last_name: lead.last_name || null,
+      job_title: lead.job_title || null,
+      email: lead.email || null,
       company_name: lead.company_name,
       industry: lead.industry,
       tech_stack: lead.tech_stack,

@@ -37,6 +37,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
 
     // Fetch source data for context (lead or deal)
     let companyName;
+    let personContext = {};
     const entityId = dealId || leadId;
     const entityType = dealId ? 'deal' : 'lead';
 
@@ -50,6 +51,12 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         return;
       }
       companyName = deal.company_name;
+      personContext = {
+        first_name: deal.first_name || null,
+        last_name: deal.last_name || null,
+        job_title: deal.job_title || null,
+        linkedin_url: deal.linkedin_url || null,
+      };
     } else {
       const lead = await get('SELECT * FROM leads WHERE id = ?', [leadId]);
       if (!lead) {
@@ -60,6 +67,20 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         return;
       }
       companyName = lead.company_name;
+      personContext = {
+        first_name: lead.first_name || null,
+        last_name: lead.last_name || null,
+        job_title: lead.job_title || null,
+        linkedin_url: lead.linkedin_url || null,
+      };
+    }
+
+    // Merge person context into hints for adapters
+    const enrichedHints = { ...hints };
+    if (personContext.first_name) enrichedHints.first_name = personContext.first_name;
+    if (personContext.last_name) enrichedHints.last_name = personContext.last_name;
+    if (personContext.linkedin_url && !enrichedHints.linkedin_person_url) {
+      enrichedHints.linkedin_person_url = personContext.linkedin_url;
     }
 
     // Execute all platform adapters in parallel
@@ -69,7 +90,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         if (!adapter) {
           return { platform, success: false, error: `Unknown platform: ${platform}`, data: null, profile: null };
         }
-        const result = await adapter(companyName, hints);
+        const result = await adapter(companyName, enrichedHints);
         return { platform, ...result };
       })
     );
@@ -145,7 +166,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
     // Generate AI research summary if we have data and Claude is configured
     if (succeeded.length > 0 && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your_anthropic_api_key_here') {
       try {
-        const summary = await generateResearchSummary(companyName, platformData);
+        const summary = await generateResearchSummary(companyName, platformData, personContext);
         if (summary) {
           await run(
             `UPDATE research_profiles SET research_summary = ?, updated_at = datetime('now') WHERE id = ?`,
@@ -166,7 +187,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
   }
 }
 
-async function generateResearchSummary(companyName, platformData) {
+async function generateResearchSummary(companyName, platformData, personContext = {}) {
   const sections = [];
   if (platformData.linkedin) {
     const li = platformData.linkedin;
@@ -190,7 +211,14 @@ async function generateResearchSummary(companyName, platformData) {
     sections.push(`Facebook: ${fb.name || companyName} - ${fb.fan_count || 0} fans. ${fb.category || ''}`);
   }
 
-  const prompt = `Summarize the following research data about "${companyName}" in 3-5 sentences. Focus on what would be useful for a sales representative crafting personalized outreach. Write in English.\n\n${sections.join('\n\n')}`;
+  const personName = personContext.first_name && personContext.last_name
+    ? `${personContext.first_name} ${personContext.last_name}`
+    : null;
+  const subjectDesc = personName
+    ? `${personName} at ${companyName}`
+    : companyName;
+
+  const prompt = `Summarize the following research data about ${subjectDesc} in 3-5 sentences. Focus on what would be useful for a sales representative crafting personalized outreach${personName ? `, specifically targeting ${personName}` : ''}. Write in English.\n\n${sections.join('\n\n')}`;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

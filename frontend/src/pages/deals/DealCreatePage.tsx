@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, User, Mail, Phone, Linkedin } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +20,12 @@ import {
 import { API_URL } from '@/lib/api';
 
 interface DealForm {
+  first_name: string;
+  last_name: string;
+  job_title: string;
+  email: string;
+  phone: string;
+  linkedin_url: string;
   company_name: string;
   industry: string;
   stage: string;
@@ -54,6 +60,12 @@ export default function DealCreatePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<DealForm>({
+    first_name: '',
+    last_name: '',
+    job_title: '',
+    email: '',
+    phone: '',
+    linkedin_url: '',
     company_name: '',
     industry: '',
     stage: 'new_signal',
@@ -72,6 +84,12 @@ export default function DealCreatePage() {
   // Check if form has any data entered (dirty state)
   const isFormDirty = useCallback(() => {
     return (
+      form.first_name.trim() !== '' ||
+      form.last_name.trim() !== '' ||
+      form.job_title.trim() !== '' ||
+      form.email.trim() !== '' ||
+      form.phone.trim() !== '' ||
+      form.linkedin_url.trim() !== '' ||
       form.company_name.trim() !== '' ||
       form.industry.trim() !== '' ||
       form.estimated_value !== '' ||
@@ -150,21 +168,14 @@ export default function DealCreatePage() {
     e.preventDefault();
     setError(null);
 
-    const companyName = form.company_name.trim();
-    if (!companyName) {
-      setError('Company name is required');
+    const firstName = form.first_name.trim();
+    const lastName = form.last_name.trim();
+    if (!firstName) {
+      setError('First name is required');
       return;
     }
-
-    // Validate min length
-    if (companyName.length < 2) {
-      setError('Company name must be at least 2 characters');
-      return;
-    }
-
-    // Validate max length
-    if (companyName.length > 255) {
-      setError('Company name must not exceed 255 characters');
+    if (!lastName) {
+      setError('Last name is required');
       return;
     }
 
@@ -189,7 +200,13 @@ export default function DealCreatePage() {
       setLoading(true);
 
       const payload = {
-        company_name: form.company_name.trim(),
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
+        job_title: form.job_title.trim() || null,
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        linkedin_url: form.linkedin_url.trim() || null,
+        company_name: form.company_name.trim() || null,
         industry: form.industry.trim() || null,
         stage: form.stage,
         estimated_value: form.estimated_value ? parseFloat(form.estimated_value) : null,
@@ -278,21 +295,93 @@ export default function DealCreatePage() {
               </div>
             )}
 
+            {/* Contact Person Section */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Contact Person
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="first_name">First Name *</Label>
+                  <Input
+                    id="first_name"
+                    name="first_name"
+                    value={form.first_name}
+                    onChange={handleChange}
+                    placeholder="John"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="last_name">Last Name *</Label>
+                  <Input
+                    id="last_name"
+                    name="last_name"
+                    value={form.last_name}
+                    onChange={handleChange}
+                    placeholder="Smith"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="job_title">Job Title</Label>
+                  <Input
+                    id="job_title"
+                    name="job_title"
+                    value={form.job_title}
+                    onChange={handleChange}
+                    placeholder="CTO"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={form.email}
+                    onChange={handleChange}
+                    placeholder="john@example.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    value={form.phone}
+                    onChange={handleChange}
+                    placeholder="+1 555 000 0000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="linkedin_url">LinkedIn URL</Label>
+                  <Input
+                    id="linkedin_url"
+                    name="linkedin_url"
+                    type="url"
+                    value={form.linkedin_url}
+                    onChange={handleChange}
+                    placeholder="https://linkedin.com/in/..."
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Company Name */}
               <div className="space-y-2">
-                <Label htmlFor="company_name">Company Name *</Label>
+                <Label htmlFor="company_name">Company Name</Label>
                 <Input
                   id="company_name"
                   name="company_name"
                   value={form.company_name}
                   onChange={handleChange}
                   placeholder="Acme Corp"
-                  required
-                  minLength={2}
                   maxLength={255}
                 />
-                <p className="text-xs text-muted-foreground">2-255 characters</p>
               </div>
 
               {/* Industry */}

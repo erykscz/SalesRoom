@@ -85,7 +85,7 @@ router.post('/', async (req, res) => {
     }
 
     // Verify deal exists
-    const deal = await get('SELECT id, owner_id, company_name, stage FROM deals WHERE id = ?', [deal_id]);
+    const deal = await get('SELECT id, owner_id, first_name, last_name, company_name, stage FROM deals WHERE id = ?', [deal_id]);
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -155,7 +155,7 @@ router.post('/', async (req, res) => {
         uuidv4(),
         deal_id,
         'sales_room_created',
-        `Sales Room created for ${deal.company_name}`,
+        `Sales Room created for ${deal.first_name} ${deal.last_name}`,
         JSON.stringify({ sales_room_id: salesRoomId, template_type: templateTypeValue, public_url_slug: publicUrlSlug }),
         req.user.id
       ]
@@ -440,7 +440,7 @@ router.post('/:id/clone', async (req, res) => {
     }
 
     // Verify target deal
-    const targetDeal = await get('SELECT id, owner_id, company_name FROM deals WHERE id = ?', [deal_id]);
+    const targetDeal = await get('SELECT id, owner_id, first_name, last_name, company_name FROM deals WHERE id = ?', [deal_id]);
     if (!targetDeal) {
       return res.status(404).json({ error: 'Target deal not found' });
     }
@@ -483,7 +483,7 @@ router.post('/:id/clone', async (req, res) => {
     await run(
       `INSERT INTO activities (id, deal_id, activity_type, description, created_by)
        VALUES (?, ?, ?, ?, ?)`,
-      [uuidv4(), deal_id, 'sales_room_created', `Sales Room cloned for ${targetDeal.company_name}`, req.user.id]
+      [uuidv4(), deal_id, 'sales_room_created', `Sales Room cloned for ${targetDeal.first_name} ${targetDeal.last_name}`, req.user.id]
     );
 
     const newRoom = await get('SELECT * FROM sales_rooms WHERE id = ?', [newRoomId]);

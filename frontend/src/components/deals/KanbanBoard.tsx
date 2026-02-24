@@ -8,7 +8,13 @@ import { API_URL } from '@/lib/api';
 
 interface Deal {
   id: string;
-  company_name: string;
+  first_name: string;
+  last_name: string;
+  job_title: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  company_name: string | null;
   industry: string | null;
   stage: string;
   estimated_value: number | null;
@@ -212,12 +218,12 @@ export default function KanbanBoard() {
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-sm truncate" title={deal.company_name}>
-                              {deal.company_name}
+                            <h4 className="font-medium text-sm truncate" title={`${deal.first_name} ${deal.last_name}`}>
+                              {deal.first_name} {deal.last_name}
                             </h4>
-                            {deal.industry && (
+                            {deal.company_name && (
                               <p className="text-xs text-muted-foreground truncate">
-                                {deal.industry}
+                                {deal.company_name}
                               </p>
                             )}
                           </div>
@@ -280,9 +286,12 @@ export default function KanbanBoard() {
                     kanbanData.stages[stage]?.slice(0, 5).map((deal) => (
                       <Link key={deal.id} to={`/deals/${deal.id}`}>
                         <div className="p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer">
-                          <h4 className="font-medium text-sm truncate" title={deal.company_name}>
-                            {deal.company_name}
+                          <h4 className="font-medium text-sm truncate" title={`${deal.first_name} ${deal.last_name}`}>
+                            {deal.first_name} {deal.last_name}
                           </h4>
+                          {deal.company_name && (
+                            <p className="text-xs text-muted-foreground truncate">{deal.company_name}</p>
+                          )}
                           <div className="flex items-center justify-between text-xs mt-1">
                             <span className="text-muted-foreground">{deal.owner_name}</span>
                             <span className="font-medium">

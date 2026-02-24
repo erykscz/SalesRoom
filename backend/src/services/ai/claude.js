@@ -23,9 +23,11 @@ function buildSystemPrompt(channel, tone) {
   const channelConf = CHANNEL_CONFIG[channel];
   return `You are an expert sales development representative crafting personalized outreach messages.
 You write messages that are authentic, specific, and demonstrate genuine research about the prospect.
+Your messages are directed to a SPECIFIC PERSON - always address them by name and reference their role, background, or interests when available.
 
 Rules:
 - Never be generic. Every message MUST reference specific details from the research data provided.
+- Personalize for the individual: use their name, mention their job title or expertise, reference their professional background.
 - Match the requested tone: ${TONE_DESCRIPTIONS[tone]}
 - Channel: ${channelConf.label}
 - Maximum message body length: ${channelConf.maxLength} characters. STRICTLY respect this limit.
@@ -39,11 +41,15 @@ ${channelConf.hasSubject ? '- Include a compelling subject line (max 80 characte
 function buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext) {
   const sections = [];
 
-  sections.push(`## Company Information
+  sections.push(`## Prospect Information
+- Name: ${leadData.first_name || ''} ${leadData.last_name || ''}`.trim() + `
+- Job Title: ${leadData.job_title || 'Unknown'}
+- Email: ${leadData.email || 'Unknown'}
 - Company: ${leadData.company_name}
 - Industry: ${leadData.industry || 'Unknown'}
 - Tech Stack: ${leadData.tech_stack || 'Unknown'}
-- Identified Pain: ${leadData.identified_pain || 'Not yet identified'}`);
+- Identified Pain: ${leadData.identified_pain || 'Not yet identified'}
+- Notes: ${leadData.notes || 'None'}`);
 
   if (researchData) {
     if (researchData.linkedin_data) {

@@ -10,7 +10,13 @@ import { API_URL } from '@/lib/api';
 
 interface Deal {
   id: string;
-  company_name: string;
+  first_name: string;
+  last_name: string;
+  job_title: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  company_name: string | null;
   industry: string | null;
   stage: string;
   estimated_value: number | null;
@@ -213,8 +219,8 @@ export default function DealsPage() {
     }
   };
 
-  const deleteDeal = async (id: string, companyName: string) => {
-    if (!confirm(`Are you sure you want to delete the deal for "${companyName}"?`)) {
+  const deleteDeal = async (id: string, displayName: string) => {
+    if (!confirm(`Are you sure you want to delete the deal for "${displayName}"?`)) {
       return;
     }
 
@@ -237,8 +243,8 @@ export default function DealsPage() {
     }
   };
 
-  const archiveDeal = async (id: string, companyName: string) => {
-    if (!confirm(`Are you sure you want to archive the deal for "${companyName}"?`)) {
+  const archiveDeal = async (id: string, displayName: string) => {
+    if (!confirm(`Are you sure you want to archive the deal for "${displayName}"?`)) {
       return;
     }
 
@@ -504,8 +510,8 @@ export default function DealsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('company_name')}>
-                      <div className="flex items-center">Company<SortIcon column="company_name" /></div>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('last_name')}>
+                      <div className="flex items-center">Contact<SortIcon column="last_name" /></div>
                     </th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('stage')}>
                       <div className="flex items-center">Stage<SortIcon column="stage" /></div>
@@ -528,11 +534,14 @@ export default function DealsPage() {
                     <tr key={deal.id} className="border-b border-border hover:bg-muted/50 transition-colors">
                       <td className="py-3 px-4 max-w-xs">
                         <div className="truncate">
-                          <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }} className="font-medium hover:text-primary truncate block" title={deal.company_name}>
-                            {deal.company_name}
+                          <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }} className="font-medium hover:text-primary truncate block" title={`${deal.first_name} ${deal.last_name}`}>
+                            {deal.first_name} {deal.last_name}
                           </Link>
-                          {deal.industry && (
-                            <p className="text-sm text-muted-foreground truncate" title={deal.industry}>{deal.industry}</p>
+                          {deal.company_name && (
+                            <p className="text-sm text-muted-foreground truncate" title={deal.company_name}>{deal.company_name}</p>
+                          )}
+                          {deal.job_title && (
+                            <p className="text-xs text-muted-foreground truncate" title={deal.job_title}>{deal.job_title}</p>
                           )}
                         </div>
                       </td>
@@ -564,12 +573,12 @@ export default function DealsPage() {
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
                           <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }}>
-                            <Button variant="ghost" size="sm" aria-label={`View ${deal.company_name}`}>
+                            <Button variant="ghost" size="sm" aria-label={`View ${deal.first_name} ${deal.last_name}`}>
                               <Eye className="w-4 h-4" />
                             </Button>
                           </Link>
                           <Link to={`/deals/${deal.id}/edit`} state={{ from: currentUrl }}>
-                            <Button variant="ghost" size="sm" aria-label={`Edit ${deal.company_name}`}>
+                            <Button variant="ghost" size="sm" aria-label={`Edit ${deal.first_name} ${deal.last_name}`}>
                               <Pencil className="w-4 h-4" />
                             </Button>
                           </Link>
@@ -579,7 +588,7 @@ export default function DealsPage() {
                               size="sm"
                               onClick={() => unarchiveDeal(deal.id)}
                               className="text-green-500 hover:text-green-600"
-                              aria-label={`Restore ${deal.company_name}`}
+                              aria-label={`Restore ${deal.first_name} ${deal.last_name}`}
                             >
                               <ArchiveRestore className="w-4 h-4" />
                             </Button>
@@ -587,9 +596,9 @@ export default function DealsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => archiveDeal(deal.id, deal.company_name)}
+                              onClick={() => archiveDeal(deal.id, `${deal.first_name} ${deal.last_name}`)}
                               className="text-orange-500 hover:text-orange-600"
-                              aria-label={`Archive ${deal.company_name}`}
+                              aria-label={`Archive ${deal.first_name} ${deal.last_name}`}
                             >
                               <Archive className="w-4 h-4" />
                             </Button>
@@ -597,9 +606,9 @@ export default function DealsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => deleteDeal(deal.id, deal.company_name)}
+                            onClick={() => deleteDeal(deal.id, `${deal.first_name} ${deal.last_name}`)}
                             className="text-red-500 hover:text-red-600"
-                            aria-label={`Delete ${deal.company_name}`}
+                            aria-label={`Delete ${deal.first_name} ${deal.last_name}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>

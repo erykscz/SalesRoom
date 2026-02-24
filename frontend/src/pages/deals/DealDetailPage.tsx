@@ -25,14 +25,24 @@ import {
   Users,
   FileText,
   Presentation,
-  Microscope
+  Microscope,
+  Mail,
+  Phone,
+  Linkedin,
+  ExternalLink
 } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 import DealResearchSection from './components/DealResearchSection';
 
 interface Deal {
   id: string;
-  company_name: string;
+  first_name: string;
+  last_name: string;
+  job_title: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  company_name: string | null;
   industry: string | null;
   stage: string;
   estimated_value: number | null;
@@ -188,7 +198,7 @@ export default function DealDetailPage() {
   }, [id, token]);
 
   const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to delete the deal for "${deal?.company_name}"?`)) {
+    if (!confirm(`Are you sure you want to delete the deal for "${deal?.first_name} ${deal?.last_name}"?`)) {
       return;
     }
 
@@ -438,14 +448,14 @@ export default function DealDetailPage() {
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold">{deal.company_name}</h2>
+              <h2 className="text-2xl font-bold">{deal.first_name} {deal.last_name}</h2>
               <span className={`px-2 py-1 rounded text-xs text-white ${stageColors[deal.stage] || 'bg-gray-500'}`}>
                 {stageLabels[deal.stage] || deal.stage}
               </span>
             </div>
-            {deal.industry && (
-              <p className="text-muted-foreground">{deal.industry}</p>
-            )}
+            <p className="text-muted-foreground">
+              {deal.company_name ? `at ${deal.company_name}` : ''}{deal.company_name && deal.industry ? ' \u00B7 ' : ''}{deal.industry || ''}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -497,6 +507,42 @@ export default function DealDetailPage() {
               <CardTitle className="text-base">Deal Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Contact Person */}
+              {deal.job_title && (
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Job Title</p>
+                  <p className="font-medium">{deal.job_title}</p>
+                </div>
+              )}
+              {deal.email && (
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Email</p>
+                  <a href={`mailto:${deal.email}`} className="font-medium text-primary hover:underline flex items-center gap-1">
+                    <Mail className="h-3 w-3" />
+                    {deal.email}
+                  </a>
+                </div>
+              )}
+              {deal.phone && (
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Phone</p>
+                  <p className="font-medium flex items-center gap-1">
+                    <Phone className="h-3 w-3" />
+                    {deal.phone}
+                  </p>
+                </div>
+              )}
+              {deal.linkedin_url && (
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">LinkedIn</p>
+                  <a href={deal.linkedin_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline flex items-center gap-1">
+                    <Linkedin className="h-3 w-3" />
+                    Profile
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              )}
+              {(deal.email || deal.phone || deal.linkedin_url || deal.job_title) && <div className="border-t" />}
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Owner</p>
                 <p className="font-medium">{deal.owner_name || 'Unknown'}</p>
@@ -504,6 +550,10 @@ export default function DealDetailPage() {
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Stage</p>
                 <p className="font-medium">{stageLabels[deal.stage] || deal.stage}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Company</p>
+                <p className="font-medium">{deal.company_name || '-'}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Industry</p>
@@ -627,7 +677,7 @@ export default function DealDetailPage() {
 
           {/* Deep Research */}
           {id && (
-            <DealResearchSection dealId={id} companyName={deal.company_name} />
+            <DealResearchSection dealId={id} companyName={deal.company_name || ''} personName={`${deal.first_name} ${deal.last_name}`} />
           )}
         </div>
 
@@ -789,7 +839,7 @@ export default function DealDetailPage() {
             <CardHeader>
               <CardTitle>Transfer Deal</CardTitle>
               <CardDescription>
-                Transfer "{deal.company_name}" to another sales rep
+                Transfer "{deal.first_name} {deal.last_name}" to another sales rep
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

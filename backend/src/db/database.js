@@ -35,19 +35,6 @@ db.run('ALTER TABLE users ADD COLUMN notification_preferences TEXT', (err) => {
   }
 });
 
-// Add health score calculation columns to deals
-db.run('ALTER TABLE deals ADD COLUMN has_decision_maker INTEGER DEFAULT 0', (err) => {
-  if (err && !err.message.includes('duplicate column')) {
-    console.error('Migration error:', err.message);
-  }
-});
-
-db.run('ALTER TABLE deals ADD COLUMN has_confirmed_budget INTEGER DEFAULT 0', (err) => {
-  if (err && !err.message.includes('duplicate column')) {
-    console.error('Migration error:', err.message);
-  }
-});
-
 // Deep Research module tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS research_profiles (
