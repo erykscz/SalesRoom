@@ -118,6 +118,23 @@ db.exec(`
   }
 });
 
+// Add deal_id support to research tables (allows research on deals, not just leads)
+['research_profiles', 'social_profiles', 'generated_messages'].forEach(table => {
+  db.run(`ALTER TABLE ${table} ADD COLUMN deal_id TEXT REFERENCES deals(id) ON DELETE CASCADE`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error(`Migration error (${table}.deal_id):`, err.message);
+    }
+  });
+});
+
+// Make lead_id nullable (research can be for a deal without a lead)
+// SQLite doesn't support ALTER COLUMN, so we just ensure new inserts work with NULL lead_id
+
+// Add indexes for deal_id
+db.run('CREATE INDEX IF NOT EXISTS idx_research_profiles_deal ON research_profiles(deal_id)', () => {});
+db.run('CREATE INDEX IF NOT EXISTS idx_social_profiles_deal ON social_profiles(deal_id)', () => {});
+db.run('CREATE INDEX IF NOT EXISTS idx_generated_messages_deal ON generated_messages(deal_id)', () => {});
+
 // Promisified database methods
 export function run(sql, params = []) {
   return new Promise((resolve, reject) => {

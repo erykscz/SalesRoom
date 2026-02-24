@@ -24,9 +24,11 @@ import {
   CheckCircle2,
   Users,
   FileText,
-  Presentation
+  Presentation,
+  Microscope
 } from 'lucide-react';
 import { API_URL } from '@/lib/api';
+import DealResearchSection from './components/DealResearchSection';
 
 interface Deal {
   id: string;
@@ -622,6 +624,11 @@ export default function DealDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Deep Research */}
+          {id && (
+            <DealResearchSection dealId={id} companyName={deal.company_name} />
+          )}
         </div>
 
         {/* Center Column - Activity Feed Timeline (flexible) */}

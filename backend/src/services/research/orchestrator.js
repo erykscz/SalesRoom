@@ -27,7 +27,7 @@ export function getAvailablePlatforms() {
   return available;
 }
 
-export async function executeResearch(researchProfileId, leadId, platforms, hints, userId) {
+export async function executeResearch(researchProfileId, leadId, platforms, hints, userId, dealId = null) {
   try {
     // Update status to running
     await run(
@@ -35,17 +35,32 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
       [JSON.stringify(platforms), researchProfileId]
     );
 
-    // Fetch lead data for context
-    const lead = await get('SELECT * FROM leads WHERE id = ?', [leadId]);
-    if (!lead) {
-      await run(
-        `UPDATE research_profiles SET status = 'failed', error_log = ?, updated_at = datetime('now') WHERE id = ?`,
-        [JSON.stringify([{ platform: 'system', error: 'Lead not found' }]), researchProfileId]
-      );
-      return;
-    }
+    // Fetch source data for context (lead or deal)
+    let companyName;
+    const entityId = dealId || leadId;
+    const entityType = dealId ? 'deal' : 'lead';
 
-    const companyName = lead.company_name;
+    if (dealId) {
+      const deal = await get('SELECT * FROM deals WHERE id = ?', [dealId]);
+      if (!deal) {
+        await run(
+          `UPDATE research_profiles SET status = 'failed', error_log = ?, updated_at = datetime('now') WHERE id = ?`,
+          [JSON.stringify([{ platform: 'system', error: 'Deal not found' }]), researchProfileId]
+        );
+        return;
+      }
+      companyName = deal.company_name;
+    } else {
+      const lead = await get('SELECT * FROM leads WHERE id = ?', [leadId]);
+      if (!lead) {
+        await run(
+          `UPDATE research_profiles SET status = 'failed', error_log = ?, updated_at = datetime('now') WHERE id = ?`,
+          [JSON.stringify([{ platform: 'system', error: 'Lead not found' }]), researchProfileId]
+        );
+        return;
+      }
+      companyName = lead.company_name;
+    }
 
     // Execute all platform adapters in parallel
     const results = await Promise.allSettled(
@@ -79,10 +94,10 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         // Store social profile
         if (profile) {
           await run(
-            `INSERT INTO social_profiles (id, lead_id, research_profile_id, platform, profile_url, username, display_name, bio, followers_count, profile_data)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO social_profiles (id, lead_id, deal_id, research_profile_id, platform, profile_url, username, display_name, bio, followers_count, profile_data)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-              uuidv4(), leadId, researchProfileId, profile.platform,
+              uuidv4(), leadId || '', dealId || '', researchProfileId, profile.platform,
               profile.profile_url, profile.username, profile.display_name,
               profile.bio, profile.followers_count, JSON.stringify(data),
             ]
