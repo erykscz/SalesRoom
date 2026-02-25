@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban } from 'lucide-react';
@@ -10,8 +10,7 @@ import { API_URL } from '@/lib/api';
 
 interface Deal {
   id: string;
-  first_name: string;
-  last_name: string;
+  name: string;
   job_title: string | null;
   email: string | null;
   phone: string | null;
@@ -83,8 +82,8 @@ export default function DealsPage() {
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedStage, setSelectedStage] = useState<string | null>(searchParams.get('stage'));
   const [healthScoreFilter, setHealthScoreFilter] = useState<string>(searchParams.get('health') || 'all');
-  const [sortBy, setSortBy] = useState<string>(searchParams.get('sort_by') || 'created_at');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sort_order') as 'asc' | 'desc') || 'desc');
+  const [sortBy, setSortBy] = useState<string>(searchParams.get('sort_by') || 'name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sort_order') as 'asc' | 'desc') || 'asc');
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1'));
   const [showArchived, setShowArchived] = useState(searchParams.get('archived') === 'true');
   const [dateFilter, setDateFilter] = useState<string>(searchParams.get('date_filter') || 'all');
@@ -96,8 +95,8 @@ export default function DealsPage() {
     if (searchTerm) params.set('search', searchTerm);
     if (selectedStage) params.set('stage', selectedStage);
     if (healthScoreFilter && healthScoreFilter !== 'all') params.set('health', healthScoreFilter);
-    if (sortBy && sortBy !== 'created_at') params.set('sort_by', sortBy);
-    if (sortOrder && sortOrder !== 'desc') params.set('sort_order', sortOrder);
+    if (sortBy && sortBy !== 'name') params.set('sort_by', sortBy);
+    if (sortOrder && sortOrder !== 'asc') params.set('sort_order', sortOrder);
     if (currentPage > 1) params.set('page', currentPage.toString());
     if (showArchived) params.set('archived', 'true');
     if (dateFilter && dateFilter !== 'all') params.set('date_filter', dateFilter);
@@ -154,7 +153,7 @@ export default function DealsPage() {
     }
   };
 
-  const importFromCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCsvFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -184,7 +183,7 @@ export default function DealsPage() {
       alert(err instanceof Error ? err.message : 'Failed to import deals');
     }
 
-    // Reset file input
+    // Reset so same file can be re-imported
     event.target.value = '';
   };
 
@@ -364,16 +363,15 @@ export default function DealsPage() {
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
-          <input
-            id="csv-file-input"
-            type="file"
-            accept=".csv"
-            onChange={importFromCsv}
-            className="hidden"
-          />
-          <label htmlFor="csv-file-input" className={buttonVariants({ variant: 'outline' }) + ' cursor-pointer'}>
+          <label className="relative inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-11 px-4 py-2 cursor-pointer">
             <Upload className="w-4 h-4 mr-2" />
             Import CSV
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCsvFileChange}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
           </label>
           <Link to="/deals/new">
             <Button>
@@ -507,8 +505,8 @@ export default function DealsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('last_name')}>
-                      <div className="flex items-center">Contact<SortIcon column="last_name" /></div>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>
+                      <div className="flex items-center">Contact<SortIcon column="name" /></div>
                     </th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('stage')}>
                       <div className="flex items-center">Stage<SortIcon column="stage" /></div>
@@ -531,8 +529,8 @@ export default function DealsPage() {
                     <tr key={deal.id} className="border-b border-border hover:bg-muted/50 transition-colors">
                       <td className="py-3 px-4 max-w-xs">
                         <div className="truncate">
-                          <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }} className="font-medium hover:text-primary truncate block" title={`${deal.first_name} ${deal.last_name}`}>
-                            {deal.first_name} {deal.last_name}
+                          <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }} className="font-medium hover:text-primary truncate block" title={deal.name}>
+                            {deal.name}
                           </Link>
                           {deal.company_name && (
                             <p className="text-sm text-muted-foreground truncate" title={deal.company_name}>{deal.company_name}</p>
@@ -570,12 +568,12 @@ export default function DealsPage() {
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
                           <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }}>
-                            <Button variant="ghost" size="sm" aria-label={`View ${deal.first_name} ${deal.last_name}`}>
+                            <Button variant="ghost" size="sm" aria-label={`View ${deal.name}`}>
                               <Eye className="w-4 h-4" />
                             </Button>
                           </Link>
                           <Link to={`/deals/${deal.id}/edit`} state={{ from: currentUrl }}>
-                            <Button variant="ghost" size="sm" aria-label={`Edit ${deal.first_name} ${deal.last_name}`}>
+                            <Button variant="ghost" size="sm" aria-label={`Edit ${deal.name}`}>
                               <Pencil className="w-4 h-4" />
                             </Button>
                           </Link>
@@ -585,7 +583,7 @@ export default function DealsPage() {
                               size="sm"
                               onClick={() => unarchiveDeal(deal.id)}
                               className="text-green-500 hover:text-green-600"
-                              aria-label={`Restore ${deal.first_name} ${deal.last_name}`}
+                              aria-label={`Restore ${deal.name}`}
                             >
                               <ArchiveRestore className="w-4 h-4" />
                             </Button>
@@ -593,9 +591,9 @@ export default function DealsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => archiveDeal(deal.id, `${deal.first_name} ${deal.last_name}`)}
+                              onClick={() => archiveDeal(deal.id, deal.name)}
                               className="text-orange-500 hover:text-orange-600"
-                              aria-label={`Archive ${deal.first_name} ${deal.last_name}`}
+                              aria-label={`Archive ${deal.name}`}
                             >
                               <Archive className="w-4 h-4" />
                             </Button>
@@ -603,9 +601,9 @@ export default function DealsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => deleteDeal(deal.id, `${deal.first_name} ${deal.last_name}`)}
+                            onClick={() => deleteDeal(deal.id, deal.name)}
                             className="text-red-500 hover:text-red-600"
-                            aria-label={`Delete ${deal.first_name} ${deal.last_name}`}
+                            aria-label={`Delete ${deal.name}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>

@@ -46,6 +46,8 @@ interface User {
   name: string;
   role: string;
   avatarUrl?: string;
+  phone?: string | null;
+  jobTitle?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -93,7 +95,9 @@ export default function UsersPage() {
     password: '',
     name: '',
     role: 'rep',
-    isActive: true
+    isActive: true,
+    phone: '',
+    jobTitle: ''
   });
 
   const fetchUsers = async () => {
@@ -160,7 +164,7 @@ export default function UsersPage() {
       });
 
       setShowCreateDialog(false);
-      setFormData({ email: '', password: '', name: '', role: 'rep', isActive: true });
+      setFormData({ email: '', password: '', name: '', role: 'rep', isActive: true, phone: '', jobTitle: '' });
       fetchUsers();
     } catch (error: any) {
       toast({
@@ -189,7 +193,9 @@ export default function UsersPage() {
           name: formData.name,
           email: formData.email,
           role: formData.role,
-          isActive: formData.isActive
+          isActive: formData.isActive,
+          phone: formData.phone || null,
+          jobTitle: formData.jobTitle || null
         })
       });
 
@@ -342,7 +348,9 @@ export default function UsersPage() {
       password: '',
       name: user.name,
       role: user.role,
-      isActive: user.isActive
+      isActive: user.isActive,
+      phone: user.phone || '',
+      jobTitle: user.jobTitle || ''
     });
     setShowEditDialog(true);
   };
@@ -384,7 +392,7 @@ export default function UsersPage() {
             <CardDescription>Manage system users and their permissions</CardDescription>
           </div>
           <Button onClick={() => {
-            setFormData({ email: '', password: '', name: '', role: 'rep', isActive: true });
+            setFormData({ email: '', password: '', name: '', role: 'rep', isActive: true, phone: '', jobTitle: '' });
             setShowCreateDialog(true);
           }}>
             <Plus className="h-4 w-4 mr-2" />
@@ -523,6 +531,24 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="jobTitle">Job Title</Label>
+              <Input
+                id="jobTitle"
+                value={formData.jobTitle}
+                onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
+                placeholder="e.g. Account Executive"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="e.g. +48 123 456 789"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
@@ -584,6 +610,24 @@ export default function UsersPage() {
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-jobTitle">Job Title</Label>
+              <Input
+                id="edit-jobTitle"
+                value={formData.jobTitle}
+                onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
+                placeholder="e.g. Account Executive"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">Phone</Label>
+              <Input
+                id="edit-phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="e.g. +48 123 456 789"
+              />
             </div>
             <div className="flex items-center space-x-2">
               <input

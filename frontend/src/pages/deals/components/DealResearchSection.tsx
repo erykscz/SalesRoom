@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
   Microscope, Play, Loader2, Linkedin, Twitter, Github, MessageCircle, Facebook,
-  Settings, ChevronDown, ChevronUp, ExternalLink, Users, CheckCircle, AlertCircle,
-  FileText, Sparkles, Copy, Star, Trash2, Mail, Check
+  ChevronDown, ChevronUp, ExternalLink, Users, FileText, Sparkles, Copy, Star,
+  Trash2, Mail, Check, RefreshCw, Globe
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 interface DealResearchSectionProps {
   dealId: string;
   companyName: string;
+  companyUrl?: string;
+  personName?: string;
 }
 
 interface SocialProfile {
@@ -40,17 +42,17 @@ interface GeneratedMessage {
 }
 
 const PLATFORM_CONFIG = [
-  { key: 'linkedin', label: 'LinkedIn', icon: Linkedin, color: 'text-blue-600', bg: 'bg-blue-50' },
-  { key: 'twitter', label: 'X', icon: Twitter, color: 'text-sky-500', bg: 'bg-sky-50' },
-  { key: 'github', label: 'GitHub', icon: Github, color: 'text-gray-800', bg: 'bg-gray-50' },
-  { key: 'reddit', label: 'Reddit', icon: MessageCircle, color: 'text-orange-500', bg: 'bg-orange-50' },
-  { key: 'facebook', label: 'Facebook', icon: Facebook, color: 'text-blue-500', bg: 'bg-blue-50' },
+  { key: 'linkedin', label: 'LinkedIn', icon: Linkedin, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-950' },
+  { key: 'twitter', label: 'X (Twitter)', icon: Twitter, color: 'text-sky-500', bg: 'bg-sky-50 dark:bg-sky-950' },
+  { key: 'github', label: 'GitHub', icon: Github, color: 'text-gray-800 dark:text-gray-200', bg: 'bg-gray-50 dark:bg-gray-900' },
+  { key: 'reddit', label: 'Reddit', icon: MessageCircle, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-950' },
+  { key: 'facebook', label: 'Facebook', icon: Facebook, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-950' },
 ];
 
 const CHANNELS = [
   { value: 'cold_email', label: 'Email', icon: Mail },
   { value: 'linkedin_inmail', label: 'InMail', icon: Linkedin },
-  { value: 'linkedin_connection', label: 'Connect', icon: Linkedin },
+  { value: 'linkedin_connection', label: 'Connection Request', icon: Linkedin },
   { value: 'twitter_dm', label: 'X DM', icon: Twitter },
   { value: 'generic', label: 'Generic', icon: MessageCircle },
 ];
@@ -69,8 +71,7 @@ function formatFollowers(count: number | null): string {
   return count.toString();
 }
 
-export default function DealResearchSection({ dealId, companyName }: DealResearchSectionProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function DealResearchSection({ dealId, companyName, companyUrl, personName }: DealResearchSectionProps) {
   const [availablePlatforms, setAvailablePlatforms] = useState<string[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [researchStatus, setResearchStatus] = useState<string>('none');
@@ -78,9 +79,10 @@ export default function DealResearchSection({ dealId, companyName }: DealResearc
   const [researchData, setResearchData] = useState<any>(null);
   const [socialProfiles, setSocialProfiles] = useState<SocialProfile[]>([]);
   const [messages, setMessages] = useState<GeneratedMessage[]>([]);
-  const [showHints, setShowHints] = useState(false);
-  const [hints, setHints] = useState({ linkedin_url: '', twitter_handle: '', github_username: '' });
+  const [hints, setHints] = useState({ linkedin_url: '', twitter_handle: '', github_username: '', company_url: '' });
   const [showMessageGen, setShowMessageGen] = useState(false);
+  const [showMessages, setShowMessages] = useState(true);
+  const [showHints, setShowHints] = useState(false);
   const [channel, setChannel] = useState('cold_email');
   const [tone, setTone] = useState('consultative');
   const [context, setContext] = useState('');
@@ -90,6 +92,12 @@ export default function DealResearchSection({ dealId, companyName }: DealResearc
   const { toast } = useToast();
 
   const token = localStorage.getItem('token');
+
+  useEffect(() => {
+    if (companyUrl) {
+      setHints(h => ({ ...h, company_url: companyUrl }));
+    }
+  }, [companyUrl]);
 
   useEffect(() => {
     fetchPlatforms();
@@ -121,15 +129,11 @@ export default function DealResearchSection({ dealId, companyName }: DealResearc
       setSocialProfiles(data.socialProfiles || []);
       setMessages(data.messages || []);
       setResearchStatus(data.research?.status || 'none');
-      if (data.research && (data.research.status === 'completed' || data.research.status === 'partial')) {
-        setExpanded(true);
-      }
     } catch { /* ignore */ }
   }
 
   async function startResearch() {
     setResearching(true);
-    setExpanded(true);
     try {
       const body: any = {};
       if (selectedPlatforms.length > 0 && selectedPlatforms.length < availablePlatforms.length) {
@@ -138,6 +142,7 @@ export default function DealResearchSection({ dealId, companyName }: DealResearc
       if (hints.linkedin_url) body.linkedin_url = hints.linkedin_url;
       if (hints.twitter_handle) body.twitter_handle = hints.twitter_handle;
       if (hints.github_username) body.github_username = hints.github_username;
+      if (hints.company_url) body.company_url = hints.company_url;
 
       const res = await fetch(`${API_URL}/research/deal/${dealId}/start`, {
         method: 'POST',
@@ -151,7 +156,7 @@ export default function DealResearchSection({ dealId, companyName }: DealResearc
       }
 
       setResearchStatus('running');
-      toast({ title: 'Research started', description: `Researching ${companyName}...` });
+      toast({ title: 'Research started', description: `Researching ${personName || companyName}...` });
 
       pollingRef.current = setInterval(async () => {
         try {
@@ -194,6 +199,7 @@ export default function DealResearchSection({ dealId, companyName }: DealResearc
       if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
       toast({ title: 'Message generated' });
       fetchResearchResults();
+      setShowMessages(true);
     } catch (err: any) {
       toast({ title: 'Generation failed', description: err.message, variant: 'destructive' });
     } finally {
@@ -218,6 +224,11 @@ export default function DealResearchSection({ dealId, companyName }: DealResearc
     fetchResearchResults();
   }
 
+  async function handleDeleteProfile(id: string) {
+    await fetch(`${API_URL}/research/profiles/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    setSocialProfiles(prev => prev.filter(p => p.id !== id));
+  }
+
   function togglePlatform(p: string) {
     setSelectedPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
   }
@@ -226,185 +237,382 @@ export default function DealResearchSection({ dealId, companyName }: DealResearc
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Microscope className="h-4 w-4" />
-            Deep Research
-          </CardTitle>
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Microscope className="h-5 w-5" />
+              Deep Research
+            </CardTitle>
+            <CardDescription>
+              {hasResults
+                ? `${socialProfiles.length} profiles found`
+                : `Research ${personName || companyName} across social platforms`}
+            </CardDescription>
+          </div>
           <div className="flex items-center gap-2">
             {hasResults && (
-              <Badge variant="secondary" className="text-xs">
-                {socialProfiles.length} profiles
-              </Badge>
+              <Button size="sm" variant="outline" onClick={startResearch} disabled={researching}>
+                <RefreshCw className={`h-4 w-4 mr-1 ${researching ? 'animate-spin' : ''}`} />
+                Re-run
+              </Button>
             )}
-            <Button
-              size="sm"
-              onClick={hasResults ? () => setExpanded(!expanded) : startResearch}
-              disabled={researching || selectedPlatforms.length === 0}
-            >
-              {researching ? (
-                <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Researching...</>
-              ) : hasResults ? (
-                <>{expanded ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}{expanded ? 'Collapse' : 'Show Results'}</>
-              ) : (
-                <><Play className="h-3 w-3 mr-1" />Research {companyName}</>
-              )}
-            </Button>
+            {!hasResults && !researching && (
+              <Button size="sm" onClick={startResearch} disabled={researching || selectedPlatforms.length === 0}>
+                <Play className="h-4 w-4 mr-1" />
+                Start Research
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
 
-      {/* Platform selector (always visible before first research) */}
-      {!hasResults && !researching && (
-        <CardContent className="pt-0 space-y-2">
-          <div className="flex flex-wrap gap-1.5">
-            {PLATFORM_CONFIG.map(p => {
-              const Icon = p.icon;
-              const isAvailable = availablePlatforms.includes(p.key);
-              const isSelected = selectedPlatforms.includes(p.key);
-              return (
-                <button
-                  key={p.key}
-                  onClick={() => isAvailable && togglePlatform(p.key)}
-                  disabled={!isAvailable}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs border transition-colors ${
-                    !isAvailable ? 'opacity-40 cursor-not-allowed' : isSelected ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <Icon className={`h-3 w-3 ${isAvailable ? p.color : ''}`} />
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-          <button onClick={() => setShowHints(!showHints)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-            <Settings className="h-3 w-3" />Hints {showHints ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-          {showHints && (
-            <div className="space-y-1.5">
-              <Input value={hints.linkedin_url} onChange={e => setHints(h => ({...h, linkedin_url: e.target.value}))} placeholder="LinkedIn URL" className="text-xs h-7" />
-              <Input value={hints.twitter_handle} onChange={e => setHints(h => ({...h, twitter_handle: e.target.value}))} placeholder="@twitter" className="text-xs h-7" />
-              <Input value={hints.github_username} onChange={e => setHints(h => ({...h, github_username: e.target.value}))} placeholder="GitHub org" className="text-xs h-7" />
+      <CardContent className="space-y-5">
+        {/* Platform selector + hints (before first research or for re-run) */}
+        {!hasResults && !researching && (
+          <div className="space-y-4">
+            {/* Platforms */}
+            <div>
+              <Label className="text-xs text-muted-foreground mb-2 block">Platforms</Label>
+              <div className="flex flex-wrap gap-2">
+                {PLATFORM_CONFIG.map(p => {
+                  const Icon = p.icon;
+                  const isAvailable = availablePlatforms.includes(p.key);
+                  const isSelected = selectedPlatforms.includes(p.key);
+                  return (
+                    <button
+                      key={p.key}
+                      onClick={() => isAvailable && togglePlatform(p.key)}
+                      disabled={!isAvailable}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                        !isAvailable ? 'opacity-40 cursor-not-allowed' : isSelected ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 ${isAvailable ? p.color : ''}`} />
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
-        </CardContent>
-      )}
 
-      {/* Running indicator */}
-      {researching && (
-        <CardContent className="pt-0">
-          <div className="flex items-center gap-2 p-2 rounded bg-muted/50 text-sm">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            Researching {companyName} across {selectedPlatforms.length} platforms...
+            {/* Profile hints - always visible */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1">
+                  <Linkedin className="h-3 w-3 text-blue-600" />
+                  LinkedIn Profile URL
+                </Label>
+                <Input
+                  value={hints.linkedin_url}
+                  onChange={e => setHints(h => ({...h, linkedin_url: e.target.value}))}
+                  placeholder="https://linkedin.com/in/..."
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1">
+                  <Globe className="h-3 w-3 text-green-600" />
+                  Company Website
+                </Label>
+                <Input
+                  value={hints.company_url}
+                  onChange={e => setHints(h => ({...h, company_url: e.target.value}))}
+                  placeholder="https://acme.com"
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1">
+                  <Twitter className="h-3 w-3 text-sky-500" />
+                  X (Twitter) Handle
+                </Label>
+                <Input
+                  value={hints.twitter_handle}
+                  onChange={e => setHints(h => ({...h, twitter_handle: e.target.value}))}
+                  placeholder="@handle"
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1">
+                  <Github className="h-3 w-3" />
+                  GitHub Organization
+                </Label>
+                <Input
+                  value={hints.github_username}
+                  onChange={e => setHints(h => ({...h, github_username: e.target.value}))}
+                  placeholder="org-name"
+                  className="text-sm"
+                />
+              </div>
+            </div>
           </div>
-        </CardContent>
-      )}
+        )}
 
-      {/* Results */}
-      {expanded && hasResults && (
-        <CardContent className="pt-0 space-y-4">
-          {/* Social profiles grid */}
-          {socialProfiles.length > 0 && (
-            <div className="grid grid-cols-1 gap-2">
-              {socialProfiles.map(sp => {
-                const conf = PLATFORM_CONFIG.find(p => p.key === sp.platform);
-                const Icon = conf?.icon || MessageCircle;
-                return (
-                  <div key={sp.id} className={`flex items-center gap-2 p-2 rounded ${conf?.bg || 'bg-muted'}`}>
-                    <Icon className={`h-4 w-4 flex-shrink-0 ${conf?.color || ''}`} />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium truncate block">{sp.display_name || sp.username}</span>
-                      {sp.bio && <span className="text-xs text-muted-foreground truncate block">{sp.bio}</span>}
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {sp.followers_count !== null && (
-                        <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                          <Users className="h-3 w-3" />{formatFollowers(sp.followers_count)}
-                        </span>
-                      )}
-                      {sp.profile_url && (
-                        <a href={sp.profile_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 text-muted-foreground hover:text-foreground" /></a>
-                      )}
+        {/* Running indicator */}
+        {researching && (
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <div>
+              <p className="font-medium text-sm">Researching {personName || companyName}...</p>
+              <p className="text-xs text-muted-foreground">Checking {selectedPlatforms.length} platforms. This usually takes 10-30 seconds.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Results */}
+        {hasResults && (
+          <>
+            {/* Editable hints + platform selector for re-run */}
+            <div>
+              <button
+                onClick={() => setShowHints(!showHints)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
+              >
+                {showHints ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                Research Sources & Hints
+              </button>
+              {showHints && (
+                <div className="space-y-4 p-3 border rounded-lg bg-muted/30">
+                  {/* Platform selector */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-2 block">Platforms</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {PLATFORM_CONFIG.map(p => {
+                        const Icon = p.icon;
+                        const isAvailable = availablePlatforms.includes(p.key);
+                        const isSelected = selectedPlatforms.includes(p.key);
+                        return (
+                          <button
+                            key={p.key}
+                            onClick={() => isAvailable && togglePlatform(p.key)}
+                            disabled={!isAvailable}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                              !isAvailable ? 'opacity-40 cursor-not-allowed' : isSelected ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/50'
+                            }`}
+                          >
+                            <Icon className={`h-4 w-4 ${isAvailable ? p.color : ''}`} />
+                            {p.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
 
-          {/* Research summary */}
-          {researchData?.research_summary && (
-            <div className="p-2 rounded bg-muted/50">
-              <p className="text-xs font-medium mb-1 flex items-center gap-1"><FileText className="h-3 w-3" />Summary</p>
-              <p className="text-xs text-muted-foreground">{researchData.research_summary}</p>
-            </div>
-          )}
-
-          {/* Re-run + generate buttons */}
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={startResearch} disabled={researching}>
-              <Play className="h-3 w-3 mr-1" />Re-run
-            </Button>
-            <Button size="sm" onClick={() => setShowMessageGen(!showMessageGen)}>
-              <Sparkles className="h-3 w-3 mr-1" />{showMessageGen ? 'Hide' : 'Generate Message'}
-            </Button>
-          </div>
-
-          {/* Message generator */}
-          {showMessageGen && (
-            <div className="space-y-2 p-3 border rounded-lg">
-              <div className="flex flex-wrap gap-1">
-                {CHANNELS.map(ch => (
-                  <button key={ch.value} onClick={() => setChannel(ch.value)}
-                    className={`px-2 py-1 rounded text-xs border ${channel === ch.value ? 'border-primary bg-primary/10' : 'border-border'}`}>
-                    {ch.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {TONES.map(t => (
-                  <button key={t.value} onClick={() => setTone(t.value)}
-                    className={`px-2 py-1 rounded text-xs border ${tone === t.value ? 'border-primary bg-primary/10' : 'border-border'}`}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <Textarea value={context} onChange={e => setContext(e.target.value)} placeholder="Additional context..." rows={2} className="text-xs" />
-              <Button size="sm" onClick={handleGenerate} disabled={generating} className="w-full">
-                {generating ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Generating...</> : <><Sparkles className="h-3 w-3 mr-1" />Generate</>}
-              </Button>
-            </div>
-          )}
-
-          {/* Generated messages */}
-          {messages.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Messages ({messages.length})</p>
-              {messages.map(msg => (
-                <div key={msg.id} className={`p-2 border rounded text-sm ${msg.is_favorite ? 'border-yellow-300' : ''}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-muted-foreground capitalize">{msg.channel.replace(/_/g, ' ')} &middot; {msg.tone}</span>
-                    <div className="flex gap-0.5">
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(msg)}>
-                        {copiedId === msg.id ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleFavorite(msg.id)}>
-                        <Star className={`h-3 w-3 ${msg.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive" onClick={() => handleDelete(msg.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                  {/* Hint fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1">
+                        <Linkedin className="h-3 w-3 text-blue-600" />
+                        LinkedIn Profile URL
+                      </Label>
+                      <Input
+                        value={hints.linkedin_url}
+                        onChange={e => setHints(h => ({...h, linkedin_url: e.target.value}))}
+                        placeholder="https://linkedin.com/in/..."
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1">
+                        <Globe className="h-3 w-3 text-green-600" />
+                        Company Website
+                      </Label>
+                      <Input
+                        value={hints.company_url}
+                        onChange={e => setHints(h => ({...h, company_url: e.target.value}))}
+                        placeholder="https://acme.com"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1">
+                        <Twitter className="h-3 w-3 text-sky-500" />
+                        X (Twitter) Handle
+                      </Label>
+                      <Input
+                        value={hints.twitter_handle}
+                        onChange={e => setHints(h => ({...h, twitter_handle: e.target.value}))}
+                        placeholder="@handle"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1">
+                        <Github className="h-3 w-3" />
+                        GitHub Organization
+                      </Label>
+                      <Input
+                        value={hints.github_username}
+                        onChange={e => setHints(h => ({...h, github_username: e.target.value}))}
+                        placeholder="org-name"
+                        className="text-sm"
+                      />
                     </div>
                   </div>
-                  {msg.subject_line && <p className="text-xs font-medium mb-0.5">Subject: {msg.subject_line}</p>}
-                  <p className="text-xs whitespace-pre-wrap">{msg.message_body}</p>
+                  <div className="flex justify-end">
+                    <Button size="sm" variant="outline" onClick={startResearch} disabled={researching || selectedPlatforms.length === 0}>
+                      <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${researching ? 'animate-spin' : ''}`} />
+                      Re-run with updated hints
+                    </Button>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </CardContent>
-      )}
+
+            {/* Social profiles */}
+            {socialProfiles.length > 0 && (
+              <div>
+                <Label className="text-xs text-muted-foreground mb-2 block">Found Profiles</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {socialProfiles.map(sp => {
+                    const conf = PLATFORM_CONFIG.find(p => p.key === sp.platform);
+                    const Icon = conf?.icon || MessageCircle;
+                    return (
+                      <div key={sp.id} className={`flex items-start gap-3 p-3 rounded-lg border ${conf?.bg || 'bg-muted'} group`}>
+                        <Icon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${conf?.color || ''}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium truncate">{sp.display_name || sp.username}</span>
+                            {sp.followers_count !== null && (
+                              <Badge variant="secondary" className="text-xs flex-shrink-0">
+                                <Users className="h-3 w-3 mr-1" />{formatFollowers(sp.followers_count)}
+                              </Badge>
+                            )}
+                          </div>
+                          {sp.bio && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{sp.bio}</p>}
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {sp.profile_url && (
+                            <a href={sp.profile_url} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+                            </a>
+                          )}
+                          <button
+                            onClick={() => handleDeleteProfile(sp.id)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                            title="Remove profile"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive transition-colors" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Research summary */}
+            {researchData?.research_summary && (
+              <div className="p-4 rounded-lg bg-muted/50 border">
+                <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                  <FileText className="h-4 w-4" />
+                  AI Summary
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{researchData.research_summary}</p>
+              </div>
+            )}
+
+            {/* Message Generation */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4" />
+                  Generate Outreach Message
+                </p>
+                <Button size="sm" variant="ghost" onClick={() => setShowMessageGen(!showMessageGen)}>
+                  {showMessageGen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
+              </div>
+
+              {showMessageGen && (
+                <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Channel</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {CHANNELS.map(ch => (
+                        <button key={ch.value} onClick={() => setChannel(ch.value)}
+                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${channel === ch.value ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/50'}`}>
+                          {ch.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Tone</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {TONES.map(t => (
+                        <button key={t.value} onClick={() => setTone(t.value)}
+                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${tone === t.value ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/50'}`}>
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Additional Context</Label>
+                    <Textarea
+                      value={context}
+                      onChange={e => setContext(e.target.value)}
+                      placeholder="Any specific talking points, offer details, or context..."
+                      rows={2}
+                      className="text-sm"
+                    />
+                  </div>
+                  <Button onClick={handleGenerate} disabled={generating} className="w-full">
+                    {generating ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</> : <><Sparkles className="h-4 w-4 mr-2" />Generate Message</>}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Generated messages */}
+            {messages.length > 0 && (
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium">
+                    Generated Messages ({messages.length})
+                  </p>
+                  <Button size="sm" variant="ghost" onClick={() => setShowMessages(!showMessages)}>
+                    {showMessages ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                </div>
+                {showMessages && (
+                  <div className="space-y-3">
+                    {messages.map(msg => (
+                      <div key={msg.id} className={`p-4 border rounded-lg ${msg.is_favorite ? 'border-yellow-300 bg-yellow-50/30 dark:bg-yellow-950/20' : 'bg-background'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs capitalize">{msg.channel.replace(/_/g, ' ')}</Badge>
+                            <Badge variant="secondary" className="text-xs capitalize">{msg.tone}</Badge>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleCopy(msg)}>
+                              {copiedId === msg.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleFavorite(msg.id)}>
+                              <Star className={`h-3.5 w-3.5 ${msg.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDelete(msg.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        {msg.subject_line && (
+                          <p className="text-sm font-medium mb-1">Subject: {msg.subject_line}</p>
+                        )}
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.message_body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
     </Card>
   );
 }

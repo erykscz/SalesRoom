@@ -21,7 +21,7 @@ router.post('/login', async (req, res) => {
 
     // Find user by email
     const user = await get(
-      'SELECT id, email, password_hash, name, role, avatar_url, is_active FROM users WHERE email = ?',
+      'SELECT id, email, password_hash, name, role, avatar_url, is_active, phone, job_title FROM users WHERE email = ?',
       [email.toLowerCase().trim()]
     );
 
@@ -71,7 +71,9 @@ router.post('/login', async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
-        avatarUrl: user.avatar_url
+        avatarUrl: user.avatar_url,
+        phone: user.phone || null,
+        jobTitle: user.job_title || null
       }
     });
   } catch (error) {
@@ -108,7 +110,7 @@ router.post('/logout', authMiddleware, async (req, res) => {
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await get(
-      'SELECT id, email, name, role, avatar_url, created_at FROM users WHERE id = ?',
+      'SELECT id, email, name, role, avatar_url, phone, job_title, created_at FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -122,6 +124,8 @@ router.get('/me', authMiddleware, async (req, res) => {
       name: user.name,
       role: user.role,
       avatarUrl: user.avatar_url,
+      phone: user.phone || null,
+      jobTitle: user.job_title || null,
       createdAt: user.created_at
     });
   } catch (error) {

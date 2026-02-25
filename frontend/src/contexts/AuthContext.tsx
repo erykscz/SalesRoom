@@ -7,6 +7,8 @@ interface User {
   name: string;
   role: 'rep' | 'sdr' | 'ae' | 'manager' | 'admin';
   avatarUrl?: string;
+  phone?: string | null;
+  jobTitle?: string | null;
 }
 
 interface AuthContextType {

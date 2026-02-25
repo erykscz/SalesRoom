@@ -3,7 +3,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { API_URL } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { User, Bell, Loader2, CheckCircle, XCircle, Camera, Upload } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { User, Bell, Loader2, CheckCircle, XCircle, Camera, Upload, Phone, Briefcase } from 'lucide-react';
 
 interface NotificationPreferences {
   deal_transferred: boolean;
@@ -41,12 +43,23 @@ export default function ProfilePage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [phone, setPhone] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
 
   useEffect(() => {
     fetchPreferences();
   }, []);
+
+  // Sync phone/jobTitle from user context
+  useEffect(() => {
+    if (user) {
+      setPhone(user.phone || '');
+      setJobTitle(user.jobTitle || '');
+    }
+  }, [user]);
 
   const fetchPreferences = async () => {
     try {
@@ -142,6 +155,39 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSaveProfile = async () => {
+    if (!user) return;
+
+    try {
+      setSavingProfile(true);
+      setError(null);
+
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/users/${user.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ phone: phone || null, jobTitle: jobTitle || null })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+
+      setSuccess('Profile updated successfully!');
+      if (refreshUser) {
+        await refreshUser();
+      }
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update profile');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -230,6 +276,48 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Account Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Account Details</CardTitle>
+          <CardDescription>Update your contact information — visible in Sales Room pages you create</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="jobTitle" className="flex items-center gap-2">
+                <Briefcase className="h-4 w-4" />
+                Job Title
+              </Label>
+              <Input
+                id="jobTitle"
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                placeholder="e.g. Account Executive, Sales Manager"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Phone Number
+              </Label>
+              <Input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. +48 123 456 789"
+              />
+            </div>
+            <Button onClick={handleSaveProfile} disabled={savingProfile}>
+              {savingProfile ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Save Details
+            </Button>
           </div>
         </CardContent>
       </Card>

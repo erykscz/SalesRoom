@@ -29,8 +29,7 @@ interface CompetitorInfo {
 
 interface Lead {
   id: string;
-  first_name: string;
-  last_name: string;
+  name: string;
   job_title: string | null;
   email: string | null;
   phone: string | null;
@@ -92,8 +91,7 @@ export default function IntentScraperPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
+    name: '',
     job_title: '',
     email: '',
     phone: '',
@@ -170,8 +168,7 @@ export default function IntentScraperPage() {
 
   const resetFormFields = () => {
     setFormData({
-      first_name: '',
-      last_name: '',
+      name: '',
       job_title: '',
       email: '',
       phone: '',
@@ -346,8 +343,7 @@ export default function IntentScraperPage() {
   const startEdit = (lead: Lead) => {
     setEditingLead(lead);
     setFormData({
-      first_name: lead.first_name || '',
-      last_name: lead.last_name || '',
+      name: lead.name || '',
       job_title: lead.job_title || '',
       email: lead.email || '',
       phone: lead.phone || '',
@@ -1127,23 +1123,13 @@ export default function IntentScraperPage() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="first_name">First Name *</Label>
+                    <Label htmlFor="lead_name">Name *</Label>
                     <Input
-                      id="first_name"
-                      value={formData.first_name}
-                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                      id="lead_name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
-                      placeholder="John"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="last_name">Last Name *</Label>
-                    <Input
-                      id="last_name"
-                      value={formData.last_name}
-                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                      required
-                      placeholder="Smith"
+                      placeholder="John Smith"
                     />
                   </div>
                   <div className="space-y-2">
@@ -1321,8 +1307,13 @@ export default function IntentScraperPage() {
                   <div className="flex items-start justify-between">
                     <div className="space-y-2 flex-1">
                       <div className="flex items-center gap-3">
-                        <Building2 className="h-5 w-5 text-muted-foreground" />
-                        <h3 className="font-semibold text-lg">{lead.company_name}</h3>
+                        <User className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <h3 className="font-semibold text-lg">{lead.name}</h3>
+                          {lead.company_name && (
+                            <p className="text-sm text-muted-foreground">{lead.company_name}</p>
+                          )}
+                        </div>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[lead.status]}`}>
                           {statusLabels[lead.status]}
                         </span>
@@ -1394,7 +1385,7 @@ export default function IntentScraperPage() {
                         variant="ghost"
                         size="icon"
                         onClick={() => startEdit(lead)}
-                        aria-label={`Edit ${lead.company_name}`}
+                        aria-label={`Edit ${lead.name}`}
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
@@ -1403,7 +1394,7 @@ export default function IntentScraperPage() {
                         size="icon"
                         onClick={() => handleDelete(lead.id)}
                         className="text-red-500 hover:text-red-600"
-                        aria-label={`Delete ${lead.company_name}`}
+                        aria-label={`Delete ${lead.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

@@ -10,7 +10,7 @@ const router = express.Router();
 router.get('/', authMiddleware, requireRole('admin', 'manager'), async (req, res) => {
   try {
     const users = await all(`
-      SELECT id, email, name, role, avatar_url, is_active, created_at, updated_at
+      SELECT id, email, name, role, avatar_url, phone, job_title, is_active, created_at, updated_at
       FROM users
       ORDER BY created_at DESC
     `);
@@ -21,6 +21,8 @@ router.get('/', authMiddleware, requireRole('admin', 'manager'), async (req, res
       name: u.name,
       role: u.role,
       avatarUrl: u.avatar_url,
+      phone: u.phone,
+      jobTitle: u.job_title,
       isActive: !!u.is_active,
       createdAt: u.created_at,
       updatedAt: u.updated_at
@@ -104,7 +106,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
     }
 
     const user = await get(
-      `SELECT id, email, name, role, avatar_url, is_active, created_at, updated_at
+      `SELECT id, email, name, role, avatar_url, phone, job_title, is_active, created_at, updated_at
        FROM users WHERE id = ?`,
       [id]
     );
@@ -119,6 +121,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
       name: user.name,
       role: user.role,
       avatarUrl: user.avatar_url,
+      phone: user.phone,
+      jobTitle: user.job_title,
       isActive: !!user.is_active,
       createdAt: user.created_at,
       updatedAt: user.updated_at
@@ -133,7 +137,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, role, isActive, avatarUrl } = req.body;
+    const { name, email, role, isActive, avatarUrl, phone, jobTitle } = req.body;
 
     // Users can update their own profile (except role), admins can update anyone
     const isOwnProfile = req.user.id === id;
@@ -189,6 +193,16 @@ router.put('/:id', authMiddleware, async (req, res) => {
       params.push(avatarUrl);
     }
 
+    if (phone !== undefined) {
+      updates.push('phone = ?');
+      params.push(phone || null);
+    }
+
+    if (jobTitle !== undefined) {
+      updates.push('job_title = ?');
+      params.push(jobTitle || null);
+    }
+
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
     }
@@ -206,7 +220,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
     // Fetch updated user
     const updatedUser = await get(
-      `SELECT id, email, name, role, avatar_url, is_active, created_at, updated_at FROM users WHERE id = ?`,
+      `SELECT id, email, name, role, avatar_url, phone, job_title, is_active, created_at, updated_at FROM users WHERE id = ?`,
       [id]
     );
 
@@ -216,6 +230,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
       name: updatedUser.name,
       role: updatedUser.role,
       avatarUrl: updatedUser.avatar_url,
+      phone: updatedUser.phone,
+      jobTitle: updatedUser.job_title,
       isActive: !!updatedUser.is_active,
       createdAt: updatedUser.created_at,
       updatedAt: updatedUser.updated_at

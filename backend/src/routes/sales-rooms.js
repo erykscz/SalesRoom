@@ -2,6 +2,122 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { get, run, all } from '../db/database.js';
 import crypto from 'crypto';
+import path from 'path';
+import { createUploadMiddleware, storeFile, deleteStoredFile, getFileBuffer } from '../utils/storage.js';
+
+const upload = createUploadMiddleware('', {
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'text/plain',
+      'image/png',
+      'image/jpeg'
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('File type not allowed. Accepted: PDF, DOCX, XLSX, PPTX, TXT, PNG, JPG'));
+    }
+  }
+});
+
+// Extract text from uploaded file buffer
+async function extractTextFromFile(buffer, mimetype) {
+  if (mimetype === 'application/pdf') {
+    const pdfParse = (await import('pdf-parse')).default;
+    const data = await pdfParse(buffer);
+    return data.text;
+  }
+  if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    const mammoth = await import('mammoth');
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value;
+  }
+  if (mimetype === 'text/plain') {
+    return buffer.toString('utf-8');
+  }
+  return null;
+}
+
+// Generate stakeholder sections using Claude AI
+async function generateSectionsFromOffer(offerText, stakeholders, knowledgeBase) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || apiKey === 'your_anthropic_api_key_here') {
+    return null;
+  }
+
+  const stakeholderList = stakeholders.map(s => `- ${s.label}: focus on aspects relevant to a ${s.label}`).join('\n');
+
+  let kbSection = '';
+  if (knowledgeBase && knowledgeBase.length > 0) {
+    const kbEntries = knowledgeBase.map(kb => {
+      const contentLimit = kb.type === 'document' ? 3000 : 1000;
+      const content = (kb.content || '').substring(0, contentLimit);
+      return `### [${kb.type || 'document'}] ${kb.title}\n${content}`;
+    }).join('\n\n');
+    kbSection = `\n\nCompany Knowledge Base (use these materials to enrich section content — reference relevant case studies, product details, and competitive advantages):\n${kbEntries}`;
+  }
+
+  const prompt = `Based on the following sales offer/proposal document, generate personalized content sections for each of the following stakeholders. Each section should highlight the aspects of the offer most relevant to that stakeholder's role and concerns.
+
+Stakeholders:
+${stakeholderList}
+
+For each stakeholder, write:
+- title: A short, compelling section title (e.g., "ROI & Financial Impact" for CFO)
+- content: Detailed markdown content (3-5 paragraphs) focusing on aspects relevant to that role. Use headers, bullet points, and bold text for readability.
+
+IMPORTANT: Write in the same language as the offer document.
+
+Offer document:
+${offerText.substring(0, 15000)}${kbSection}
+
+Respond in valid JSON format only, as an array:
+[{"key": "stakeholder_key", "label": "Stakeholder Label", "title": "Section Title", "content": "Markdown content..."}]`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      console.error('Claude API error:', res.status, await res.text());
+      return null;
+    }
+
+    const data = await res.json();
+    const text = data.content?.[0]?.text || '';
+
+    // Parse JSON from response (handle markdown code blocks)
+    let jsonStr = text;
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[1].trim();
+    }
+
+    const sections = JSON.parse(jsonStr);
+    return Array.isArray(sections) ? sections : null;
+  } catch (err) {
+    console.error('Error generating sections:', err);
+    return null;
+  }
+}
 
 const router = express.Router();
 
@@ -85,7 +201,7 @@ router.post('/', async (req, res) => {
     }
 
     // Verify deal exists
-    const deal = await get('SELECT id, owner_id, first_name, last_name, company_name, stage FROM deals WHERE id = ?', [deal_id]);
+    const deal = await get('SELECT id, owner_id, name, company_name, stage FROM deals WHERE id = ?', [deal_id]);
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
@@ -155,7 +271,7 @@ router.post('/', async (req, res) => {
         uuidv4(),
         deal_id,
         'sales_room_created',
-        `Sales Room created for ${deal.first_name} ${deal.last_name}`,
+        `Sales Room created for ${deal.name}`,
         JSON.stringify({ sales_room_id: salesRoomId, template_type: templateTypeValue, public_url_slug: publicUrlSlug }),
         req.user.id
       ]
@@ -440,7 +556,7 @@ router.post('/:id/clone', async (req, res) => {
     }
 
     // Verify target deal
-    const targetDeal = await get('SELECT id, owner_id, first_name, last_name, company_name FROM deals WHERE id = ?', [deal_id]);
+    const targetDeal = await get('SELECT id, owner_id, name, company_name FROM deals WHERE id = ?', [deal_id]);
     if (!targetDeal) {
       return res.status(404).json({ error: 'Target deal not found' });
     }
@@ -483,7 +599,7 @@ router.post('/:id/clone', async (req, res) => {
     await run(
       `INSERT INTO activities (id, deal_id, activity_type, description, created_by)
        VALUES (?, ?, ?, ?, ?)`,
-      [uuidv4(), deal_id, 'sales_room_created', `Sales Room cloned for ${targetDeal.first_name} ${targetDeal.last_name}`, req.user.id]
+      [uuidv4(), deal_id, 'sales_room_created', `Sales Room cloned for ${targetDeal.name}`, req.user.id]
     );
 
     const newRoom = await get('SELECT * FROM sales_rooms WHERE id = ?', [newRoomId]);
@@ -496,6 +612,141 @@ router.post('/:id/clone', async (req, res) => {
   } catch (error) {
     console.error('Error cloning sales room:', error);
     res.status(500).json({ error: 'Failed to clone sales room' });
+  }
+});
+
+// POST /api/sales-rooms/:id/attachment - Upload offer attachment and generate sections
+router.post('/:id/attachment', upload.single('attachment'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const salesRoom = await get(
+      `SELECT sr.*, d.owner_id
+       FROM sales_rooms sr
+       LEFT JOIN deals d ON sr.deal_id = d.id
+       WHERE sr.id = ?`,
+      [id]
+    );
+
+    if (!salesRoom) {
+      if (req.file?.path) await deleteStoredFile(req.file.path);
+      return res.status(404).json({ error: 'Sales Room not found' });
+    }
+
+    if (req.user.role !== 'admin' && req.user.role !== 'manager' && salesRoom.owner_id !== req.user.id) {
+      if (req.file?.path) await deleteStoredFile(req.file.path);
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Delete old attachment if exists
+    await deleteStoredFile(salesRoom.attachment_path);
+
+    // Get file buffer and store file
+    const fileBuffer = getFileBuffer(req.file);
+    const { url: attachmentUrl, storagePath } = await storeFile(req.file);
+
+    // Save attachment metadata
+    await run(
+      `UPDATE sales_rooms SET
+        attachment_filename = ?, attachment_path = ?,
+        attachment_mimetype = ?, attachment_size = ?,
+        updated_at = datetime('now')
+       WHERE id = ?`,
+      [req.file.originalname, storagePath, req.file.mimetype, req.file.size, id]
+    );
+
+    // Try to extract text and generate sections
+    let generatedSections = null;
+    const extractedText = await extractTextFromFile(fileBuffer, req.file.mimetype);
+
+    if (extractedText && extractedText.trim().length > 50) {
+      // Get stakeholders from request body or existing sections
+      let stakeholders;
+      if (req.body.stakeholders) {
+        stakeholders = JSON.parse(req.body.stakeholders);
+      } else if (salesRoom.sections) {
+        const existingSections = JSON.parse(salesRoom.sections);
+        stakeholders = Array.isArray(existingSections)
+          ? existingSections.map(s => ({ key: s.key, label: s.label }))
+          : null;
+      }
+
+      if (stakeholders && stakeholders.length > 0) {
+        // Fetch shared Knowledge Base materials for AI context
+        const kbItems = await all(
+          `SELECT title, content, type FROM knowledge_base WHERE is_shared = 1 ORDER BY created_at DESC LIMIT 10`
+        );
+        generatedSections = await generateSectionsFromOffer(extractedText, stakeholders, kbItems);
+        if (generatedSections) {
+          await run(
+            `UPDATE sales_rooms SET sections = ?, updated_at = datetime('now') WHERE id = ?`,
+            [JSON.stringify(generatedSections), id]
+          );
+        }
+      }
+    }
+
+    res.json({
+      attachment: {
+        filename: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        url: attachmentUrl
+      },
+      sections: generatedSections,
+      message: generatedSections
+        ? 'Attachment uploaded and sections generated from offer'
+        : 'Attachment uploaded successfully'
+    });
+  } catch (error) {
+    console.error('Error uploading attachment:', error);
+    if (req.file?.path) {
+      await deleteStoredFile(req.file.path);
+    }
+    res.status(500).json({ error: 'Failed to upload attachment' });
+  }
+});
+
+// DELETE /api/sales-rooms/:id/attachment - Remove attachment
+router.delete('/:id/attachment', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const salesRoom = await get(
+      `SELECT sr.*, d.owner_id
+       FROM sales_rooms sr
+       LEFT JOIN deals d ON sr.deal_id = d.id
+       WHERE sr.id = ?`,
+      [id]
+    );
+
+    if (!salesRoom) {
+      return res.status(404).json({ error: 'Sales Room not found' });
+    }
+
+    if (req.user.role !== 'admin' && salesRoom.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    await deleteStoredFile(salesRoom.attachment_path);
+
+    await run(
+      `UPDATE sales_rooms SET
+        attachment_filename = NULL, attachment_path = NULL,
+        attachment_mimetype = NULL, attachment_size = NULL,
+        updated_at = datetime('now')
+       WHERE id = ?`,
+      [id]
+    );
+
+    res.json({ message: 'Attachment removed successfully' });
+  } catch (error) {
+    console.error('Error deleting attachment:', error);
+    res.status(500).json({ error: 'Failed to delete attachment' });
   }
 });
 
@@ -725,9 +976,8 @@ router.post('/public/:slug/track', async (req, res) => {
       return res.status(410).json({ error: 'This Sales Room has expired' });
     }
 
-    // Validate section
-    const validSections = ['overview', 'cfo', 'cto', 'security', 'engineering', 'map', 'poll'];
-    if (!section || !validSections.includes(section)) {
+    // Validate section - allow any non-empty string (dynamic stakeholder sections)
+    if (!section || typeof section !== 'string' || section.length > 100) {
       return res.status(400).json({ error: 'Invalid section' });
     }
 

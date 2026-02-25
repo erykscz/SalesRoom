@@ -1,17 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '@/lib/api';
+import { PREDEFINED_STAKEHOLDERS, getDefaultSectionContent, type StakeholderSection } from '@/lib/sales-room-defaults';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, ArrowRight, Check, Building2, FileText, Palette, Users, Calendar, Lock, Image } from 'lucide-react';
+import { Loader2, ArrowLeft, ArrowRight, Check, Building2, FileText, Palette, Users, Calendar, Lock, Image, Upload, Plus, X, Pencil, Sparkles } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Deal {
   id: string;
+  name: string;
   company_name: string;
   industry: string;
   stage: string;
@@ -50,18 +59,30 @@ export default function SalesRoomCreatePage() {
   const [primaryColor, setPrimaryColor] = useState('#2563eb');
   const [companyNameOverride, setCompanyNameOverride] = useState('');
 
+  // Stakeholder selection
+  const [selectedStakeholders, setSelectedStakeholders] = useState<{ key: string; label: string }[]>([]);
+  const [customRoleInput, setCustomRoleInput] = useState('');
+
+  // File upload & sections
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [sections, setSections] = useState<StakeholderSection[]>([]);
+
+  // Section edit dialog
+  const [editingSectionIdx, setEditingSectionIdx] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContentText, setEditContentText] = useState('');
+
   // Load deals for step 1
   useEffect(() => {
     const fetchDeals = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/deals?has_sales_room=false`, {
+        const response = await fetch(`${API_URL}/deals?has_sales_room=false&limit=1000&sort_by=created_at&sort_order=desc`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
         if (response.ok) {
           const data = await response.json();
-          // Filter out deals that already have sales rooms
           setDeals(data.deals || []);
         }
       } catch (err) {
@@ -76,9 +97,59 @@ export default function SalesRoomCreatePage() {
 
   const selectedDeal = deals.find(d => d.id === selectedDealId);
 
+  // When stakeholders change, initialize default sections
+  useEffect(() => {
+    setSections(prev => {
+      // Keep existing sections that still have a matching stakeholder
+      const existingMap = new Map(prev.map(s => [s.key, s]));
+      return selectedStakeholders.map(sh => {
+        if (existingMap.has(sh.key)) {
+          return existingMap.get(sh.key)!;
+        }
+        const defaults = getDefaultSectionContent(sh.key, templateType);
+        return { key: sh.key, label: sh.label, title: defaults.title, content: defaults.content };
+      });
+    });
+  }, [selectedStakeholders, templateType]);
+
+  const toggleStakeholder = (sh: { key: string; label: string }) => {
+    setSelectedStakeholders(prev => {
+      const exists = prev.find(s => s.key === sh.key);
+      if (exists) {
+        return prev.filter(s => s.key !== sh.key);
+      }
+      return [...prev, sh];
+    });
+  };
+
+  const addCustomRole = () => {
+    const label = customRoleInput.trim();
+    if (!label) return;
+    const key = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    if (selectedStakeholders.find(s => s.key === key)) {
+      toast({ title: 'Already added', description: `${label} is already selected`, variant: 'destructive' });
+      return;
+    }
+    setSelectedStakeholders(prev => [...prev, { key, label }]);
+    setCustomRoleInput('');
+  };
+
+  const openSectionEditor = (idx: number) => {
+    setEditingSectionIdx(idx);
+    setEditTitle(sections[idx].title);
+    setEditContentText(sections[idx].content);
+  };
+
+  const saveSectionEdit = () => {
+    if (editingSectionIdx === null) return;
+    setSections(prev => prev.map((s, i) =>
+      i === editingSectionIdx ? { ...s, title: editTitle, content: editContentText } : s
+    ));
+    setEditingSectionIdx(null);
+  };
+
   const canProceedStep1 = selectedDealId !== '';
-  const canProceedStep2 = templateType !== '';
-  const canProceedStep3 = true; // Offer content is optional
+  const canProceedStep2 = templateType !== '' && selectedStakeholders.length > 0;
 
   const handleNext = () => {
     if (step < 3) setStep(step + 1);
@@ -107,6 +178,7 @@ export default function SalesRoomCreatePage() {
           deal_id: selectedDealId,
           template_type: templateType,
           offer_content: offerContent || null,
+          sections: sections.length > 0 ? sections : null,
           video_url: videoUrl || null,
           calendly_link: calendlyLink || null,
           poll_enabled: pollEnabled,
@@ -126,6 +198,19 @@ export default function SalesRoomCreatePage() {
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create Sales Room');
+      }
+
+      // If there's an attachment file, upload it after creating
+      if (attachmentFile && data.salesRoom?.id) {
+        const formData = new FormData();
+        formData.append('attachment', attachmentFile);
+        formData.append('stakeholders', JSON.stringify(selectedStakeholders));
+
+        await fetch(`${API_URL}/sales-rooms/${data.salesRoom.id}/attachment`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
       }
 
       toast({ title: 'Success!', description: 'Sales Room created successfully' });
@@ -195,7 +280,7 @@ export default function SalesRoomCreatePage() {
                 </Button>
               </div>
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-3 max-h-96 overflow-y-auto">
                 {deals.map((deal) => (
                   <div
                     key={deal.id}
@@ -208,9 +293,9 @@ export default function SalesRoomCreatePage() {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium">{deal.company_name}</p>
+                        <p className="font-medium">{deal.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {deal.industry} • {deal.stage.replace(/_/g, ' ')}
+                          {deal.company_name && `${deal.company_name} · `}{deal.industry} • {deal.stage.replace(/_/g, ' ')}
                         </p>
                       </div>
                       {selectedDealId === deal.id && (
@@ -232,53 +317,120 @@ export default function SalesRoomCreatePage() {
         </Card>
       )}
 
-      {/* Step 2: Select Template */}
+      {/* Step 2: Template + Stakeholders */}
       {step === 2 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Palette className="h-5 w-5" />
-              Select Template
-            </CardTitle>
-            <CardDescription>Choose a template for your Sales Room</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              {TEMPLATE_TYPES.map((template) => (
-                <div
-                  key={template.value}
-                  onClick={() => setTemplateType(template.value)}
-                  className={`p-4 rounded-lg border cursor-pointer transition-colors ${
-                    templateType === template.value
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium">{template.label}</p>
-                      <p className="text-sm text-muted-foreground">{template.description}</p>
+        <div className="space-y-6">
+          {/* Template Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="h-5 w-5" />
+                Select Template
+              </CardTitle>
+              <CardDescription>Choose a template for your Sales Room</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 md:grid-cols-2">
+                {TEMPLATE_TYPES.map((template) => (
+                  <div
+                    key={template.value}
+                    onClick={() => setTemplateType(template.value)}
+                    className={`p-4 rounded-lg border cursor-pointer transition-colors ${
+                      templateType === template.value
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-medium">{template.label}</p>
+                        <p className="text-sm text-muted-foreground">{template.description}</p>
+                      </div>
+                      {templateType === template.value && (
+                        <Check className="h-5 w-5 text-primary" />
+                      )}
                     </div>
-                    {templateType === template.value && (
-                      <Check className="h-5 w-5 text-primary" />
-                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stakeholder Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Target Stakeholders
+              </CardTitle>
+              <CardDescription>Select who this Sales Room is addressed to (minimum 1)</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {PREDEFINED_STAKEHOLDERS.map((sh) => {
+                  const isSelected = selectedStakeholders.some(s => s.key === sh.key);
+                  return (
+                    <button
+                      key={sh.key}
+                      onClick={() => toggleStakeholder(sh)}
+                      className={`px-3 py-2 rounded-full text-sm font-medium border transition-colors ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-background text-foreground border-border hover:border-primary/50'
+                      }`}
+                    >
+                      {isSelected && <Check className="h-3 w-3 inline mr-1" />}
+                      {sh.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom role input */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add custom role..."
+                  value={customRoleInput}
+                  onChange={(e) => setCustomRoleInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addCustomRole()}
+                  className="flex-1"
+                />
+                <Button variant="outline" onClick={addCustomRole} disabled={!customRoleInput.trim()}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add
+                </Button>
+              </div>
+
+              {/* Selected stakeholders preview */}
+              {selectedStakeholders.length > 0 && (
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground mb-2">Selected ({selectedStakeholders.length}):</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedStakeholders.map((sh) => (
+                      <span key={sh.key} className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-sm">
+                        {sh.label}
+                        <button onClick={() => toggleStakeholder(sh)} className="hover:text-destructive">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
+            </CardContent>
+          </Card>
 
-            <div className="flex justify-between pt-4">
-              <Button variant="outline" onClick={handleBack}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <Button onClick={handleNext} disabled={!canProceedStep2}>
-                Next
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={handleBack}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <Button onClick={handleNext} disabled={!canProceedStep2}>
+              Next
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Step 3: Content & Options */}
@@ -295,9 +447,75 @@ export default function SalesRoomCreatePage() {
             {/* Summary */}
             <div className="p-4 bg-muted rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Creating Sales Room for:</p>
-              <p className="font-medium">{selectedDeal?.company_name}</p>
-              <p className="text-sm text-muted-foreground capitalize">{templateType.replace(/_/g, ' ')} template</p>
+              <p className="font-medium">{selectedDeal?.name}</p>
+              {selectedDeal?.company_name && (
+                <p className="text-sm text-muted-foreground">{selectedDeal.company_name}</p>
+              )}
+              <p className="text-sm text-muted-foreground capitalize">
+                {templateType.replace(/_/g, ' ')} template • {selectedStakeholders.map(s => s.label).join(', ')}
+              </p>
             </div>
+
+            {/* Offer Document Upload */}
+            <div className="space-y-3 p-4 border rounded-lg">
+              <Label className="flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                Offer Document (PDF, DOCX)
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Upload your offer document — AI will generate personalized sections for each stakeholder
+              </p>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setAttachmentFile(file);
+                  }}
+                  className="flex-1"
+                />
+                {attachmentFile && (
+                  <Button variant="ghost" size="icon" onClick={() => setAttachmentFile(null)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {attachmentFile && (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <Check className="h-4 w-4" />
+                  <span>{attachmentFile.name} ({(attachmentFile.size / 1024 / 1024).toFixed(1)} MB)</span>
+                  <span className="text-muted-foreground">— AI will generate sections on create</span>
+                </div>
+              )}
+            </div>
+
+            {/* Stakeholder Sections */}
+            {sections.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    Stakeholder Sections
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {attachmentFile ? 'AI will regenerate on create' : 'Using default content'}
+                  </p>
+                </div>
+                {sections.map((section, idx) => (
+                  <div key={section.key} className="p-3 border rounded-lg flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium">{section.label}</p>
+                      <p className="text-sm text-muted-foreground truncate">{section.title}</p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => openSectionEditor(idx)}>
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Offer Content */}
             <div className="space-y-2">
@@ -307,7 +525,7 @@ export default function SalesRoomCreatePage() {
                 placeholder="Enter your proposal content here..."
                 value={offerContent}
                 onChange={(e) => setOfferContent(e.target.value)}
-                rows={6}
+                rows={4}
               />
             </div>
 
@@ -522,6 +740,47 @@ export default function SalesRoomCreatePage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Section Edit Dialog */}
+      <Dialog open={editingSectionIdx !== null} onOpenChange={(open) => { if (!open) setEditingSectionIdx(null); }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              Edit Section — {editingSectionIdx !== null ? sections[editingSectionIdx]?.label : ''}
+            </DialogTitle>
+            <DialogDescription>
+              Customize the section content for this stakeholder. Use Markdown for formatting.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 flex-1 overflow-y-auto">
+            <div className="space-y-2">
+              <Label>Title</Label>
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Section title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Content (Markdown)</Label>
+              <Textarea
+                value={editContentText}
+                onChange={(e) => setEditContentText(e.target.value)}
+                placeholder="Section content..."
+                className="min-h-[250px] font-mono text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setEditingSectionIdx(null)}>
+              Cancel
+            </Button>
+            <Button onClick={saveSectionEdit}>
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

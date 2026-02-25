@@ -20,13 +20,13 @@ import {
 import { API_URL } from '@/lib/api';
 
 interface DealForm {
-  first_name: string;
-  last_name: string;
+  name: string;
   job_title: string;
   email: string;
   phone: string;
   linkedin_url: string;
   company_name: string;
+  company_url: string;
   industry: string;
   stage: string;
   estimated_value: string;
@@ -60,13 +60,13 @@ export default function DealCreatePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<DealForm>({
-    first_name: '',
-    last_name: '',
+    name: '',
     job_title: '',
     email: '',
     phone: '',
     linkedin_url: '',
     company_name: '',
+    company_url: '',
     industry: '',
     stage: 'new_signal',
     estimated_value: '',
@@ -84,13 +84,13 @@ export default function DealCreatePage() {
   // Check if form has any data entered (dirty state)
   const isFormDirty = useCallback(() => {
     return (
-      form.first_name.trim() !== '' ||
-      form.last_name.trim() !== '' ||
+      form.name.trim() !== '' ||
       form.job_title.trim() !== '' ||
       form.email.trim() !== '' ||
       form.phone.trim() !== '' ||
       form.linkedin_url.trim() !== '' ||
       form.company_name.trim() !== '' ||
+      form.company_url.trim() !== '' ||
       form.industry.trim() !== '' ||
       form.estimated_value !== '' ||
       form.close_date !== '' ||
@@ -168,14 +168,9 @@ export default function DealCreatePage() {
     e.preventDefault();
     setError(null);
 
-    const firstName = form.first_name.trim();
-    const lastName = form.last_name.trim();
-    if (!firstName) {
-      setError('First name is required');
-      return;
-    }
-    if (!lastName) {
-      setError('Last name is required');
+    const nameVal = form.name.trim();
+    if (!nameVal) {
+      setError('Name is required');
       return;
     }
 
@@ -200,13 +195,13 @@ export default function DealCreatePage() {
       setLoading(true);
 
       const payload = {
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
+        name: form.name.trim(),
         job_title: form.job_title.trim() || null,
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
         linkedin_url: form.linkedin_url.trim() || null,
         company_name: form.company_name.trim() || null,
+        company_url: form.company_url.trim() || null,
         industry: form.industry.trim() || null,
         stage: form.stage,
         estimated_value: form.estimated_value ? parseFloat(form.estimated_value) : null,
@@ -303,24 +298,13 @@ export default function DealCreatePage() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="first_name">First Name *</Label>
+                  <Label htmlFor="name">Name *</Label>
                   <Input
-                    id="first_name"
-                    name="first_name"
-                    value={form.first_name}
+                    id="name"
+                    name="name"
+                    value={form.name}
                     onChange={handleChange}
-                    placeholder="John"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="last_name">Last Name *</Label>
-                  <Input
-                    id="last_name"
-                    name="last_name"
-                    value={form.last_name}
-                    onChange={handleChange}
-                    placeholder="Smith"
+                    placeholder="John Smith"
                     required
                   />
                 </div>
@@ -381,6 +365,19 @@ export default function DealCreatePage() {
                   onChange={handleChange}
                   placeholder="Acme Corp"
                   maxLength={255}
+                />
+              </div>
+
+              {/* Company Website */}
+              <div className="space-y-2">
+                <Label htmlFor="company_url">Company Website</Label>
+                <Input
+                  id="company_url"
+                  name="company_url"
+                  type="url"
+                  value={form.company_url}
+                  onChange={handleChange}
+                  placeholder="https://acme.com"
                 />
               </div>
 

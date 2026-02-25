@@ -1,6 +1,60 @@
 import express from 'express';
-import db from '../db/database.js';
+import { run, get, all } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
+import { createUploadMiddleware, storeFile, deleteStoredFile, getFileBuffer } from '../utils/storage.js';
+
+const upload = createUploadMiddleware('knowledge', {
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = [
+      'application/pdf',
+      'text/plain',
+      'text/markdown',
+      'application/json',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    const allowedExts = ['.pdf', '.txt', '.md', '.json', '.docx'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedMimes.includes(file.mimetype) || allowedExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Allowed: PDF, TXT, MD, JSON, DOCX'));
+    }
+  }
+});
+
+// Extract text content from uploaded file buffer
+async function extractFileContent(buffer, originalName) {
+  const ext = path.extname(originalName).toLowerCase();
+
+  switch (ext) {
+    case '.txt':
+    case '.md': {
+      return buffer.toString('utf-8');
+    }
+    case '.json': {
+      const raw = buffer.toString('utf-8');
+      try {
+        const parsed = JSON.parse(raw);
+        return JSON.stringify(parsed, null, 2);
+      } catch {
+        return raw;
+      }
+    }
+    case '.pdf': {
+      const pdfParse = (await import('pdf-parse')).default;
+      const pdfData = await pdfParse(buffer);
+      return pdfData.text || '';
+    }
+    case '.docx': {
+      const mammoth = (await import('mammoth')).default;
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value || '';
+    }
+    default:
+      throw new Error(`Unsupported file type: ${ext}`);
+  }
+}
 
 const router = express.Router();
 
@@ -38,20 +92,15 @@ router.get('/', async (req, res) => {
 
     sql += ` ORDER BY kb.created_at DESC`;
 
-    db.all(sql, params, (err, rows) => {
-      if (err) {
-        console.error('Error fetching knowledge base:', err);
-        return res.status(500).json({ error: 'Failed to fetch knowledge base items' });
-      }
+    const rows = await all(sql, params);
 
-      // Parse tags JSON for each row
-      const items = rows.map(row => ({
-        ...row,
-        tags: row.tags ? JSON.parse(row.tags) : []
-      }));
+    // Parse tags JSON for each row
+    const items = rows.map(row => ({
+      ...row,
+      tags: row.tags ? JSON.parse(row.tags) : []
+    }));
 
-      res.json({ items, count: items.length });
-    });
+    res.json({ items, count: items.length });
   } catch (error) {
     console.error('Error in knowledge GET:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -72,7 +121,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Title is required' });
     }
 
-    const validTypes = ['case_study', 'faq', 'competitor_sheet', 'offer_template'];
+    const validTypes = ['case_study', 'faq', 'competitor_sheet', 'offer_template', 'document'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid type. Must be one of: ' + validTypes.join(', ') });
     }
@@ -85,34 +134,115 @@ router.post('/', async (req, res) => {
       VALUES (?, ?, ?, ?, ?, 1, ?)
     `;
 
-    db.run(sql, [id, type, title.trim(), content || '', tagsJson, userId], function(err) {
-      if (err) {
-        console.error('Error creating knowledge base item:', err);
-        return res.status(500).json({ error: 'Failed to create knowledge base item' });
+    await run(sql, [id, type, title.trim(), content || '', tagsJson, userId]);
+
+    // Fetch the created item
+    const row = await get(
+      `SELECT kb.*, u.name as created_by_name FROM knowledge_base kb LEFT JOIN users u ON kb.created_by = u.id WHERE kb.id = ?`,
+      [id]
+    );
+
+    res.status(201).json({
+      item: {
+        ...row,
+        tags: row.tags ? JSON.parse(row.tags) : []
       }
-
-      // Fetch the created item
-      db.get(
-        `SELECT kb.*, u.name as created_by_name FROM knowledge_base kb LEFT JOIN users u ON kb.created_by = u.id WHERE kb.id = ?`,
-        [id],
-        (err, row) => {
-          if (err) {
-            console.error('Error fetching created item:', err);
-            return res.status(500).json({ error: 'Item created but failed to fetch' });
-          }
-
-          res.status(201).json({
-            item: {
-              ...row,
-              tags: row.tags ? JSON.parse(row.tags) : []
-            }
-          });
-        }
-      );
     });
   } catch (error) {
     console.error('Error in knowledge POST:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/knowledge/upload - Upload a document file and extract content
+router.post('/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const userId = req.user.id;
+    const { type = 'document', title, tags } = req.body;
+    const originalName = req.file.originalname;
+    const fileSize = req.file.size;
+    const ext = path.extname(originalName).toLowerCase().replace('.', '');
+    const fileBuffer = getFileBuffer(req.file);
+
+    // Validate type
+    const validTypes = ['case_study', 'faq', 'competitor_sheet', 'offer_template', 'document'];
+    const finalType = validTypes.includes(type) ? type : 'document';
+
+    // Extract text content from the file buffer
+    let content = '';
+    let extractionError = null;
+    try {
+      content = await extractFileContent(fileBuffer, originalName);
+    } catch (err) {
+      console.error('Error extracting file content:', err);
+      extractionError = err.message;
+      content = `[Content extraction failed for ${originalName}]`;
+    }
+
+    const finalTitle = (title && title.trim()) || originalName.replace(/\.[^/.]+$/, '');
+
+    // Parse tags
+    let parsedTags = [];
+    if (tags) {
+      try {
+        parsedTags = JSON.parse(tags);
+      } catch {
+        parsedTags = tags.split(',').map(t => t.trim()).filter(t => t);
+      }
+    }
+    // Add file format as tag
+    parsedTags.push(ext.toUpperCase());
+    const tagsJson = JSON.stringify(parsedTags);
+
+    const id = uuidv4();
+    const { url: fileUrl, storagePath } = await storeFile(req.file, 'knowledge');
+
+    const sql = `
+      INSERT INTO knowledge_base (id, type, title, content, file_url, tags, is_shared, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+    `;
+
+    try {
+      await run(sql, [id, finalType, finalTitle, content, fileUrl, tagsJson, userId]);
+    } catch (dbErr) {
+      console.error('Error saving uploaded document:', dbErr);
+      // Clean up file on error
+      await deleteStoredFile(storagePath);
+      return res.status(500).json({ error: 'Failed to save document' });
+    }
+
+    // Fetch the created item
+    const row = await get(
+      `SELECT kb.*, u.name as created_by_name FROM knowledge_base kb LEFT JOIN users u ON kb.created_by = u.id WHERE kb.id = ?`,
+      [id]
+    );
+
+    const item = {
+      ...row,
+      tags: row.tags ? JSON.parse(row.tags) : []
+    };
+
+    res.status(201).json({
+      item,
+      extraction: {
+        success: !extractionError,
+        error: extractionError,
+        contentLength: content.length,
+        fileSize,
+        format: ext
+      }
+    });
+  } catch (error) {
+    console.error('Error in knowledge upload:', error);
+    // Clean up file on error (disk mode only)
+    if (req.file?.path) {
+      await deleteStoredFile(req.file.path);
+    }
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 
@@ -143,19 +273,14 @@ router.get('/search', async (req, res) => {
         kb.created_at DESC
     `;
 
-    db.all(sql, [searchTerm, searchTerm, searchTerm, userId, searchTerm, searchTerm], (err, rows) => {
-      if (err) {
-        console.error('Error searching knowledge base:', err);
-        return res.status(500).json({ error: 'Failed to search knowledge base' });
-      }
+    const rows = await all(sql, [searchTerm, searchTerm, searchTerm, userId, searchTerm, searchTerm]);
 
-      const items = rows.map(row => ({
-        ...row,
-        tags: row.tags ? JSON.parse(row.tags) : []
-      }));
+    const items = rows.map(row => ({
+      ...row,
+      tags: row.tags ? JSON.parse(row.tags) : []
+    }));
 
-      res.json({ items, count: items.length });
-    });
+    res.json({ items, count: items.length });
   } catch (error) {
     console.error('Error in knowledge search:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -168,30 +293,24 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    db.get(
+    const row = await get(
       `SELECT kb.*, u.name as created_by_name
        FROM knowledge_base kb
        LEFT JOIN users u ON kb.created_by = u.id
        WHERE kb.id = ? AND (kb.is_shared = 1 OR kb.created_by = ?)`,
-      [id, userId],
-      (err, row) => {
-        if (err) {
-          console.error('Error fetching knowledge base item:', err);
-          return res.status(500).json({ error: 'Failed to fetch item' });
-        }
-
-        if (!row) {
-          return res.status(404).json({ error: 'Item not found' });
-        }
-
-        res.json({
-          item: {
-            ...row,
-            tags: row.tags ? JSON.parse(row.tags) : []
-          }
-        });
-      }
+      [id, userId]
     );
+
+    if (!row) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    res.json({
+      item: {
+        ...row,
+        tags: row.tags ? JSON.parse(row.tags) : []
+      }
+    });
   } catch (error) {
     console.error('Error in knowledge GET/:id:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -207,80 +326,65 @@ router.put('/:id', async (req, res) => {
     const userRole = req.user.role;
 
     // Check if item exists and user can edit
-    db.get('SELECT * FROM knowledge_base WHERE id = ?', [id], (err, item) => {
-      if (err) {
-        console.error('Error checking item:', err);
-        return res.status(500).json({ error: 'Database error' });
+    const item = await get('SELECT * FROM knowledge_base WHERE id = ?', [id]);
+
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    // Only creator or admin can edit
+    if (item.created_by !== userId && userRole !== 'admin') {
+      return res.status(403).json({ error: 'You can only edit your own items' });
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (title !== undefined) {
+      if (!title.trim()) {
+        return res.status(400).json({ error: 'Title cannot be empty' });
       }
+      updates.push('title = ?');
+      params.push(title.trim());
+    }
 
-      if (!item) {
-        return res.status(404).json({ error: 'Item not found' });
+    if (content !== undefined) {
+      updates.push('content = ?');
+      params.push(content);
+    }
+
+    if (tags !== undefined) {
+      updates.push('tags = ?');
+      params.push(JSON.stringify(tags || []));
+    }
+
+    if (is_shared !== undefined) {
+      updates.push('is_shared = ?');
+      params.push(is_shared ? 1 : 0);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    updates.push("updated_at = datetime('now')");
+    params.push(id);
+
+    const sql = `UPDATE knowledge_base SET ${updates.join(', ')} WHERE id = ?`;
+
+    await run(sql, params);
+
+    // Fetch updated item
+    const row = await get(
+      `SELECT kb.*, u.name as created_by_name FROM knowledge_base kb LEFT JOIN users u ON kb.created_by = u.id WHERE kb.id = ?`,
+      [id]
+    );
+
+    res.json({
+      item: {
+        ...row,
+        tags: row.tags ? JSON.parse(row.tags) : []
       }
-
-      // Only creator or admin can edit
-      if (item.created_by !== userId && userRole !== 'admin') {
-        return res.status(403).json({ error: 'You can only edit your own items' });
-      }
-
-      const updates = [];
-      const params = [];
-
-      if (title !== undefined) {
-        if (!title.trim()) {
-          return res.status(400).json({ error: 'Title cannot be empty' });
-        }
-        updates.push('title = ?');
-        params.push(title.trim());
-      }
-
-      if (content !== undefined) {
-        updates.push('content = ?');
-        params.push(content);
-      }
-
-      if (tags !== undefined) {
-        updates.push('tags = ?');
-        params.push(JSON.stringify(tags || []));
-      }
-
-      if (is_shared !== undefined) {
-        updates.push('is_shared = ?');
-        params.push(is_shared ? 1 : 0);
-      }
-
-      if (updates.length === 0) {
-        return res.status(400).json({ error: 'No fields to update' });
-      }
-
-      updates.push("updated_at = datetime('now')");
-      params.push(id);
-
-      const sql = `UPDATE knowledge_base SET ${updates.join(', ')} WHERE id = ?`;
-
-      db.run(sql, params, function(err) {
-        if (err) {
-          console.error('Error updating item:', err);
-          return res.status(500).json({ error: 'Failed to update item' });
-        }
-
-        // Fetch updated item
-        db.get(
-          `SELECT kb.*, u.name as created_by_name FROM knowledge_base kb LEFT JOIN users u ON kb.created_by = u.id WHERE kb.id = ?`,
-          [id],
-          (err, row) => {
-            if (err) {
-              return res.status(500).json({ error: 'Update successful but failed to fetch' });
-            }
-
-            res.json({
-              item: {
-                ...row,
-                tags: row.tags ? JSON.parse(row.tags) : []
-              }
-            });
-          }
-        );
-      });
     });
   } catch (error) {
     console.error('Error in knowledge PUT:', error);
@@ -296,30 +400,20 @@ router.delete('/:id', async (req, res) => {
     const userRole = req.user.role;
 
     // Check if item exists and user can delete
-    db.get('SELECT * FROM knowledge_base WHERE id = ?', [id], (err, item) => {
-      if (err) {
-        console.error('Error checking item:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
+    const item = await get('SELECT * FROM knowledge_base WHERE id = ?', [id]);
 
-      if (!item) {
-        return res.status(404).json({ error: 'Item not found' });
-      }
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
 
-      // Only creator or admin can delete
-      if (item.created_by !== userId && userRole !== 'admin') {
-        return res.status(403).json({ error: 'You can only delete your own items' });
-      }
+    // Only creator or admin can delete
+    if (item.created_by !== userId && userRole !== 'admin') {
+      return res.status(403).json({ error: 'You can only delete your own items' });
+    }
 
-      db.run('DELETE FROM knowledge_base WHERE id = ?', [id], function(err) {
-        if (err) {
-          console.error('Error deleting item:', err);
-          return res.status(500).json({ error: 'Failed to delete item' });
-        }
+    await run('DELETE FROM knowledge_base WHERE id = ?', [id]);
 
-        res.json({ message: 'Item deleted successfully' });
-      });
-    });
+    res.json({ message: 'Item deleted successfully' });
   } catch (error) {
     console.error('Error in knowledge DELETE:', error);
     res.status(500).json({ error: 'Internal server error' });

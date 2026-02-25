@@ -45,7 +45,7 @@ router.post('/deal/:dealId/start', async (req, res) => {
   try {
     const { dealId } = req.params;
     const userId = req.user.id;
-    const { platforms, linkedin_url, twitter_handle, github_username, facebook_page_id } = req.body;
+    const { platforms, linkedin_url, twitter_handle, github_username, facebook_page_id, company_url } = req.body;
 
     const deal = await get('SELECT * FROM deals WHERE id = ?', [dealId]);
     if (!deal) {
@@ -64,20 +64,21 @@ router.post('/deal/:dealId/start', async (req, res) => {
     const researchId = uuidv4();
     await run(
       `INSERT INTO research_profiles (id, lead_id, deal_id, status, platforms_searched, requested_by)
-       VALUES (?, '', ?, 'pending', ?, ?)`,
+       VALUES (?, NULL, ?, 'pending', ?, ?)`,
       [researchId, dealId, JSON.stringify(selectedPlatforms), userId]
     );
 
     const hints = {};
-    if (linkedin_url) hints.linkedin_company_url = linkedin_url;
+    if (linkedin_url) hints.linkedin_person_url = linkedin_url;
     if (twitter_handle) hints.twitter_handle = twitter_handle;
     if (github_username) hints.github_username = github_username;
     if (facebook_page_id) hints.facebook_page_id = facebook_page_id;
+    if (company_url) hints.company_url = company_url;
 
-    // Add person hints from deal
-    if (deal.first_name) hints.first_name = deal.first_name;
-    if (deal.last_name) hints.last_name = deal.last_name;
-    if (deal.linkedin_url) hints.linkedin_person_url = deal.linkedin_url;
+    // Add person hints from deal (form hints take priority)
+    if (deal.name) hints.name = deal.name;
+    if (deal.linkedin_url && !hints.linkedin_person_url) hints.linkedin_person_url = deal.linkedin_url;
+    if (deal.company_url && !hints.company_url) hints.company_url = deal.company_url;
 
     executeResearch(researchId, null, selectedPlatforms, hints, userId, dealId);
 
@@ -190,16 +191,21 @@ router.post('/deal/:dealId/generate-message', async (req, res) => {
 
     // Map deal data to leadData format expected by Claude service
     const leadData = {
-      first_name: deal.first_name || null,
-      last_name: deal.last_name || null,
+      name: deal.name || null,
       job_title: deal.job_title || null,
       email: deal.email || null,
       company_name: deal.company_name,
+      company_url: deal.company_url || null,
       industry: deal.industry,
       tech_stack: null,
       identified_pain: null,
       notes: deal.next_step_description,
     };
+
+    // Fetch Knowledge Base materials for context
+    const kbItems = await all(
+      `SELECT title, content, type FROM knowledge_base WHERE is_shared = 1 ORDER BY created_at DESC LIMIT 10`
+    );
 
     const result = await generateMessage({
       leadData,
@@ -208,12 +214,13 @@ router.post('/deal/:dealId/generate-message', async (req, res) => {
       channel,
       tone,
       additionalContext: additional_context,
+      knowledgeBase: kbItems,
     });
 
     const messageId = uuidv4();
     await run(
       `INSERT INTO generated_messages (id, lead_id, deal_id, research_profile_id, channel, tone, subject_line, message_body, message_length, prompt_used, model_used, generated_by)
-       VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         messageId, dealId,
         research ? research.id : null,
@@ -276,15 +283,14 @@ router.post('/:leadId/start', async (req, res) => {
     );
 
     const hints = {};
-    if (linkedin_url) hints.linkedin_company_url = linkedin_url;
+    if (linkedin_url) hints.linkedin_person_url = linkedin_url;
     if (twitter_handle) hints.twitter_handle = twitter_handle;
     if (github_username) hints.github_username = github_username;
     if (facebook_page_id) hints.facebook_page_id = facebook_page_id;
 
-    // Add person hints from lead
-    if (lead.first_name) hints.first_name = lead.first_name;
-    if (lead.last_name) hints.last_name = lead.last_name;
-    if (lead.linkedin_url) hints.linkedin_person_url = lead.linkedin_url;
+    // Add person hints from lead (form hints take priority)
+    if (lead.name) hints.name = lead.name;
+    if (lead.linkedin_url && !hints.linkedin_person_url) hints.linkedin_person_url = lead.linkedin_url;
 
     executeResearch(researchId, leadId, selectedPlatforms, hints, userId);
 
@@ -392,8 +398,7 @@ router.post('/:leadId/generate-message', async (req, res) => {
     );
 
     const leadData = {
-      first_name: lead.first_name || null,
-      last_name: lead.last_name || null,
+      name: lead.name || null,
       job_title: lead.job_title || null,
       email: lead.email || null,
       company_name: lead.company_name,
@@ -403,6 +408,11 @@ router.post('/:leadId/generate-message', async (req, res) => {
       notes: lead.notes,
     };
 
+    // Fetch Knowledge Base materials for context
+    const kbItems = await all(
+      `SELECT title, content, type FROM knowledge_base WHERE is_shared = 1 ORDER BY created_at DESC LIMIT 10`
+    );
+
     const result = await generateMessage({
       leadData,
       researchData: research,
@@ -410,6 +420,7 @@ router.post('/:leadId/generate-message', async (req, res) => {
       channel,
       tone,
       additionalContext: additional_context,
+      knowledgeBase: kbItems,
     });
 
     const messageId = uuidv4();
@@ -463,6 +474,24 @@ router.get('/:leadId/messages', async (req, res) => {
 // ============================================================================
 // SHARED ENDPOINTS (work for both leads and deals)
 // ============================================================================
+
+// DELETE /api/research/profiles/:profileId - Delete a social profile
+router.delete('/profiles/:profileId', async (req, res) => {
+  try {
+    const { profileId } = req.params;
+
+    const profile = await get('SELECT * FROM social_profiles WHERE id = ?', [profileId]);
+    if (!profile) {
+      return res.status(404).json({ error: 'Social profile not found' });
+    }
+
+    await run('DELETE FROM social_profiles WHERE id = ?', [profileId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting social profile:', error);
+    res.status(500).json({ error: 'Failed to delete social profile' });
+  }
+});
 
 // DELETE /api/research/messages/:messageId - Delete a message
 router.delete('/messages/:messageId', async (req, res) => {

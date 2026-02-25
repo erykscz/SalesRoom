@@ -66,10 +66,10 @@ export async function research(companyName, hints = {}) {
       user = await searchUser(companyName, token);
     }
 
-    // Try person search if first_name + last_name provided
+    // Try person search if name provided
     let personUser = null;
-    if (hints.first_name && hints.last_name) {
-      const personHandle = `${hints.first_name}${hints.last_name}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (hints.name) {
+      const personHandle = hints.name.toLowerCase().replace(/[^a-z0-9]/g, '');
       const personResult = await lookupByUsername(personHandle, token);
       if (personResult.ok && personResult.data) {
         personUser = personResult.data;

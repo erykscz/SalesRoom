@@ -17,12 +17,10 @@ const platformAdapters = {
 // Determine which platforms have API keys configured
 export function getAvailablePlatforms() {
   const available = [];
-  if (process.env.PROXYCURL_API_KEY) available.push('linkedin');
+  available.push('linkedin'); // Works with Proxycurl API or public profile scraper
   available.push('github'); // GitHub works without token (lower rate limit)
   if (process.env.TWITTER_BEARER_TOKEN) available.push('twitter');
   if (process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET) available.push('reddit');
-  // Reddit also works without auth via public JSON, so always include it
-  if (!available.includes('reddit')) available.push('reddit');
   if (process.env.FACEBOOK_ACCESS_TOKEN) available.push('facebook');
   return available;
 }
@@ -52,10 +50,10 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
       }
       companyName = deal.company_name;
       personContext = {
-        first_name: deal.first_name || null,
-        last_name: deal.last_name || null,
+        name: deal.name || null,
         job_title: deal.job_title || null,
         linkedin_url: deal.linkedin_url || null,
+        company_url: deal.company_url || null,
       };
     } else {
       const lead = await get('SELECT * FROM leads WHERE id = ?', [leadId]);
@@ -68,8 +66,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
       }
       companyName = lead.company_name;
       personContext = {
-        first_name: lead.first_name || null,
-        last_name: lead.last_name || null,
+        name: lead.name || null,
         job_title: lead.job_title || null,
         linkedin_url: lead.linkedin_url || null,
       };
@@ -77,8 +74,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
 
     // Merge person context into hints for adapters
     const enrichedHints = { ...hints };
-    if (personContext.first_name) enrichedHints.first_name = personContext.first_name;
-    if (personContext.last_name) enrichedHints.last_name = personContext.last_name;
+    if (personContext.name) enrichedHints.name = personContext.name;
     if (personContext.linkedin_url && !enrichedHints.linkedin_person_url) {
       enrichedHints.linkedin_person_url = personContext.linkedin_url;
     }
@@ -118,7 +114,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
             `INSERT INTO social_profiles (id, lead_id, deal_id, research_profile_id, platform, profile_url, username, display_name, bio, followers_count, profile_data)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-              uuidv4(), leadId || '', dealId || '', researchProfileId, profile.platform,
+              uuidv4(), leadId || null, dealId || null, researchProfileId, profile.platform,
               profile.profile_url, profile.username, profile.display_name,
               profile.bio, profile.followers_count, JSON.stringify(data),
             ]
@@ -189,10 +185,27 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
 
 async function generateResearchSummary(companyName, platformData, personContext = {}) {
   const sections = [];
+
+  // LinkedIn - include both company AND person data
   if (platformData.linkedin) {
     const li = platformData.linkedin;
     const company = li.company || li;
-    sections.push(`LinkedIn: ${company.name || companyName} - ${company.industry || 'N/A'}, ${company.company_size || 'N/A'} employees. ${company.description ? company.description.substring(0, 300) : ''}`);
+    sections.push(`LinkedIn Company: ${company.name || companyName} - ${company.industry || 'N/A'}, ${company.company_size || 'N/A'} employees. ${company.description ? company.description.substring(0, 300) : ''}`);
+
+    // Include person data if available
+    if (li.person) {
+      const p = li.person;
+      let personSection = `LinkedIn Person: ${p.full_name || personContext.name || 'N/A'}`;
+      if (p.headline) personSection += ` - ${p.headline}`;
+      if (p.summary) personSection += `. Summary: ${p.summary.substring(0, 300)}`;
+      if (p.experiences && p.experiences.length > 0) {
+        personSection += `. Current role: ${p.experiences[0].title} at ${p.experiences[0].company}`;
+      }
+      if (p.skills && p.skills.length > 0) {
+        personSection += `. Skills: ${p.skills.slice(0, 5).join(', ')}`;
+      }
+      sections.push(personSection);
+    }
   }
   if (platformData.github) {
     const gh = platformData.github;
@@ -211,14 +224,18 @@ async function generateResearchSummary(companyName, platformData, personContext 
     sections.push(`Facebook: ${fb.name || companyName} - ${fb.fan_count || 0} fans. ${fb.category || ''}`);
   }
 
-  const personName = personContext.first_name && personContext.last_name
-    ? `${personContext.first_name} ${personContext.last_name}`
-    : null;
+  // Add company website context
+  if (personContext.company_url) {
+    sections.push(`Company website: ${personContext.company_url}`);
+  }
+
+  const personName = personContext.name || null;
+  const jobTitle = personContext.job_title || null;
   const subjectDesc = personName
-    ? `${personName} at ${companyName}`
+    ? `${personName}${jobTitle ? ` (${jobTitle})` : ''} at ${companyName}`
     : companyName;
 
-  const prompt = `Summarize the following research data about ${subjectDesc} in 3-5 sentences. Focus on what would be useful for a sales representative crafting personalized outreach${personName ? `, specifically targeting ${personName}` : ''}. Write in English.\n\n${sections.join('\n\n')}`;
+  const prompt = `Summarize the following research data about ${subjectDesc} in 3-5 sentences. Focus on what would be useful for a sales representative crafting personalized outreach${personName ? `, specifically targeting ${personName}` : ''}. Highlight personal interests, professional background, and any hooks for conversation. Write in English.\n\n${sections.join('\n\n')}`;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

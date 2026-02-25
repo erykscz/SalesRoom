@@ -8,8 +8,7 @@ import { API_URL } from '@/lib/api';
 
 interface Deal {
   id: string;
-  first_name: string;
-  last_name: string;
+  name: string;
   job_title: string | null;
   email: string | null;
   phone: string | null;
@@ -218,8 +217,8 @@ export default function KanbanBoard() {
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-sm truncate" title={`${deal.first_name} ${deal.last_name}`}>
-                              {deal.first_name} {deal.last_name}
+                            <h4 className="font-medium text-sm truncate" title={deal.name}>
+                              {deal.name}
                             </h4>
                             {deal.company_name && (
                               <p className="text-xs text-muted-foreground truncate">
@@ -286,8 +285,8 @@ export default function KanbanBoard() {
                     kanbanData.stages[stage]?.slice(0, 5).map((deal) => (
                       <Link key={deal.id} to={`/deals/${deal.id}`}>
                         <div className="p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer">
-                          <h4 className="font-medium text-sm truncate" title={`${deal.first_name} ${deal.last_name}`}>
-                            {deal.first_name} {deal.last_name}
+                          <h4 className="font-medium text-sm truncate" title={deal.name}>
+                            {deal.name}
                           </h4>
                           {deal.company_name && (
                             <p className="text-xs text-muted-foreground truncate">{deal.company_name}</p>

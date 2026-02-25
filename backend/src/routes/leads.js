@@ -1,11 +1,11 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import db from '../db/database.js';
+import { run, get, all } from '../db/database.js';
 
 const router = express.Router();
 
 // GET /api/leads - List all leads with filters
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { status, search, sort_by = 'created_at', sort_order = 'desc', min_confidence } = req.query;
     const userId = req.user.id;
@@ -40,10 +40,10 @@ router.get('/', (req, res) => {
       }
     }
 
-    // Search by person name, company name, email, or industry
+    // Search by name, company name, email, or industry
     if (search) {
-      query += ` AND (l.first_name LIKE ? OR l.last_name LIKE ? OR l.email LIKE ? OR l.company_name LIKE ? OR l.industry LIKE ? OR l.identified_pain LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      query += ` AND (l.name LIKE ? OR l.email LIKE ? OR l.company_name LIKE ? OR l.industry LIKE ? OR l.identified_pain LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     // Sorting
@@ -52,23 +52,18 @@ router.get('/', (req, res) => {
     const order = sort_order === 'asc' ? 'ASC' : 'DESC';
     query += ` ORDER BY l.${sortField} ${order}`;
 
-    db.all(query, params, (err, leads) => {
-      if (err) {
-        console.error('Error fetching leads:', err);
-        return res.status(500).json({ error: 'Failed to fetch leads' });
-      }
+    const leads = await all(query, params);
 
-      // Parse JSON fields
-      const parsedLeads = leads.map(lead => ({
-        ...lead,
-        tech_stack: lead.tech_stack ? JSON.parse(lead.tech_stack) : [],
-        hook_suggestions: lead.hook_suggestions ? JSON.parse(lead.hook_suggestions) : [],
-        competitor_info: lead.competitor_info ? JSON.parse(lead.competitor_info) : null,
-        trigger_events: lead.trigger_events ? JSON.parse(lead.trigger_events) : []
-      }));
+    // Parse JSON fields
+    const parsedLeads = leads.map(lead => ({
+      ...lead,
+      tech_stack: lead.tech_stack ? JSON.parse(lead.tech_stack) : [],
+      hook_suggestions: lead.hook_suggestions ? JSON.parse(lead.hook_suggestions) : [],
+      competitor_info: lead.competitor_info ? JSON.parse(lead.competitor_info) : null,
+      trigger_events: lead.trigger_events ? JSON.parse(lead.trigger_events) : []
+    }));
 
-      res.json(parsedLeads);
-    });
+    res.json(parsedLeads);
   } catch (error) {
     console.error('Error fetching leads:', error);
     res.status(500).json({ error: 'Failed to fetch leads' });
@@ -76,11 +71,10 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/leads - Create a new lead
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const {
-      first_name,
-      last_name,
+      name,
       job_title,
       email,
       phone,
@@ -96,25 +90,24 @@ router.post('/', (req, res) => {
     } = req.body;
 
     // Validation
-    if (!first_name || !last_name) {
-      return res.status(400).json({ error: 'First name and last name are required' });
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
     }
 
     const id = uuidv4();
     const owner_id = req.user.id;
     const now = new Date().toISOString();
 
-    db.run(`
+    await run(`
       INSERT INTO leads (
-        id, first_name, last_name, job_title, email, phone, linkedin_url,
+        id, name, job_title, email, phone, linkedin_url,
         company_name, industry, tech_stack, identified_pain,
         confidence_score, source_link, status, owner_id, notes,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
-      first_name.trim(),
-      last_name.trim(),
+      name.trim(),
       job_title || null,
       email || null,
       phone || null,
@@ -130,23 +123,13 @@ router.post('/', (req, res) => {
       notes || null,
       now,
       now
-    ], function(err) {
-      if (err) {
-        console.error('Error creating lead:', err);
-        return res.status(500).json({ error: 'Failed to create lead' });
-      }
+    ]);
 
-      db.get('SELECT * FROM leads WHERE id = ?', [id], (err, lead) => {
-        if (err) {
-          console.error('Error fetching created lead:', err);
-          return res.status(500).json({ error: 'Lead created but failed to fetch' });
-        }
+    const lead = await get('SELECT * FROM leads WHERE id = ?', [id]);
 
-        res.status(201).json({
-          ...lead,
-          tech_stack: lead.tech_stack ? JSON.parse(lead.tech_stack) : []
-        });
-      });
+    res.status(201).json({
+      ...lead,
+      tech_stack: lead.tech_stack ? JSON.parse(lead.tech_stack) : []
     });
   } catch (error) {
     console.error('Error creating lead:', error);
@@ -155,39 +138,34 @@ router.post('/', (req, res) => {
 });
 
 // GET /api/leads/:id - Get a single lead
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    db.get(`
+    const lead = await get(`
       SELECT l.*, u.name as owner_name
       FROM leads l
       LEFT JOIN users u ON l.owner_id = u.id
       WHERE l.id = ?
-    `, [id], (err, lead) => {
-      if (err) {
-        console.error('Error fetching lead:', err);
-        return res.status(500).json({ error: 'Failed to fetch lead' });
-      }
+    `, [id]);
 
-      if (!lead) {
-        return res.status(404).json({ error: 'Lead not found' });
-      }
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
 
-      // Check ownership unless manager/admin
-      if (userRole !== 'manager' && userRole !== 'admin' && lead.owner_id !== userId) {
-        return res.status(404).json({ error: 'Lead not found' });
-      }
+    // Check ownership unless manager/admin
+    if (userRole !== 'manager' && userRole !== 'admin' && lead.owner_id !== userId) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
 
-      res.json({
-        ...lead,
-        tech_stack: lead.tech_stack ? JSON.parse(lead.tech_stack) : [],
-        hook_suggestions: lead.hook_suggestions ? JSON.parse(lead.hook_suggestions) : [],
-        competitor_info: lead.competitor_info ? JSON.parse(lead.competitor_info) : null,
-        trigger_events: lead.trigger_events ? JSON.parse(lead.trigger_events) : []
-      });
+    res.json({
+      ...lead,
+      tech_stack: lead.tech_stack ? JSON.parse(lead.tech_stack) : [],
+      hook_suggestions: lead.hook_suggestions ? JSON.parse(lead.hook_suggestions) : [],
+      competitor_info: lead.competitor_info ? JSON.parse(lead.competitor_info) : null,
+      trigger_events: lead.trigger_events ? JSON.parse(lead.trigger_events) : []
     });
   } catch (error) {
     console.error('Error fetching lead:', error);
@@ -196,107 +174,86 @@ router.get('/:id', (req, res) => {
 });
 
 // PUT /api/leads/:id - Update a lead
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    db.get('SELECT * FROM leads WHERE id = ?', [id], (err, lead) => {
-      if (err) {
-        console.error('Error fetching lead:', err);
-        return res.status(500).json({ error: 'Failed to fetch lead' });
-      }
+    const lead = await get('SELECT * FROM leads WHERE id = ?', [id]);
 
-      if (!lead) {
-        return res.status(404).json({ error: 'Lead not found' });
-      }
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
 
-      // Check ownership unless admin
-      if (userRole !== 'admin' && lead.owner_id !== userId) {
-        return res.status(403).json({ error: 'Not authorized to edit this lead' });
-      }
+    // Check ownership unless admin
+    if (userRole !== 'admin' && lead.owner_id !== userId) {
+      return res.status(403).json({ error: 'Not authorized to edit this lead' });
+    }
 
-      const {
-        first_name,
-        last_name,
-        job_title,
-        email,
-        phone,
-        linkedin_url,
-        company_name,
-        industry,
-        tech_stack,
-        identified_pain,
-        confidence_score,
-        source_link,
-        status,
-        notes
-      } = req.body;
+    const {
+      name,
+      job_title,
+      email,
+      phone,
+      linkedin_url,
+      company_name,
+      industry,
+      tech_stack,
+      identified_pain,
+      confidence_score,
+      source_link,
+      status,
+      notes
+    } = req.body;
 
-      // Validation
-      if (first_name !== undefined && first_name.trim().length === 0) {
-        return res.status(400).json({ error: 'First name cannot be empty' });
-      }
-      if (last_name !== undefined && last_name.trim().length === 0) {
-        return res.status(400).json({ error: 'Last name cannot be empty' });
-      }
+    // Validation
+    if (name !== undefined && name.trim().length === 0) {
+      return res.status(400).json({ error: 'Name cannot be empty' });
+    }
 
-      const now = new Date().toISOString();
+    const now = new Date().toISOString();
 
-      db.run(`
-        UPDATE leads SET
-          first_name = COALESCE(?, first_name),
-          last_name = COALESCE(?, last_name),
-          job_title = COALESCE(?, job_title),
-          email = COALESCE(?, email),
-          phone = COALESCE(?, phone),
-          linkedin_url = COALESCE(?, linkedin_url),
-          company_name = COALESCE(?, company_name),
-          industry = COALESCE(?, industry),
-          tech_stack = COALESCE(?, tech_stack),
-          identified_pain = COALESCE(?, identified_pain),
-          confidence_score = COALESCE(?, confidence_score),
-          source_link = COALESCE(?, source_link),
-          status = COALESCE(?, status),
-          notes = COALESCE(?, notes),
-          updated_at = ?
-        WHERE id = ?
-      `, [
-        first_name ? first_name.trim() : null,
-        last_name ? last_name.trim() : null,
-        job_title,
-        email,
-        phone,
-        linkedin_url,
-        company_name ? company_name.trim() : null,
-        industry,
-        tech_stack ? JSON.stringify(tech_stack) : null,
-        identified_pain,
-        confidence_score,
-        source_link,
-        status,
-        notes,
-        now,
-        id
-      ], function(err) {
-        if (err) {
-          console.error('Error updating lead:', err);
-          return res.status(500).json({ error: 'Failed to update lead' });
-        }
+    await run(`
+      UPDATE leads SET
+        name = COALESCE(?, name),
+        job_title = COALESCE(?, job_title),
+        email = COALESCE(?, email),
+        phone = COALESCE(?, phone),
+        linkedin_url = COALESCE(?, linkedin_url),
+        company_name = COALESCE(?, company_name),
+        industry = COALESCE(?, industry),
+        tech_stack = COALESCE(?, tech_stack),
+        identified_pain = COALESCE(?, identified_pain),
+        confidence_score = COALESCE(?, confidence_score),
+        source_link = COALESCE(?, source_link),
+        status = COALESCE(?, status),
+        notes = COALESCE(?, notes),
+        updated_at = ?
+      WHERE id = ?
+    `, [
+      name ? name.trim() : null,
+      job_title,
+      email,
+      phone,
+      linkedin_url,
+      company_name ? company_name.trim() : null,
+      industry,
+      tech_stack ? JSON.stringify(tech_stack) : null,
+      identified_pain,
+      confidence_score,
+      source_link,
+      status,
+      notes,
+      now,
+      id
+    ]);
 
-        db.get('SELECT * FROM leads WHERE id = ?', [id], (err, updatedLead) => {
-          if (err) {
-            console.error('Error fetching updated lead:', err);
-            return res.status(500).json({ error: 'Lead updated but failed to fetch' });
-          }
+    const updatedLead = await get('SELECT * FROM leads WHERE id = ?', [id]);
 
-          res.json({
-            ...updatedLead,
-            tech_stack: updatedLead.tech_stack ? JSON.parse(updatedLead.tech_stack) : []
-          });
-        });
-      });
+    res.json({
+      ...updatedLead,
+      tech_stack: updatedLead.tech_stack ? JSON.parse(updatedLead.tech_stack) : []
     });
   } catch (error) {
     console.error('Error updating lead:', error);
@@ -305,36 +262,26 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE /api/leads/:id - Delete a lead
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    db.get('SELECT * FROM leads WHERE id = ?', [id], (err, lead) => {
-      if (err) {
-        console.error('Error fetching lead:', err);
-        return res.status(500).json({ error: 'Failed to fetch lead' });
-      }
+    const lead = await get('SELECT * FROM leads WHERE id = ?', [id]);
 
-      if (!lead) {
-        return res.status(404).json({ error: 'Lead not found' });
-      }
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
 
-      // Check ownership unless admin
-      if (userRole !== 'admin' && lead.owner_id !== userId) {
-        return res.status(403).json({ error: 'Not authorized to delete this lead' });
-      }
+    // Check ownership unless admin
+    if (userRole !== 'admin' && lead.owner_id !== userId) {
+      return res.status(403).json({ error: 'Not authorized to delete this lead' });
+    }
 
-      db.run('DELETE FROM leads WHERE id = ?', [id], function(err) {
-        if (err) {
-          console.error('Error deleting lead:', err);
-          return res.status(500).json({ error: 'Failed to delete lead' });
-        }
+    await run('DELETE FROM leads WHERE id = ?', [id]);
 
-        res.json({ message: 'Lead deleted successfully' });
-      });
-    });
+    res.json({ message: 'Lead deleted successfully' });
   } catch (error) {
     console.error('Error deleting lead:', error);
     res.status(500).json({ error: 'Failed to delete lead' });
@@ -342,106 +289,85 @@ router.delete('/:id', (req, res) => {
 });
 
 // POST /api/leads/:id/convert-to-deal - Convert lead to deal
-router.post('/:id/convert-to-deal', (req, res) => {
+router.post('/:id/convert-to-deal', async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    db.get('SELECT * FROM leads WHERE id = ?', [id], (err, lead) => {
-      if (err) {
-        console.error('Error fetching lead:', err);
-        return res.status(500).json({ error: 'Failed to fetch lead' });
-      }
+    const lead = await get('SELECT * FROM leads WHERE id = ?', [id]);
 
-      if (!lead) {
-        return res.status(404).json({ error: 'Lead not found' });
-      }
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
 
-      // Check ownership unless admin
-      if (userRole !== 'admin' && lead.owner_id !== userId) {
-        return res.status(403).json({ error: 'Not authorized to convert this lead' });
-      }
+    // Check ownership unless admin
+    if (userRole !== 'admin' && lead.owner_id !== userId) {
+      return res.status(403).json({ error: 'Not authorized to convert this lead' });
+    }
 
-      // Check if already converted
-      if (lead.deal_id) {
-        return res.status(400).json({ error: 'Lead already converted to a deal' });
-      }
+    // Check if already converted
+    if (lead.deal_id) {
+      return res.status(400).json({ error: 'Lead already converted to a deal' });
+    }
 
-      const dealId = uuidv4();
-      const activityId = uuidv4();
-      const now = new Date().toISOString();
-      const nextStepDate = new Date();
-      nextStepDate.setDate(nextStepDate.getDate() + 7); // Default 7 days
+    const dealId = uuidv4();
+    const activityId = uuidv4();
+    const now = new Date().toISOString();
+    const nextStepDate = new Date();
+    nextStepDate.setDate(nextStepDate.getDate() + 7); // Default 7 days
 
-      // Create the deal - copy all person fields from lead
-      db.run(`
-        INSERT INTO deals (
-          id, first_name, last_name, job_title, email, phone, linkedin_url,
-          company_name, industry, stage, estimated_value,
-          next_step_date, next_step_description, health_score, owner_id,
-          source, priority, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        dealId,
-        lead.first_name,
-        lead.last_name,
-        lead.job_title || null,
-        lead.email || null,
-        lead.phone || null,
-        lead.linkedin_url || null,
-        lead.company_name,
-        lead.industry,
-        'qualified', // Start as qualified since it came from Intent Scraper
-        0,
-        nextStepDate.toISOString().split('T')[0],
-        'Follow up from Intent Scraper lead',
-        50, // Default health score
-        userId,
-        'intent_scraper',
-        'medium',
-        now,
-        now
-      ], function(err) {
-        if (err) {
-          console.error('Error creating deal:', err);
-          return res.status(500).json({ error: 'Failed to create deal' });
-        }
+    // Create the deal - copy all person fields from lead
+    await run(`
+      INSERT INTO deals (
+        id, name, job_title, email, phone, linkedin_url,
+        company_name, industry, stage, estimated_value,
+        next_step_date, next_step_description, health_score, owner_id,
+        source, priority, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      dealId,
+      lead.name,
+      lead.job_title || null,
+      lead.email || null,
+      lead.phone || null,
+      lead.linkedin_url || null,
+      lead.company_name,
+      lead.industry,
+      'qualified', // Start as qualified since it came from Intent Scraper
+      0,
+      nextStepDate.toISOString().split('T')[0],
+      'Follow up from Intent Scraper lead',
+      50, // Default health score
+      userId,
+      'intent_scraper',
+      'medium',
+      now,
+      now
+    ]);
 
-        // Update lead with deal_id and status
-        db.run(`
-          UPDATE leads SET deal_id = ?, status = 'qualified', updated_at = ?
-          WHERE id = ?
-        `, [dealId, now, id], function(err) {
-          if (err) {
-            console.error('Error updating lead:', err);
-            return res.status(500).json({ error: 'Deal created but failed to update lead' });
-          }
+    // Update lead with deal_id and status
+    await run(`
+      UPDATE leads SET deal_id = ?, status = 'qualified', updated_at = ?
+      WHERE id = ?
+    `, [dealId, now, id]);
 
-          // Create activity for the deal
-          db.run(`
-            INSERT INTO activities (id, deal_id, activity_type, description, created_by, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `, [activityId, dealId, 'deal_created', `Deal created from Intent Scraper lead: ${lead.first_name} ${lead.last_name}`, userId, now], function(err) {
-            if (err) {
-              console.error('Error creating activity:', err);
-              // Don't fail the whole operation for this
-            }
+    // Create activity for the deal
+    try {
+      await run(`
+        INSERT INTO activities (id, deal_id, activity_type, description, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [activityId, dealId, 'deal_created', `Deal created from Intent Scraper lead: ${lead.name}`, userId, now]);
+    } catch (activityErr) {
+      console.error('Error creating activity:', activityErr);
+      // Don't fail the whole operation for this
+    }
 
-            db.get('SELECT * FROM deals WHERE id = ?', [dealId], (err, deal) => {
-              if (err) {
-                console.error('Error fetching deal:', err);
-                return res.status(500).json({ error: 'Deal created but failed to fetch' });
-              }
+    const deal = await get('SELECT * FROM deals WHERE id = ?', [dealId]);
 
-              res.status(201).json({
-                message: 'Lead converted to deal successfully',
-                deal
-              });
-            });
-          });
-        });
-      });
+    res.status(201).json({
+      message: 'Lead converted to deal successfully',
+      deal
     });
   } catch (error) {
     console.error('Error converting lead to deal:', error);

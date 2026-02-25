@@ -29,20 +29,21 @@ import {
   Mail,
   Phone,
   Linkedin,
-  ExternalLink
+  ExternalLink,
+  Globe
 } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 import DealResearchSection from './components/DealResearchSection';
 
 interface Deal {
   id: string;
-  first_name: string;
-  last_name: string;
+  name: string;
   job_title: string | null;
   email: string | null;
   phone: string | null;
   linkedin_url: string | null;
   company_name: string | null;
+  company_url: string | null;
   industry: string | null;
   stage: string;
   estimated_value: number | null;
@@ -198,7 +199,7 @@ export default function DealDetailPage() {
   }, [id, token]);
 
   const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to delete the deal for "${deal?.first_name} ${deal?.last_name}"?`)) {
+    if (!confirm(`Are you sure you want to delete the deal for "${deal?.name}"?`)) {
       return;
     }
 
@@ -448,7 +449,7 @@ export default function DealDetailPage() {
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold">{deal.first_name} {deal.last_name}</h2>
+              <h2 className="text-2xl font-bold">{deal.name}</h2>
               <span className={`px-2 py-1 rounded text-xs text-white ${stageColors[deal.stage] || 'bg-gray-500'}`}>
                 {stageLabels[deal.stage] || deal.stage}
               </span>
@@ -542,7 +543,17 @@ export default function DealDetailPage() {
                   </a>
                 </div>
               )}
-              {(deal.email || deal.phone || deal.linkedin_url || deal.job_title) && <div className="border-t" />}
+              {deal.company_url && (
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Website</p>
+                  <a href={deal.company_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline flex items-center gap-1">
+                    <Globe className="h-3 w-3" />
+                    {new URL(deal.company_url).hostname.replace('www.', '')}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              )}
+              {(deal.email || deal.phone || deal.linkedin_url || deal.job_title || deal.company_url) && <div className="border-t" />}
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Owner</p>
                 <p className="font-medium">{deal.owner_name || 'Unknown'}</p>
@@ -675,14 +686,15 @@ export default function DealDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Deep Research */}
-          {id && (
-            <DealResearchSection dealId={id} companyName={deal.company_name || ''} personName={`${deal.first_name} ${deal.last_name}`} />
-          )}
         </div>
 
-        {/* Center Column - Activity Feed Timeline (flexible) */}
+        {/* Center Column - Activity Feed + Research (flexible) */}
         <div className="space-y-6">
+          {/* Deep Research */}
+          {id && (
+            <DealResearchSection dealId={id} companyName={deal.company_name || ''} companyUrl={deal.company_url || ''} personName={deal.name} />
+          )}
+
           {/* Next Steps Card */}
           <Card>
             <CardHeader className="pb-3">
@@ -839,7 +851,7 @@ export default function DealDetailPage() {
             <CardHeader>
               <CardTitle>Transfer Deal</CardTitle>
               <CardDescription>
-                Transfer "{deal.first_name} {deal.last_name}" to another sales rep
+                Transfer "{deal.name}" to another sales rep
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

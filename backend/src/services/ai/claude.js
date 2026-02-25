@@ -38,11 +38,11 @@ ${channelConf.hasSubject ? '- Include a compelling subject line (max 80 characte
 - Output ONLY valid JSON, nothing else.`;
 }
 
-function buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext) {
+function buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase) {
   const sections = [];
 
   sections.push(`## Prospect Information
-- Name: ${leadData.first_name || ''} ${leadData.last_name || ''}`.trim() + `
+- Name: ${leadData.name || 'Unknown'}
 - Job Title: ${leadData.job_title || 'Unknown'}
 - Email: ${leadData.email || 'Unknown'}
 - Company: ${leadData.company_name}
@@ -122,6 +122,15 @@ function buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, 
     }
   }
 
+  if (knowledgeBase && knowledgeBase.length > 0) {
+    const kbEntries = knowledgeBase.map(kb => {
+      const contentLimit = kb.type === 'document' ? 3000 : 1000;
+      const content = (kb.content || '').substring(0, contentLimit);
+      return `### [${kb.type || 'document'}] ${kb.title}\n${content}`;
+    }).join('\n\n');
+    sections.push(`## Company Knowledge Base (use these materials to enrich the message)\n${kbEntries}`);
+  }
+
   if (additionalContext) {
     sections.push(`## Additional Context from Sales Rep\n${additionalContext}`);
   }
@@ -140,14 +149,14 @@ The message_body must be under ${channelConf.maxLength} characters.`);
   return `Generate a ${channelConf.label} message with a ${tone} tone for the following prospect:\n\n${sections.join('\n\n')}`;
 }
 
-export async function generateMessage({ leadData, researchData, socialProfiles, channel, tone, additionalContext }) {
+export async function generateMessage({ leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === 'your_anthropic_api_key_here') {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
   const systemPrompt = buildSystemPrompt(channel, tone);
-  const userPrompt = buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext);
+  const userPrompt = buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase);
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',

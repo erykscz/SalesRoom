@@ -130,9 +130,9 @@ export async function research(companyName, hints = {}) {
       })),
     };
 
-    // Try person GitHub search if first_name + last_name provided
-    if (hints.first_name && hints.last_name) {
-      const personQuery = `${hints.first_name} ${hints.last_name}`;
+    // Try person GitHub search if name provided
+    if (hints.name) {
+      const personQuery = hints.name;
       const searchResult = await fetchJson(`${GITHUB_BASE}/search/users?q=${encodeURIComponent(personQuery)}+type:user&per_page=3`);
       if (searchResult.ok && searchResult.data.total_count > 0) {
         const personLogin = searchResult.data.items[0].login;

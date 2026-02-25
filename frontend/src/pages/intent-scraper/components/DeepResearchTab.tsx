@@ -11,6 +11,7 @@ import ResearchPanel from './ResearchPanel';
 
 interface Lead {
   id: string;
+  name: string;
   company_name: string;
   industry: string | null;
   confidence_score: number;
@@ -165,7 +166,8 @@ export default function DeepResearchTab({ leads }: DeepResearchTabProps) {
   }
 
   const filteredLeads = leads.filter(l =>
-    l.company_name.toLowerCase().includes(searchFilter.toLowerCase())
+    l.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
+    l.company_name?.toLowerCase().includes(searchFilter.toLowerCase())
   );
 
   return (
@@ -202,9 +204,9 @@ export default function DeepResearchTab({ leads }: DeepResearchTabProps) {
                   }`}
                 >
                   <div>
-                    <span className="font-medium text-sm">{lead.company_name}</span>
-                    {lead.industry && (
-                      <span className="text-xs text-muted-foreground ml-2">{lead.industry}</span>
+                    <span className="font-medium text-sm">{lead.name}</span>
+                    {lead.company_name && (
+                      <span className="text-xs text-muted-foreground ml-2">{lead.company_name}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -225,9 +227,9 @@ export default function DeepResearchTab({ leads }: DeepResearchTabProps) {
           <CardContent className="pt-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold">{selectedLead.company_name}</h3>
+                <h3 className="font-semibold">{selectedLead.name}</h3>
                 <p className="text-sm text-muted-foreground">
-                  {selectedLead.industry || 'Unknown industry'} &middot; Confidence: {selectedLead.confidence_score}%
+                  {selectedLead.company_name && `${selectedLead.company_name} · `}{selectedLead.industry || 'Unknown industry'} &middot; Confidence: {selectedLead.confidence_score}%
                 </p>
               </div>
               <Button

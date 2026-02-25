@@ -1,5 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
 import { get, run, all } from '../db/database.js';
 import { sendSalesRoomViewNotification, sendSectionViewNotification } from '../utils/slack.js';
 
@@ -11,17 +12,17 @@ router.get('/:slug', async (req, res) => {
     const { slug } = req.params;
     const { role, password } = req.query;
 
-    console.log('Public sales room request for slug:', slug);
-
     const salesRoom = await get(
-      `SELECT sr.*, d.company_name as deal_company
+      `SELECT sr.*, d.company_name as deal_company,
+              u.name as creator_name, u.email as creator_email,
+              u.phone as creator_phone, u.job_title as creator_job_title,
+              u.avatar_url as creator_avatar_url
        FROM sales_rooms sr
        LEFT JOIN deals d ON sr.deal_id = d.id
+       LEFT JOIN users u ON sr.created_by = u.id
        WHERE sr.public_url_slug = ?`,
       [slug]
     );
-
-    console.log('Sales room query result:', salesRoom);
 
     if (!salesRoom) {
       return res.status(404).json({ error: 'Sales Room not found' });
@@ -128,9 +129,15 @@ router.get('/:slug', async (req, res) => {
     // Attach financial data to salesRoom for frontend
     salesRoom.roiData = financialData;
 
+    // Add attachment URL if exists
+    if (salesRoom.attachment_filename && salesRoom.attachment_path) {
+      salesRoom.attachment_url = `/api/uploads/${path.basename(salesRoom.attachment_path)}`;
+    }
+
     // Remove sensitive fields
     delete salesRoom.password_hash;
     delete salesRoom.created_by;
+    delete salesRoom.attachment_path;
 
     res.json({ salesRoom });
   } catch (error) {
@@ -338,9 +345,8 @@ router.post('/:slug/track', async (req, res) => {
       return res.status(410).json({ error: 'This Sales Room has expired' });
     }
 
-    // Validate section
-    const validSections = ['overview', 'cfo', 'cto', 'security', 'engineering', 'map', 'poll'];
-    if (!section || !validSections.includes(section)) {
+    // Validate section - allow any non-empty string (dynamic stakeholder sections)
+    if (!section || typeof section !== 'string' || section.length > 100) {
       return res.status(400).json({ error: 'Invalid section' });
     }
 

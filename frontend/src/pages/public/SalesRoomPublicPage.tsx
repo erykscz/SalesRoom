@@ -1,472 +1,13 @@
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '@/lib/api';
+import { type StakeholderSection } from '@/lib/sales-room-defaults';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Building2, Video, Calendar, MessageCircle, Check, Users, Shield, Code, DollarSign, Lock, AlertCircle, ThumbsUp, ThumbsDown, Minus, BarChart3, X, Send } from 'lucide-react';
+import { Loader2, Building2, Video, Calendar, MessageCircle, Check, Users, DollarSign, Lock, AlertCircle, ThumbsUp, ThumbsDown, Minus, BarChart3, X, Send, Download, FileText, Mail, Phone, User } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
-
-// Default stakeholder content based on template type
-const getDefaultSectionContent = (section: string, templateType: string) => {
-  const defaultContent: Record<string, Record<string, { title: string; content: string }>> = {
-    cfo: {
-      legacy_modernization: {
-        title: 'ROI Analysis - Legacy Modernization',
-        content: `**Investment Overview**
-
-Our legacy modernization approach delivers measurable financial returns:
-
-• **Cost Reduction**: Reduce maintenance costs by 40-60% by replacing outdated systems
-• **Operational Efficiency**: Decrease manual processes by 70% through automation
-• **Risk Mitigation**: Eliminate costly outages and security vulnerabilities
-
-**Financial Projections**
-
-Based on typical modernization projects:
-- Year 1: Investment phase with 20% efficiency gains
-- Year 2: Break-even point with 35% cost savings
-- Year 3+: 150-200% ROI through ongoing operational savings
-
-**Total Cost of Ownership (TCO)**
-
-We help you analyze the true cost of maintaining legacy systems vs. modernization, including:
-- Infrastructure costs
-- Personnel costs (specialized legacy skills)
-- Opportunity costs (inability to innovate)
-- Compliance and security risks`
-      },
-      cloud_migration: {
-        title: 'ROI Analysis - Cloud Migration',
-        content: `**Financial Benefits of Cloud Migration**
-
-• **CapEx to OpEx Shift**: Convert large upfront investments into predictable monthly costs
-• **Infrastructure Savings**: Reduce hardware and maintenance costs by 30-50%
-• **Scalability**: Pay only for what you use, scaling resources as needed
-
-**Key Financial Metrics**
-
-- Average 23% reduction in total IT spending
-- 57% faster time-to-market for new features
-- 99.99% uptime SLA protecting revenue
-
-**ROI Calculator Inputs**
-
-Consider these factors for your ROI calculation:
-- Current infrastructure costs
-- Personnel costs for on-premise management
-- Downtime costs and business impact
-- Growth projections and scalability needs`
-      },
-      staff_augmentation: {
-        title: 'ROI Analysis - Staff Augmentation',
-        content: `**Cost-Effective Talent Acquisition**
-
-• **No Recruitment Costs**: Eliminate hiring fees and lengthy recruitment processes
-• **Flexible Engagement**: Scale team up or down based on project needs
-• **Reduced Overhead**: No benefits, training, or equipment costs
-
-**Financial Comparison**
-
-Staff Augmentation vs. Full-Time Hire:
-- 35% lower total cost for 12-month projects
-- Zero ramp-up time for experienced professionals
-- No severance or transition costs
-
-**Budget Predictability**
-
-Fixed monthly rates with no hidden costs:
-- Transparent pricing model
-- Predictable project budgets
-- No surprise expenses`
-      },
-      custom: {
-        title: 'ROI Analysis',
-        content: `**Financial Overview**
-
-Our solution delivers measurable business value:
-
-• **Cost Savings**: Reduce operational costs through efficiency improvements
-• **Revenue Growth**: Enable new revenue streams and faster time-to-market
-• **Risk Reduction**: Minimize costly downtime and security incidents
-
-**Expected Returns**
-
-- Positive ROI within 12-18 months
-- Ongoing annual savings of 25-40%
-- Reduced operational risk exposure
-
-Contact us for a customized ROI analysis based on your specific situation.`
-      }
-    },
-    cto: {
-      legacy_modernization: {
-        title: 'Technical Specifications - Legacy Modernization',
-        content: `**Architecture Approach**
-
-Our modernization strategy follows industry best practices:
-
-• **Strangler Fig Pattern**: Gradually replace legacy components without big-bang migrations
-• **API-First Design**: Create clean interfaces between old and new systems
-• **Microservices Architecture**: Enable independent scaling and deployment
-
-**Technology Stack**
-
-Recommended modern stack:
-- Backend: Node.js / Python / Go with containerization (Docker/Kubernetes)
-- Frontend: React / Vue.js with modern tooling
-- Database: PostgreSQL with proper indexing and caching (Redis)
-- CI/CD: GitHub Actions / GitLab CI with automated testing
-
-**Migration Strategy**
-
-1. Assessment & Discovery
-2. Architecture Design
-3. Incremental Migration
-4. Testing & Validation
-5. Cutover & Optimization
-
-**Technical Debt Reduction**
-
-Our approach systematically eliminates:
-- Deprecated dependencies
-- Security vulnerabilities
-- Performance bottlenecks
-- Documentation gaps`
-      },
-      cloud_migration: {
-        title: 'Technical Specifications - Cloud Architecture',
-        content: `**Cloud Architecture Design**
-
-Our cloud-native approach ensures scalability and resilience:
-
-• **Multi-Region Deployment**: Geographic redundancy for high availability
-• **Auto-Scaling**: Dynamic resource allocation based on demand
-• **Infrastructure as Code**: Reproducible, version-controlled environments
-
-**Recommended Cloud Services**
-
-- Compute: Kubernetes (EKS/GKE/AKS) for container orchestration
-- Storage: Object storage + managed databases (RDS/Cloud SQL)
-- Networking: VPC with proper security groups and load balancing
-- Monitoring: CloudWatch / Prometheus + Grafana
-
-**Security Architecture**
-
-- Zero-trust network design
-- Encryption at rest and in transit
-- IAM with least-privilege access
-- Automated vulnerability scanning
-
-**DevOps Integration**
-
-- GitOps workflow for deployments
-- Blue-green and canary deployment strategies
-- Automated rollback capabilities`
-      },
-      staff_augmentation: {
-        title: 'Technical Expertise',
-        content: `**Available Technical Skills**
-
-Our team covers the full technology spectrum:
-
-**Backend Development**
-- Node.js, Python, Java, Go, .NET
-- RESTful APIs, GraphQL, gRPC
-- Microservices and serverless architectures
-
-**Frontend Development**
-- React, Vue.js, Angular
-- TypeScript, modern CSS frameworks
-- Mobile development (React Native, Flutter)
-
-**DevOps & Infrastructure**
-- Kubernetes, Docker, Terraform
-- AWS, Azure, GCP certifications
-- CI/CD pipeline design and implementation
-
-**Data Engineering**
-- SQL and NoSQL databases
-- Data pipelines and ETL
-- Analytics and reporting
-
-**Quality Assurance**
-- Automated testing frameworks
-- Performance testing
-- Security testing`
-      },
-      custom: {
-        title: 'Technical Specifications',
-        content: `**Technical Approach**
-
-Our solution is built on proven technologies:
-
-• **Modern Architecture**: Scalable, maintainable, and secure design
-• **Best Practices**: Industry-standard development methodologies
-• **Integration Ready**: APIs and connectors for your existing systems
-
-**Key Technical Features**
-
-- High availability (99.9%+ uptime)
-- Comprehensive API documentation
-- Security-first design principles
-- Performance optimization
-
-Contact our technical team for detailed architecture discussions.`
-      }
-    },
-    security: {
-      legacy_modernization: {
-        title: 'Security & Compliance - Legacy Modernization',
-        content: `**Security Improvements**
-
-Legacy modernization addresses critical security gaps:
-
-• **Vulnerability Remediation**: Eliminate known CVEs in outdated systems
-• **Modern Authentication**: Implement OAuth 2.0, SAML, and MFA
-• **Encryption Standards**: TLS 1.3, AES-256 encryption at rest
-
-**Compliance Frameworks**
-
-Our approach supports compliance with:
-- SOC 2 Type II
-- ISO 27001
-- GDPR / CCPA
-- HIPAA (healthcare)
-- PCI-DSS (payments)
-
-**Security Controls**
-
-- Automated security scanning in CI/CD
-- Regular penetration testing
-- Security incident response procedures
-- Access control and audit logging
-
-**Data Protection**
-
-- Data classification and handling procedures
-- Backup and disaster recovery
-- Data retention and deletion policies`
-      },
-      cloud_migration: {
-        title: 'Cloud Security & Compliance',
-        content: `**Cloud Security Framework**
-
-Enterprise-grade security for cloud environments:
-
-• **Shared Responsibility Model**: Clear understanding of security boundaries
-• **Cloud-Native Security**: Leverage provider security services
-• **Compliance Automation**: Continuous compliance monitoring
-
-**Certifications & Compliance**
-
-Cloud providers maintain:
-- SOC 1, SOC 2, SOC 3
-- ISO 27001, 27017, 27018
-- FedRAMP (government)
-- Industry-specific certifications
-
-**Security Architecture**
-
-- Network segmentation and micro-segmentation
-- Web Application Firewall (WAF)
-- DDoS protection
-- Secrets management (Vault, KMS)
-
-**Monitoring & Response**
-
-- 24/7 security monitoring
-- SIEM integration
-- Automated threat detection
-- Incident response playbooks`
-      },
-      staff_augmentation: {
-        title: 'Security & Compliance',
-        content: `**Security Practices**
-
-All our team members follow strict security protocols:
-
-• **Background Checks**: Comprehensive screening for all personnel
-• **Security Training**: Regular security awareness training
-• **NDA Agreements**: Strict confidentiality requirements
-
-**Access Controls**
-
-- Least-privilege access principles
-- Time-limited access grants
-- Full audit logging
-- Regular access reviews
-
-**Data Handling**
-
-- Secure development practices
-- No data retention beyond project needs
-- Secure communication channels
-- Encrypted storage and transmission
-
-**Compliance Support**
-
-Our teams are experienced with:
-- SOC 2 audits
-- ISO 27001 implementations
-- GDPR compliance
-- Industry-specific regulations`
-      },
-      custom: {
-        title: 'Security & Compliance',
-        content: `**Security Commitment**
-
-We prioritize security at every level:
-
-• **Data Protection**: Industry-standard encryption and access controls
-• **Compliance**: Support for major regulatory frameworks
-• **Transparency**: Regular security assessments and reporting
-
-**Key Security Features**
-
-- Multi-factor authentication
-- Role-based access control
-- Audit logging and monitoring
-- Regular security updates
-
-**Certifications**
-
-- SOC 2 Type II compliant
-- GDPR compliant
-- Industry-specific compliance available
-
-Contact our security team for detailed compliance documentation.`
-      }
-    },
-    engineering: {
-      legacy_modernization: {
-        title: 'Developer Experience - Legacy Modernization',
-        content: `**Improved Developer Productivity**
-
-Modern systems enable faster, more enjoyable development:
-
-• **Modern Tooling**: Replace outdated IDEs and build systems
-• **Fast Feedback Loops**: Hot reload, quick test execution
-• **Clear Documentation**: Auto-generated API docs and guides
-
-**Technical Debt Resolution**
-
-We help eliminate:
-- Spaghetti code and circular dependencies
-- Outdated libraries and frameworks
-- Inconsistent coding standards
-- Missing tests and documentation
-
-**Development Environment**
-
-- Containerized local development
-- Consistent dev/prod parity
-- Easy onboarding for new developers
-- Reproducible builds
-
-**CI/CD Pipeline**
-
-- Automated testing (unit, integration, e2e)
-- Code quality gates
-- Automated deployments
-- Feature flags for safe releases`
-      },
-      cloud_migration: {
-        title: 'Developer Experience - Cloud Native',
-        content: `**Cloud-Native Development**
-
-Modern cloud platforms enhance developer experience:
-
-• **Infrastructure as Code**: Version-controlled, reproducible environments
-• **Self-Service Platforms**: Developers can provision resources on demand
-• **Observability**: Full visibility into application behavior
-
-**Development Workflow**
-
-- GitOps-based deployments
-- Preview environments for PRs
-- Automated testing and validation
-- One-click rollbacks
-
-**Developer Tools**
-
-- Cloud IDE support
-- Local cloud emulation
-- Integrated debugging
-- Performance profiling
-
-**Documentation & Onboarding**
-
-- Architecture decision records (ADRs)
-- Runbooks for common operations
-- API documentation
-- Video tutorials and knowledge base`
-      },
-      staff_augmentation: {
-        title: 'Team Integration',
-        content: `**Seamless Team Integration**
-
-Our engineers integrate smoothly with your team:
-
-• **Agile Ready**: Experience with Scrum, Kanban, and hybrid methodologies
-• **Communication**: Daily standups, clear status updates
-• **Knowledge Transfer**: Documentation and pair programming
-
-**Collaboration Tools**
-
-We adapt to your toolset:
-- Project Management: Jira, Linear, Asana
-- Communication: Slack, Teams, Discord
-- Code: GitHub, GitLab, Bitbucket
-- Documentation: Confluence, Notion
-
-**Best Practices**
-
-Our engineers follow:
-- Clean code principles
-- Test-driven development
-- Code review standards
-- Continuous improvement mindset
-
-**Knowledge Sharing**
-
-- Regular tech talks and demos
-- Documentation as code
-- Pair programming sessions
-- Architecture reviews`
-      },
-      custom: {
-        title: 'Developer Experience',
-        content: `**Development Best Practices**
-
-We deliver solutions that your team will love to maintain:
-
-• **Clean Code**: Readable, maintainable, and well-documented
-• **Modern Stack**: Up-to-date technologies with long-term support
-• **Automation**: CI/CD pipelines and infrastructure as code
-
-**Key Benefits**
-
-- Faster onboarding for new team members
-- Reduced time-to-market for new features
-- Lower maintenance overhead
-- Better developer satisfaction
-
-**Support & Documentation**
-
-- Comprehensive technical documentation
-- Training materials and workshops
-- Ongoing support options
-
-Contact us to discuss how we can improve your development workflow.`
-      }
-    }
-  };
-
-  const sectionContent = defaultContent[section]?.[templateType] || defaultContent[section]?.custom;
-  return sectionContent || { title: section.toUpperCase(), content: 'Content for this section is being prepared.' };
-};
 
 // Format currency
 function formatCurrency(amount: number): string {
@@ -590,32 +131,22 @@ function ROICalculator({ roiData }: { roiData: ROIData }) {
   );
 }
 
-// Stakeholder Section Component
-function StakeholderSection({
+// Dynamic Stakeholder Section Component
+function DynamicSection({
   section,
-  customContent,
-  templateType,
   roiData
 }: {
-  section: string;
-  customContent?: { title: string; content: string };
-  templateType: string;
+  section: StakeholderSection;
   roiData?: ROIData | null;
 }) {
-  // Use custom content if provided, otherwise use default based on template
-  const content = customContent || getDefaultSectionContent(section, templateType);
-
   // Render markdown-like content with basic formatting
   const renderContent = (text: string) => {
     return text.split('\n').map((line, i) => {
-      // Handle headers
       if (line.startsWith('**') && line.endsWith('**')) {
         return <h4 key={i} className="font-semibold text-lg mt-4 mb-2">{line.slice(2, -2)}</h4>;
       }
-      // Handle bullet points
       if (line.startsWith('• ') || line.startsWith('- ')) {
         const bulletText = line.slice(2);
-        // Handle bold within bullet
         const parts = bulletText.split(/(\*\*[^*]+\*\*)/g);
         return (
           <li key={i} className="ml-4 mb-1">
@@ -627,11 +158,9 @@ function StakeholderSection({
           </li>
         );
       }
-      // Handle empty lines
       if (line.trim() === '') {
         return <div key={i} className="h-2" />;
       }
-      // Regular paragraph with bold support
       const parts = line.split(/(\*\*[^*]+\*\*)/g);
       return (
         <p key={i} className="mb-2">
@@ -645,26 +174,22 @@ function StakeholderSection({
     });
   };
 
+  const isCfoLike = section.key === 'cfo' || section.key.includes('finance') || section.key.includes('cfo');
+
   return (
     <div className="space-y-6">
-      {/* Show ROI Calculator for CFO section if financial data exists */}
-      {section === 'cfo' && roiData && roiData.hasFinancialData && (
+      {/* Show ROI Calculator for CFO-like section if financial data exists */}
+      {isCfoLike && roiData && roiData.hasFinancialData && (
         <ROICalculator roiData={roiData} />
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {section === 'cfo' && <DollarSign className="h-5 w-5 text-blue-600" />}
-            {section === 'cto' && <Code className="h-5 w-5 text-green-600" />}
-            {section === 'security' && <Shield className="h-5 w-5 text-purple-600" />}
-            {section === 'engineering' && <Users className="h-5 w-5 text-orange-600" />}
-            {content.title}
-          </CardTitle>
+          <CardTitle>{section.title}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="prose dark:prose-invert max-w-none">
-            {renderContent(content.content)}
+            {renderContent(section.content)}
           </div>
         </CardContent>
       </Card>
@@ -698,12 +223,7 @@ interface SalesRoom {
   template_type: string;
   public_url_slug: string;
   offer_content: string | null;
-  sections: {
-    cfo?: { title: string; content: string };
-    cto?: { title: string; content: string };
-    security?: { title: string; content: string };
-    engineering?: { title: string; content: string };
-  } | null;
+  sections: StakeholderSection[] | null;
   chatbot_enabled: boolean;
   video_url: string | null;
   calendly_link: string | null;
@@ -723,6 +243,17 @@ interface SalesRoom {
   is_expired: boolean;
   password_protected: boolean;
   roiData: ROIData | null;
+  // Creator contact
+  creator_name: string | null;
+  creator_email: string | null;
+  creator_phone: string | null;
+  creator_job_title: string | null;
+  creator_avatar_url: string | null;
+  // Attachment
+  attachment_filename: string | null;
+  attachment_url: string | null;
+  attachment_mimetype: string | null;
+  attachment_size: number | null;
 }
 
 export default function SalesRoomPublicPage() {
@@ -852,7 +383,6 @@ export default function SalesRoomPublicPage() {
   };
 
   useEffect(() => {
-    // Track section view when section changes (after initial load)
     if (salesRoom && activeSection !== 'overview') {
       trackSectionView(activeSection);
     }
@@ -893,9 +423,7 @@ export default function SalesRoomPublicPage() {
 
       if (response.ok) {
         setPollSubmitted(true);
-        // Fetch results after submission
         await fetchPollResults();
-        // Track poll interaction
         trackSectionView('poll');
       }
     } catch (err) {
@@ -979,7 +507,13 @@ export default function SalesRoomPublicPage() {
   }
 
   const branding = salesRoom.branding || {};
-  const primaryColor = branding.primary_color || '#2563eb';
+  const sections = salesRoom.sections || [];
+
+  // Build dynamic tab list: Overview + dynamic stakeholder sections
+  const tabs = [
+    { key: 'overview', label: 'Overview' },
+    ...sections.map(s => ({ key: s.key, label: `For ${s.label}` })),
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -1015,24 +549,20 @@ export default function SalesRoomPublicPage() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* Navigation Tabs - Dynamic */}
         <div className="max-w-6xl mx-auto px-4">
           <nav className="flex overflow-x-auto gap-1 pb-px">
-            {['overview', 'cfo', 'cto', 'security', 'engineering'].map((section) => (
+            {tabs.map((tab) => (
               <button
-                key={section}
-                onClick={() => setActiveSection(section)}
-                className={`px-4 py-3 text-sm font-medium capitalize whitespace-nowrap border-b-2 transition-colors ${
-                  activeSection === section
+                key={tab.key}
+                onClick={() => setActiveSection(tab.key)}
+                className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                  activeSection === tab.key
                     ? 'border-blue-500 text-white'
                     : 'border-transparent text-slate-400 hover:text-white hover:border-slate-600'
                 }`}
               >
-                {section === 'cfo' ? 'For CFO' :
-                 section === 'cto' ? 'For CTO' :
-                 section === 'security' ? 'For Security' :
-                 section === 'engineering' ? 'For Engineering' :
-                 'Overview'}
+                {tab.label}
               </button>
             ))}
           </nav>
@@ -1043,6 +573,49 @@ export default function SalesRoomPublicPage() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         {activeSection === 'overview' && (
           <div className="space-y-8">
+            {/* Creator Contact Card */}
+            {salesRoom.creator_name && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Your Contact
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-4">
+                    {salesRoom.creator_avatar_url ? (
+                      <img src={salesRoom.creator_avatar_url} alt={salesRoom.creator_name} className="h-14 w-14 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
+                        {salesRoom.creator_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p className="font-semibold text-lg">{salesRoom.creator_name}</p>
+                      {salesRoom.creator_job_title && (
+                        <p className="text-sm text-muted-foreground">{salesRoom.creator_job_title}</p>
+                      )}
+                      <div className="flex flex-wrap gap-3 mt-2">
+                        {salesRoom.creator_email && (
+                          <a href={`mailto:${salesRoom.creator_email}`} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                            <Mail className="h-4 w-4" />
+                            {salesRoom.creator_email}
+                          </a>
+                        )}
+                        {salesRoom.creator_phone && (
+                          <a href={`tel:${salesRoom.creator_phone}`} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                            <Phone className="h-4 w-4" />
+                            {salesRoom.creator_phone}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Video Message */}
             {salesRoom.video_url && (
               <Card>
@@ -1054,20 +627,15 @@ export default function SalesRoomPublicPage() {
                 </CardHeader>
                 <CardContent>
                   {(() => {
-                    // Convert Loom share URL to embed URL
                     const getLoomEmbedUrl = (url: string) => {
-                      // Loom share URLs: https://www.loom.com/share/abc123
-                      // Loom embed URLs: https://www.loom.com/embed/abc123
                       const loomMatch = url.match(/loom\.com\/share\/([a-zA-Z0-9]+)/);
                       if (loomMatch) {
                         return `https://www.loom.com/embed/${loomMatch[1]}`;
                       }
-                      // YouTube URLs
                       const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
                       if (ytMatch) {
                         return `https://www.youtube.com/embed/${ytMatch[1]}`;
                       }
-                      // Return original for other URLs
                       return url;
                     };
                     const embedUrl = getLoomEmbedUrl(salesRoom.video_url);
@@ -1114,61 +682,59 @@ export default function SalesRoomPublicPage() {
               </Card>
             )}
 
-            {/* Quick Stats */}
-            <div className="grid md:grid-cols-4 gap-4">
+            {/* Offer Document Download */}
+            {salesRoom.attachment_filename && salesRoom.attachment_url && (
               <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <DollarSign className="h-5 w-5 text-blue-600" />
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Offer Document
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-8 w-8 text-blue-500" />
+                      <div>
+                        <p className="font-medium">{salesRoom.attachment_filename}</p>
+                        {salesRoom.attachment_size && (
+                          <p className="text-sm text-muted-foreground">
+                            {(salesRoom.attachment_size / 1024 / 1024).toFixed(1)} MB
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">For CFO</p>
-                      <p className="font-semibold">ROI Analysis</p>
-                    </div>
+                    <a href={salesRoom.attachment_url} download={salesRoom.attachment_filename} target="_blank" rel="noopener noreferrer">
+                      <Button>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                    </a>
                   </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Code className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">For CTO</p>
-                      <p className="font-semibold">Technical Specs</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <Shield className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">For Security</p>
-                      <p className="font-semibold">Compliance</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-100 rounded-lg">
-                      <Users className="h-5 w-5 text-orange-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">For Engineering</p>
-                      <p className="font-semibold">Dev Experience</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            )}
+
+            {/* Quick Stats - Dynamic stakeholder sections */}
+            {sections.length > 0 && (
+              <div className={`grid gap-4 ${sections.length >= 4 ? 'md:grid-cols-4' : sections.length === 3 ? 'md:grid-cols-3' : sections.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
+                {sections.map((section) => (
+                  <Card key={section.key} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setActiveSection(section.key)}>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                          <Users className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">For {section.label}</p>
+                          <p className="font-semibold truncate">{section.title}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
 
             {/* Mutual Action Plan */}
             {salesRoom.mutual_action_plan && salesRoom.mutual_action_plan.length > 0 && (
@@ -1190,7 +756,6 @@ export default function SalesRoomPublicPage() {
                             body: JSON.stringify({ completed: !item.completed })
                           });
                           if (response.ok) {
-                            // Update local state
                             setSalesRoom(prev => {
                               if (!prev || !prev.mutual_action_plan) return prev;
                               return {
@@ -1234,15 +799,17 @@ export default function SalesRoomPublicPage() {
           </div>
         )}
 
-        {/* Section Content */}
-        {activeSection !== 'overview' && (
-          <StakeholderSection
-            section={activeSection}
-            customContent={salesRoom.sections?.[activeSection as keyof typeof salesRoom.sections]}
-            templateType={salesRoom.template_type}
-            roiData={salesRoom.roiData}
-          />
-        )}
+        {/* Dynamic Section Content */}
+        {activeSection !== 'overview' && (() => {
+          const section = sections.find(s => s.key === activeSection);
+          if (!section) return null;
+          return (
+            <DynamicSection
+              section={section}
+              roiData={salesRoom.roiData}
+            />
+          );
+        })()}
 
         {/* Calendly Integration */}
         {salesRoom.calendly_link && (
@@ -1420,7 +987,6 @@ export default function SalesRoomPublicPage() {
                 </Button>
               </CardHeader>
               <CardContent className="p-0">
-                {/* Chat Messages */}
                 <div className="h-72 overflow-y-auto p-4 space-y-3 bg-muted/30">
                   {chatMessages.length === 0 && (
                     <div className="text-center text-muted-foreground text-sm py-8">
@@ -1454,7 +1020,6 @@ export default function SalesRoomPublicPage() {
                   )}
                   <div ref={chatEndRef} />
                 </div>
-                {/* Chat Input */}
                 <div className="border-t p-3 flex gap-2">
                   <Input
                     placeholder="Type your question..."

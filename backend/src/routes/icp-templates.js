@@ -1,11 +1,11 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import db from '../db/database.js';
+import { run, get, all } from '../db/database.js';
 
 const router = express.Router();
 
 // GET /api/icp-templates - List all ICP templates
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const userId = req.user.id;
   const userRole = req.user.role;
   const { search } = req.query;
@@ -25,11 +25,8 @@ router.get('/', (req, res) => {
 
   sql += ' ORDER BY t.created_at DESC';
 
-  db.all(sql, params, (err, templates) => {
-    if (err) {
-      console.error('Error fetching ICP templates:', err);
-      return res.status(500).json({ error: 'Failed to fetch ICP templates' });
-    }
+  try {
+    const templates = await all(sql, params);
 
     // Parse criteria JSON for each template
     const parsedTemplates = templates.map(t => ({
@@ -39,11 +36,14 @@ router.get('/', (req, res) => {
     }));
 
     res.json({ templates: parsedTemplates });
-  });
+  } catch (err) {
+    console.error('Error fetching ICP templates:', err);
+    return res.status(500).json({ error: 'Failed to fetch ICP templates' });
+  }
 });
 
 // GET /api/icp-templates/:id - Get single ICP template
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
   const userRole = req.user.role;
@@ -55,11 +55,8 @@ router.get('/:id', (req, res) => {
     WHERE t.id = ? AND (t.owner_id = ? OR t.is_shared = 1 OR ? IN ('admin', 'manager'))
   `;
 
-  db.get(sql, [id, userId, userRole], (err, template) => {
-    if (err) {
-      console.error('Error fetching ICP template:', err);
-      return res.status(500).json({ error: 'Failed to fetch ICP template' });
-    }
+  try {
+    const template = await get(sql, [id, userId, userRole]);
 
     if (!template) {
       return res.status(404).json({ error: 'ICP template not found' });
@@ -70,11 +67,14 @@ router.get('/:id', (req, res) => {
       criteria: template.criteria ? JSON.parse(template.criteria) : {},
       is_shared: Boolean(template.is_shared)
     });
-  });
+  } catch (err) {
+    console.error('Error fetching ICP template:', err);
+    return res.status(500).json({ error: 'Failed to fetch ICP template' });
+  }
 });
 
 // POST /api/icp-templates - Create new ICP template
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { name, description, criteria, is_shared } = req.body;
   const userId = req.user.id;
 
@@ -94,20 +94,17 @@ router.post('/', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
-  db.run(sql, [
-    id,
-    name.trim(),
-    description || null,
-    JSON.stringify(criteria),
-    is_shared ? 1 : 0,
-    userId,
-    now,
-    now
-  ], function(err) {
-    if (err) {
-      console.error('Error creating ICP template:', err);
-      return res.status(500).json({ error: 'Failed to create ICP template' });
-    }
+  try {
+    await run(sql, [
+      id,
+      name.trim(),
+      description || null,
+      JSON.stringify(criteria),
+      is_shared ? 1 : 0,
+      userId,
+      now,
+      now
+    ]);
 
     res.status(201).json({
       id,
@@ -119,22 +116,22 @@ router.post('/', (req, res) => {
       created_at: now,
       updated_at: now
     });
-  });
+  } catch (err) {
+    console.error('Error creating ICP template:', err);
+    return res.status(500).json({ error: 'Failed to create ICP template' });
+  }
 });
 
 // PUT /api/icp-templates/:id - Update ICP template
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const { name, description, criteria, is_shared } = req.body;
   const userId = req.user.id;
   const userRole = req.user.role;
 
-  // First check if template exists and user has permission
-  db.get('SELECT * FROM icp_templates WHERE id = ?', [id], (err, template) => {
-    if (err) {
-      console.error('Error fetching ICP template:', err);
-      return res.status(500).json({ error: 'Failed to fetch ICP template' });
-    }
+  try {
+    // First check if template exists and user has permission
+    const template = await get('SELECT * FROM icp_templates WHERE id = ?', [id]);
 
     if (!template) {
       return res.status(404).json({ error: 'ICP template not found' });
@@ -157,44 +154,39 @@ router.put('/:id', (req, res) => {
       WHERE id = ?
     `;
 
-    db.run(updateSql, [
+    await run(updateSql, [
       name.trim(),
       description || null,
       criteria ? JSON.stringify(criteria) : template.criteria,
       is_shared !== undefined ? (is_shared ? 1 : 0) : template.is_shared,
       now,
       id
-    ], function(err) {
-      if (err) {
-        console.error('Error updating ICP template:', err);
-        return res.status(500).json({ error: 'Failed to update ICP template' });
-      }
+    ]);
 
-      res.json({
-        id,
-        name: name.trim(),
-        description,
-        criteria: criteria || JSON.parse(template.criteria),
-        is_shared: is_shared !== undefined ? Boolean(is_shared) : Boolean(template.is_shared),
-        owner_id: template.owner_id,
-        updated_at: now
-      });
+    res.json({
+      id,
+      name: name.trim(),
+      description,
+      criteria: criteria || JSON.parse(template.criteria),
+      is_shared: is_shared !== undefined ? Boolean(is_shared) : Boolean(template.is_shared),
+      owner_id: template.owner_id,
+      updated_at: now
     });
-  });
+  } catch (err) {
+    console.error('Error updating ICP template:', err);
+    return res.status(500).json({ error: 'Failed to update ICP template' });
+  }
 });
 
 // DELETE /api/icp-templates/:id - Delete ICP template
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
   const userRole = req.user.role;
 
-  // First check if template exists and user has permission
-  db.get('SELECT * FROM icp_templates WHERE id = ?', [id], (err, template) => {
-    if (err) {
-      console.error('Error fetching ICP template:', err);
-      return res.status(500).json({ error: 'Failed to fetch ICP template' });
-    }
+  try {
+    // First check if template exists and user has permission
+    const template = await get('SELECT * FROM icp_templates WHERE id = ?', [id]);
 
     if (!template) {
       return res.status(404).json({ error: 'ICP template not found' });
@@ -205,15 +197,13 @@ router.delete('/:id', (req, res) => {
       return res.status(403).json({ error: 'You can only delete your own templates' });
     }
 
-    db.run('DELETE FROM icp_templates WHERE id = ?', [id], function(err) {
-      if (err) {
-        console.error('Error deleting ICP template:', err);
-        return res.status(500).json({ error: 'Failed to delete ICP template' });
-      }
+    await run('DELETE FROM icp_templates WHERE id = ?', [id]);
 
-      res.json({ message: 'ICP template deleted successfully' });
-    });
-  });
+    res.json({ message: 'ICP template deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting ICP template:', err);
+    return res.status(500).json({ error: 'Failed to delete ICP template' });
+  }
 });
 
 export default router;

@@ -10,13 +10,13 @@ import { API_URL } from '@/lib/api';
 
 interface Deal {
   id: string;
-  first_name: string;
-  last_name: string;
+  name: string;
   job_title: string | null;
   email: string | null;
   phone: string | null;
   linkedin_url: string | null;
   company_name: string | null;
+  company_url: string | null;
   industry: string | null;
   stage: string;
   estimated_value: number | null;
@@ -32,13 +32,13 @@ interface Deal {
 }
 
 interface DealForm {
-  first_name: string;
-  last_name: string;
+  name: string;
   job_title: string;
   email: string;
   phone: string;
   linkedin_url: string;
   company_name: string;
+  company_url: string;
   industry: string;
   stage: string;
   estimated_value: string;
@@ -76,13 +76,13 @@ export default function DealEditPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<DealForm>({
-    first_name: '',
-    last_name: '',
+    name: '',
     job_title: '',
     email: '',
     phone: '',
     linkedin_url: '',
     company_name: '',
+    company_url: '',
     industry: '',
     stage: 'new_signal',
     estimated_value: '',
@@ -113,13 +113,13 @@ export default function DealEditPage() {
         const deal: Deal = data.deal;
 
         setForm({
-          first_name: deal.first_name || '',
-          last_name: deal.last_name || '',
+          name: deal.name || '',
           job_title: deal.job_title || '',
           email: deal.email || '',
           phone: deal.phone || '',
           linkedin_url: deal.linkedin_url || '',
           company_name: deal.company_name || '',
+          company_url: deal.company_url || '',
           industry: deal.industry || '',
           stage: deal.stage || 'new_signal',
           estimated_value: deal.estimated_value?.toString() || '',
@@ -158,13 +158,8 @@ export default function DealEditPage() {
     e.preventDefault();
     setError(null);
 
-    if (!form.first_name.trim()) {
-      setError('First name is required');
-      return;
-    }
-
-    if (!form.last_name.trim()) {
-      setError('Last name is required');
+    if (!form.name.trim()) {
+      setError('Name is required');
       return;
     }
 
@@ -177,13 +172,13 @@ export default function DealEditPage() {
       setSaving(true);
 
       const payload = {
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
+        name: form.name.trim(),
         job_title: form.job_title.trim() || null,
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
         linkedin_url: form.linkedin_url.trim() || null,
         company_name: form.company_name.trim() || null,
+        company_url: form.company_url.trim() || null,
         industry: form.industry.trim() || null,
         stage: form.stage,
         estimated_value: form.estimated_value ? parseFloat(form.estimated_value) : null,
@@ -265,24 +260,13 @@ export default function DealEditPage() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="first_name">First Name *</Label>
+                  <Label htmlFor="name">Name *</Label>
                   <Input
-                    id="first_name"
-                    name="first_name"
-                    value={form.first_name}
+                    id="name"
+                    name="name"
+                    value={form.name}
                     onChange={handleChange}
-                    placeholder="John"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="last_name">Last Name *</Label>
-                  <Input
-                    id="last_name"
-                    name="last_name"
-                    value={form.last_name}
-                    onChange={handleChange}
-                    placeholder="Smith"
+                    placeholder="John Smith"
                     required
                   />
                 </div>
@@ -342,6 +326,19 @@ export default function DealEditPage() {
                   value={form.company_name}
                   onChange={handleChange}
                   placeholder="Acme Corp"
+                />
+              </div>
+
+              {/* Company Website */}
+              <div className="space-y-2">
+                <Label htmlFor="company_url">Company Website</Label>
+                <Input
+                  id="company_url"
+                  name="company_url"
+                  type="url"
+                  value={form.company_url}
+                  onChange={handleChange}
+                  placeholder="https://acme.com"
                 />
               </div>
 

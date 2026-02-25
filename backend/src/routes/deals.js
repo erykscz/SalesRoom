@@ -69,10 +69,10 @@ router.get('/', async (req, res) => {
 
     // Filter by search term
     if (search) {
-      sql += ' AND (d.company_name LIKE ? OR d.industry LIKE ? OR d.first_name LIKE ? OR d.last_name LIKE ? OR d.email LIKE ?)';
-      countSql += ' AND (d.company_name LIKE ? OR d.industry LIKE ? OR d.first_name LIKE ? OR d.last_name LIKE ? OR d.email LIKE ?)';
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
-      countParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      sql += ' AND (d.name LIKE ? OR d.company_name LIKE ? OR d.industry LIKE ? OR d.email LIKE ?)';
+      countSql += ' AND (d.name LIKE ? OR d.company_name LIKE ? OR d.industry LIKE ? OR d.email LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      countParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     // Filter archived
@@ -95,7 +95,7 @@ router.get('/', async (req, res) => {
     }
 
     // Sort by column (whitelist allowed columns to prevent SQL injection)
-    const allowedSortColumns = ['company_name', 'first_name', 'estimated_value', 'health_score', 'created_at', 'next_step_date', 'stage'];
+    const allowedSortColumns = ['company_name', 'name', 'estimated_value', 'health_score', 'created_at', 'next_step_date', 'stage'];
     const sortColumn = allowedSortColumns.includes(sort_by) ? sort_by : 'created_at';
     const sortDirection = sort_order === 'asc' ? 'ASC' : 'DESC';
     sql += ` ORDER BY d.${sortColumn} ${sortDirection}`;
@@ -203,13 +203,13 @@ router.get('/kanban', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const {
-      first_name,
-      last_name,
+      name,
       job_title,
       email,
       phone,
       linkedin_url,
       company_name,
+      company_url,
       industry,
       stage = 'new_signal',
       estimated_value,
@@ -222,8 +222,8 @@ router.post('/', async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!first_name || !last_name) {
-      return res.status(400).json({ error: 'First name and last name are required' });
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
     }
 
     // Validate text length
@@ -264,20 +264,20 @@ router.post('/', async (req, res) => {
 
     await run(
       `INSERT INTO deals (
-        id, first_name, last_name, job_title, email, phone, linkedin_url,
-        company_name, industry, stage, estimated_value, close_date,
+        id, name, job_title, email, phone, linkedin_url,
+        company_name, company_url, industry, stage, estimated_value, close_date,
         compelling_event_date, next_step_date, next_step_description,
         health_score, owner_id, source, priority
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         dealId,
-        first_name,
-        last_name,
+        name,
         job_title || null,
         email || null,
         phone || null,
         linkedin_url || null,
         company_name || null,
+        company_url || null,
         industry || null,
         stage,
         estimated_value || null,
@@ -296,7 +296,7 @@ router.post('/', async (req, res) => {
     await run(
       `INSERT INTO activities (id, deal_id, activity_type, description, created_by)
        VALUES (?, ?, ?, ?, ?)`,
-      [uuidv4(), dealId, 'deal_created', `Deal created for ${first_name} ${last_name}`, req.user.id]
+      [uuidv4(), dealId, 'deal_created', `Deal created for ${name}`, req.user.id]
     );
 
     // Fetch the created deal
@@ -401,13 +401,13 @@ router.put('/:id', async (req, res) => {
     }
 
     const {
-      first_name,
-      last_name,
+      name,
       job_title,
       email,
       phone,
       linkedin_url,
       company_name,
+      company_url,
       industry,
       stage,
       estimated_value,
@@ -424,11 +424,8 @@ router.put('/:id', async (req, res) => {
     } = req.body;
 
     // Validate person fields
-    if (first_name !== undefined && !first_name) {
-      return res.status(400).json({ error: 'First name cannot be empty' });
-    }
-    if (last_name !== undefined && !last_name) {
-      return res.status(400).json({ error: 'Last name cannot be empty' });
+    if (name !== undefined && !name) {
+      return res.status(400).json({ error: 'Name cannot be empty' });
     }
 
     // Validate text length
@@ -453,13 +450,9 @@ router.put('/:id', async (req, res) => {
     const updates = [];
     const params = [];
 
-    if (first_name !== undefined) {
-      updates.push('first_name = ?');
-      params.push(first_name);
-    }
-    if (last_name !== undefined) {
-      updates.push('last_name = ?');
-      params.push(last_name);
+    if (name !== undefined) {
+      updates.push('name = ?');
+      params.push(name);
     }
     if (job_title !== undefined) {
       updates.push('job_title = ?');
@@ -480,6 +473,10 @@ router.put('/:id', async (req, res) => {
     if (company_name !== undefined) {
       updates.push('company_name = ?');
       params.push(company_name);
+    }
+    if (company_url !== undefined) {
+      updates.push('company_url = ?');
+      params.push(company_url);
     }
     if (industry !== undefined) {
       updates.push('industry = ?');
@@ -615,7 +612,7 @@ router.put('/:id', async (req, res) => {
               id,
               deal.owner_id,
               're_engagement',
-              `Re-engage with ${deal.first_name} ${deal.last_name}`,
+              `Re-engage with ${deal.name}`,
               `This deal was lost due to timing. The 3-month re-engagement period has passed. Consider reaching out to see if their timeline has changed.`,
               dueDateStr
             ]
@@ -724,7 +721,7 @@ router.post('/:id/transfer', async (req, res) => {
     await createNotification(
       newOwnerId,
       'deal_transferred',
-      `Deal "${existingDeal.first_name} ${existingDeal.last_name}" has been assigned to you by ${req.user.name}`,
+      `Deal "${existingDeal.name}" has been assigned to you by ${req.user.name}`,
       `/deals/${id}`
     );
 
@@ -776,8 +773,7 @@ router.post('/import/csv', async (req, res) => {
     const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
 
     // Find column indices - person fields
-    const firstNameIndex = headers.findIndex(h => h === 'first name' || h === 'first_name' || h === 'firstname');
-    const lastNameIndex = headers.findIndex(h => h === 'last name' || h === 'last_name' || h === 'lastname');
+    const nameIndex = headers.findIndex(h => h === 'name' || h === 'contact name' || h === 'contact_name');
     const jobTitleIndex = headers.findIndex(h => h === 'job title' || h === 'job_title' || h === 'jobtitle');
     const emailIndex = headers.findIndex(h => h === 'email');
     const phoneIndex = headers.findIndex(h => h === 'phone');
@@ -793,8 +789,8 @@ router.post('/import/csv', async (req, res) => {
     const nextStepDescIndex = headers.findIndex(h => h === 'next step description' || h === 'next_step_description');
     const priorityIndex = headers.findIndex(h => h === 'priority');
 
-    if (firstNameIndex === -1 || lastNameIndex === -1) {
-      return res.status(400).json({ error: 'CSV must have "First Name" and "Last Name" columns' });
+    if (nameIndex === -1) {
+      return res.status(400).json({ error: 'CSV must have a "Name" column' });
     }
 
     // Parse CSV values (handle quoted fields)
@@ -835,11 +831,10 @@ router.post('/import/csv', async (req, res) => {
       if (!line) continue;
 
       const values = parseCSVLine(line);
-      const firstName = values[firstNameIndex]?.replace(/^"|"$/g, '');
-      const lastName = values[lastNameIndex]?.replace(/^"|"$/g, '');
+      const contactName = values[nameIndex]?.replace(/^"|"$/g, '');
 
-      if (!firstName || !lastName) {
-        errors.push(`Row ${i + 1}: First name and last name are required`);
+      if (!contactName) {
+        errors.push(`Row ${i + 1}: Name is required`);
         continue;
       }
 
@@ -877,14 +872,13 @@ router.post('/import/csv', async (req, res) => {
       try {
         await run(
           `INSERT INTO deals (
-            id, first_name, last_name, job_title, email, phone, linkedin_url,
+            id, name, job_title, email, phone, linkedin_url,
             company_name, industry, stage, estimated_value, close_date,
             next_step_date, next_step_description, health_score, owner_id, source, priority
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             dealId,
-            firstName,
-            lastName,
+            contactName,
             jobTitle,
             csvEmail,
             csvPhone,
@@ -907,12 +901,12 @@ router.post('/import/csv', async (req, res) => {
         await run(
           `INSERT INTO activities (id, deal_id, activity_type, description, created_by)
            VALUES (?, ?, ?, ?, ?)`,
-          [uuidv4(), dealId, 'deal_created', `Deal imported for ${firstName} ${lastName}`, req.user.id]
+          [uuidv4(), dealId, 'deal_created', `Deal imported for ${contactName}`, req.user.id]
         );
 
-        createdDeals.push({ id: dealId, first_name: firstName, last_name: lastName, company_name: companyName });
+        createdDeals.push({ id: dealId, name: contactName, company_name: companyName });
       } catch (err) {
-        errors.push(`Row ${i + 1}: Failed to create deal for ${companyName} - ${err.message}`);
+        errors.push(`Row ${i + 1}: Failed to create deal for ${contactName} - ${err.message}`);
       }
     }
 
@@ -958,8 +952,8 @@ router.get('/export/csv', async (req, res) => {
 
     // Filter by search term
     if (search) {
-      sql += ' AND (d.company_name LIKE ? OR d.industry LIKE ? OR d.first_name LIKE ? OR d.last_name LIKE ? OR d.email LIKE ?)';
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      sql += ' AND (d.name LIKE ? OR d.company_name LIKE ? OR d.industry LIKE ? OR d.email LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     sql += ' ORDER BY d.created_at DESC';
@@ -969,8 +963,7 @@ router.get('/export/csv', async (req, res) => {
     // Create CSV content
     const headers = [
       'ID',
-      'First Name',
-      'Last Name',
+      'Name',
       'Job Title',
       'Email',
       'Phone',
@@ -993,8 +986,7 @@ router.get('/export/csv', async (req, res) => {
 
     const rows = deals.map(deal => [
       deal.id,
-      `"${(deal.first_name || '').replace(/"/g, '""')}"`,
-      `"${(deal.last_name || '').replace(/"/g, '""')}"`,
+      `"${(deal.name || '').replace(/"/g, '""')}"`,
       `"${(deal.job_title || '').replace(/"/g, '""')}"`,
       deal.email || '',
       deal.phone || '',
@@ -1143,7 +1135,7 @@ router.post('/:id/autopsy', async (req, res) => {
 
     res.json({
       deal: {
-        person_name: `${deal.first_name} ${deal.last_name}`,
+        person_name: deal.name,
         company_name: deal.company_name,
         industry: deal.industry,
         estimated_value: deal.estimated_value,
@@ -1666,9 +1658,9 @@ router.post('/:id/simulate-inactivity', async (req, res) => {
     );
 
     res.json({
-      message: `Simulated ${monthsToSimulate} months of inactivity for deal ${deal.first_name} ${deal.last_name}`,
+      message: `Simulated ${monthsToSimulate} months of inactivity for deal ${deal.name}`,
       deal_id: id,
-      person_name: `${deal.first_name} ${deal.last_name}`,
+      person_name: deal.name,
       simulated_last_activity: simulatedDateStr
     });
   } catch (error) {
