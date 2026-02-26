@@ -656,7 +656,7 @@ export default function DealDetailPage() {
                   Upload Transcript
                 </Button>
               </Link>
-              <Link to={`/sales-rooms/create?deal=${id}`} className="block">
+              <Link to={`/sales-rooms/new?deal=${id}`} className="block">
                 <Button variant="outline" className="w-full justify-start">
                   <Presentation className="w-4 h-4 mr-2" />
                   Create Sales Room
