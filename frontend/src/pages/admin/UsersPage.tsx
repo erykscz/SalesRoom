@@ -190,23 +190,40 @@ export default function UsersPage() {
   const handleUpdate = async () => {
     if (!selectedUser) return;
 
+    // Validate passwords match if password is being changed
+    if (formData.password && formData.password !== formData.confirmPassword) {
+      toast({
+        title: 'Validation Error',
+        description: 'Passwords do not match',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
+      const updateData: any = {
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+        isActive: formData.isActive,
+        phone: formData.phone || null,
+        jobTitle: formData.jobTitle || null
+      };
+
+      // Only include password if it's being changed
+      if (formData.password) {
+        updateData.password = formData.password;
+      }
+
       const response = await fetch(`${API_URL}/users/${selectedUser.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          role: formData.role,
-          isActive: formData.isActive,
-          phone: formData.phone || null,
-          jobTitle: formData.jobTitle || null
-        })
+        body: JSON.stringify(updateData)
       });
 
       if (!response.ok) {
@@ -221,6 +238,7 @@ export default function UsersPage() {
 
       setShowEditDialog(false);
       setSelectedUser(null);
+      setFormData({ email: '', password: '', confirmPassword: '', name: '', role: 'rep', isActive: true, phone: '', jobTitle: '' });
       fetchUsers();
     } catch (error: any) {
       toast({
@@ -612,6 +630,26 @@ export default function UsersPage() {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">New Password (leave empty to keep current)</Label>
+              <Input
+                id="edit-password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Min 8 chars with uppercase, lowercase, number, special"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-confirmPassword">Confirm New Password</Label>
+              <Input
+                id="edit-confirmPassword"
+                type="password"
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                placeholder="Re-enter new password"
               />
             </div>
             <div className="space-y-2">

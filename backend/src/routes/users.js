@@ -137,7 +137,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, role, isActive, avatarUrl, phone, jobTitle } = req.body;
+    const { name, email, role, isActive, avatarUrl, phone, jobTitle, password } = req.body;
 
     // Users can update their own profile (except role), admins can update anyone
     const isOwnProfile = req.user.id === id;
@@ -170,6 +170,21 @@ router.put('/:id', authMiddleware, async (req, res) => {
       }
       updates.push('email = ?');
       params.push(email.toLowerCase().trim());
+    }
+
+    // Handle password change (optional)
+    if (password !== undefined && password !== '') {
+      // Validate password strength
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+      if (!passwordRegex.test(password)) {
+        return res.status(400).json({
+          error: 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'
+        });
+      }
+      // Hash new password
+      const passwordHash = await bcrypt.hash(password, 10);
+      updates.push('password_hash = ?');
+      params.push(passwordHash);
     }
 
     // Only admins can change roles
