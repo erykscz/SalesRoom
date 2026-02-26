@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_URL } from '@/lib/api';
 import { PREDEFINED_STAKEHOLDERS, getDefaultSectionContent, type StakeholderSection } from '@/lib/sales-room-defaults';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -36,14 +36,18 @@ const TEMPLATE_TYPES = [
 export default function SalesRoomCreatePage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
 
-  const [step, setStep] = useState(1);
+  // Check if deal is pre-selected from URL
+  const dealIdFromUrl = searchParams.get('deal');
+
+  const [step, setStep] = useState(dealIdFromUrl ? 2 : 1);
   const [loading, setLoading] = useState(false);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loadingDeals, setLoadingDeals] = useState(true);
 
   // Form data
-  const [selectedDealId, setSelectedDealId] = useState('');
+  const [selectedDealId, setSelectedDealId] = useState(dealIdFromUrl || '');
   const [templateType, setTemplateType] = useState('custom');
   const [offerContent, setOfferContent] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
