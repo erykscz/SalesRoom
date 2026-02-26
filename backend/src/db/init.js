@@ -68,7 +68,8 @@ async function execMulti(sql) {
   if (isPostgres) {
     const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
     for (const stmt of statements) {
-      await neonSql(convertSQL(stmt));
+      const converted = convertSQL(stmt);
+      await neonSql.query(converted);
     }
   } else {
     return new Promise((resolve, reject) => {
@@ -82,7 +83,7 @@ async function execMulti(sql) {
 
 async function runStmt(sql, params = []) {
   if (isPostgres) {
-    await neonSql(convertSQL(sql), params);
+    await neonSql.query(convertSQL(sql), params);
   } else {
     return new Promise((resolve, reject) => {
       sqliteDb.run(sql, params, function (err) {
@@ -95,8 +96,8 @@ async function runStmt(sql, params = []) {
 
 async function getRow(sql, params = []) {
   if (isPostgres) {
-    const rows = await neonSql(convertSQL(sql), params);
-    return rows[0] || undefined;
+    const result = await neonSql.query(convertSQL(sql), params);
+    return result?.rows?.[0] || undefined;
   } else {
     return new Promise((resolve, reject) => {
       sqliteDb.get(sql, params, (err, row) => {
