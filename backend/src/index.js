@@ -79,11 +79,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Simple test endpoint
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'Test endpoint works!', env: process.env.NODE_ENV });
-});
-
 // Public routes (no auth required)
 app.use('/api/auth', authRoutes);
 app.use('/api/sales-rooms/public', salesRoomPublicRoutes);
