@@ -263,7 +263,7 @@ export async function run(sql, params = []) {
     const result = await neonSql.query(converted, params);
     return {
       lastID: null,
-      changes: result.length !== undefined ? result.length : 0
+      changes: result?.rowCount || 0
     };
   } else {
     return new Promise((resolve, reject) => {
