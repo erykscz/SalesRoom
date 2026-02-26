@@ -354,7 +354,7 @@ export default function IntentScraperPage() {
       identified_pain: lead.identified_pain || '',
       confidence_score: lead.confidence_score,
       source_link: lead.source_link || '',
-      status: lead.status,
+      status: lead.status as 'new',
       notes: lead.notes || ''
     });
     setShowCreateForm(true);

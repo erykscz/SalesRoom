@@ -322,7 +322,7 @@ export default function DiscoveryPage() {
         toast({
           title: 'Partial Upload',
           description: `${successCount} uploaded, ${failedFiles.length} failed: ${failedFiles.join(', ')}`,
-          variant: 'warning'
+          variant: 'default'
         });
       }
 
