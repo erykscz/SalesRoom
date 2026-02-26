@@ -27,10 +27,10 @@ interface Deal {
 }
 
 const TEMPLATE_TYPES = [
-  { value: 'legacy_modernization', label: 'Legacy Modernization', description: 'For replacing outdated systems' },
-  { value: 'cloud_migration', label: 'Cloud Migration', description: 'For moving to cloud infrastructure' },
-  { value: 'staff_augmentation', label: 'Staff Augmentation', description: 'For team extension services' },
-  { value: 'custom', label: 'Custom', description: 'Create from scratch' },
+  { value: 'legacy_modernization', label: 'Modernizacja Legacy', description: 'Wymiana przestarzałych systemów' },
+  { value: 'cloud_migration', label: 'Migracja do Chmury', description: 'Przeniesienie do infrastruktury chmurowej' },
+  { value: 'staff_augmentation', label: 'Wsparcie Zespołu', description: 'Rozszerzenie zespołu' },
+  { value: 'custom', label: 'Niestandardowy', description: 'Utwórz od podstaw' },
 ];
 
 export default function SalesRoomCreatePage() {
@@ -127,7 +127,7 @@ export default function SalesRoomCreatePage() {
     if (!label) return;
     const key = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
     if (selectedStakeholders.find(s => s.key === key)) {
-      toast({ title: 'Already added', description: `${label} is already selected`, variant: 'destructive' });
+      toast({ title: 'Już dodano', description: `${label} jest już wybrany`, variant: 'destructive' });
       return;
     }
     setSelectedStakeholders(prev => [...prev, { key, label }]);
@@ -161,7 +161,7 @@ export default function SalesRoomCreatePage() {
 
   const handleCreate = async () => {
     if (!selectedDealId) {
-      toast({ title: 'Error', description: 'Please select a deal', variant: 'destructive' });
+      toast({ title: 'Błąd', description: 'Proszę wybrać dealę', variant: 'destructive' });
       return;
     }
 
@@ -179,6 +179,7 @@ export default function SalesRoomCreatePage() {
           template_type: templateType,
           offer_content: offerContent || null,
           sections: sections.length > 0 ? sections : null,
+          stakeholders: selectedStakeholders,
           video_url: videoUrl || null,
           calendly_link: calendlyLink || null,
           poll_enabled: pollEnabled,
@@ -197,7 +198,7 @@ export default function SalesRoomCreatePage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create Sales Room');
+        throw new Error(data.error || 'Nie udało się utworzyć Sales Room');
       }
 
       // If there's an attachment file, upload it after creating
@@ -213,12 +214,12 @@ export default function SalesRoomCreatePage() {
         });
       }
 
-      toast({ title: 'Success!', description: 'Sales Room created successfully' });
+      toast({ title: 'Sukces!', description: 'Sales Room utworzony pomyślnie' });
       navigate(`/sales-rooms/${data.salesRoom.id}`);
     } catch (err) {
       toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to create Sales Room',
+        title: 'Błąd',
+        description: err instanceof Error ? err.message : 'Nie udało się utworzyć Sales Room',
         variant: 'destructive'
       });
     } finally {
@@ -234,8 +235,8 @@ export default function SalesRoomCreatePage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">Create Sales Room</h1>
-          <p className="text-muted-foreground">Step {step} of 3</p>
+          <h1 className="text-2xl font-bold">Utwórz Sales Room</h1>
+          <p className="text-muted-foreground">Krok {step} z 3</p>
         </div>
       </div>
 
@@ -263,9 +264,9 @@ export default function SalesRoomCreatePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
-              Select Deal
+              Wybierz Dealę
             </CardTitle>
-            <CardDescription>Choose the deal this Sales Room will be for</CardDescription>
+            <CardDescription>Wybierz dealę, dla którego zostanie utworzony Sales Room</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {loadingDeals ? (
@@ -274,9 +275,9 @@ export default function SalesRoomCreatePage() {
               </div>
             ) : deals.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-muted-foreground mb-4">No deals available without a Sales Room.</p>
+                <p className="text-muted-foreground mb-4">Brak dostępnych deali bez Sales Room.</p>
                 <Button variant="outline" onClick={() => navigate('/deals/new')}>
-                  Create a Deal First
+                  Utwórz najpierw dealę
                 </Button>
               </div>
             ) : (
@@ -309,7 +310,7 @@ export default function SalesRoomCreatePage() {
 
             <div className="flex justify-end pt-4">
               <Button onClick={handleNext} disabled={!canProceedStep1}>
-                Next
+                Dalej
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </div>
@@ -325,9 +326,9 @@ export default function SalesRoomCreatePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Palette className="h-5 w-5" />
-                Select Template
+                Wybierz Szablon
               </CardTitle>
-              <CardDescription>Choose a template for your Sales Room</CardDescription>
+              <CardDescription>Wybierz szablon dla swojego Sales Room</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-3 md:grid-cols-2">
@@ -361,9 +362,9 @@ export default function SalesRoomCreatePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Target Stakeholders
+                Docelowi Interesariusze
               </CardTitle>
-              <CardDescription>Select who this Sales Room is addressed to (minimum 1)</CardDescription>
+              <CardDescription>Wybierz, do kogo skierowany jest Sales Room (minimum 1)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
@@ -389,7 +390,7 @@ export default function SalesRoomCreatePage() {
               {/* Custom role input */}
               <div className="flex gap-2">
                 <Input
-                  placeholder="Add custom role..."
+                  placeholder="Dodaj własną rolę..."
                   value={customRoleInput}
                   onChange={(e) => setCustomRoleInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addCustomRole()}
@@ -397,14 +398,14 @@ export default function SalesRoomCreatePage() {
                 />
                 <Button variant="outline" onClick={addCustomRole} disabled={!customRoleInput.trim()}>
                   <Plus className="h-4 w-4 mr-1" />
-                  Add
+                  Dodaj
                 </Button>
               </div>
 
               {/* Selected stakeholders preview */}
               {selectedStakeholders.length > 0 && (
                 <div className="p-3 bg-muted/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-2">Selected ({selectedStakeholders.length}):</p>
+                  <p className="text-sm text-muted-foreground mb-2">Wybrano ({selectedStakeholders.length}):</p>
                   <div className="flex flex-wrap gap-2">
                     {selectedStakeholders.map((sh) => (
                       <span key={sh.key} className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-sm">
@@ -423,10 +424,10 @@ export default function SalesRoomCreatePage() {
           <div className="flex justify-between">
             <Button variant="outline" onClick={handleBack}>
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
+              Wstecz
             </Button>
             <Button onClick={handleNext} disabled={!canProceedStep2}>
-              Next
+              Dalej
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           </div>
@@ -439,20 +440,20 @@ export default function SalesRoomCreatePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Content & Options
+              Treść i Opcje
             </CardTitle>
-            <CardDescription>Add your offer content and integrations</CardDescription>
+            <CardDescription>Dodaj treść oferty i integracje</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Summary */}
             <div className="p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Creating Sales Room for:</p>
+              <p className="text-sm text-muted-foreground mb-1">Tworzenie Sales Room dla:</p>
               <p className="font-medium">{selectedDeal?.name}</p>
               {selectedDeal?.company_name && (
                 <p className="text-sm text-muted-foreground">{selectedDeal.company_name}</p>
               )}
               <p className="text-sm text-muted-foreground capitalize">
-                {templateType.replace(/_/g, ' ')} template • {selectedStakeholders.map(s => s.label).join(', ')}
+                Szablon {templateType.replace(/_/g, ' ')} • {selectedStakeholders.map(s => s.label).join(', ')}
               </p>
             </div>
 
@@ -460,10 +461,10 @@ export default function SalesRoomCreatePage() {
             <div className="space-y-3 p-4 border rounded-lg">
               <Label className="flex items-center gap-2">
                 <Upload className="h-4 w-4" />
-                Offer Document (PDF, DOCX)
+                Dokument Oferty (PDF, DOCX)
               </Label>
               <p className="text-sm text-muted-foreground">
-                Upload your offer document — AI will generate personalized sections for each stakeholder
+                Załaduj dokument oferty — AI wygeneruje spersonalizowane sekcje dla każdego interesariusza
               </p>
               <div className="flex items-center gap-3">
                 <Input
@@ -485,7 +486,7 @@ export default function SalesRoomCreatePage() {
                 <div className="flex items-center gap-2 text-sm text-green-600">
                   <Check className="h-4 w-4" />
                   <span>{attachmentFile.name} ({(attachmentFile.size / 1024 / 1024).toFixed(1)} MB)</span>
-                  <span className="text-muted-foreground">— AI will generate sections on create</span>
+                  <span className="text-muted-foreground">— AI wygeneruje sekcje po utworzeniu</span>
                 </div>
               )}
             </div>
@@ -496,10 +497,10 @@ export default function SalesRoomCreatePage() {
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4" />
-                    Stakeholder Sections
+                    Sekcje dla Interesariuszy
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    {attachmentFile ? 'AI will regenerate on create' : 'Using default content'}
+                    {attachmentFile ? 'AI wygeneruje ponownie po utworzeniu' : 'Używa domyślnej treści'}
                   </p>
                 </div>
                 {sections.map((section, idx) => (
@@ -510,7 +511,7 @@ export default function SalesRoomCreatePage() {
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => openSectionEditor(idx)}>
                       <Pencil className="h-4 w-4 mr-1" />
-                      Edit
+                      Edytuj
                     </Button>
                   </div>
                 ))}
@@ -519,10 +520,10 @@ export default function SalesRoomCreatePage() {
 
             {/* Offer Content */}
             <div className="space-y-2">
-              <Label htmlFor="offerContent">Offer Content (Optional)</Label>
+              <Label htmlFor="offerContent">Treść Oferty (Opcjonalne)</Label>
               <Textarea
                 id="offerContent"
-                placeholder="Enter your proposal content here..."
+                placeholder="Wprowadź treść propozycji..."
                 value={offerContent}
                 onChange={(e) => setOfferContent(e.target.value)}
                 rows={4}
@@ -531,7 +532,7 @@ export default function SalesRoomCreatePage() {
 
             {/* Video URL */}
             <div className="space-y-2">
-              <Label htmlFor="videoUrl">Video URL (Loom, YouTube)</Label>
+              <Label htmlFor="videoUrl">Link do Video (Loom, YouTube)</Label>
               <Input
                 id="videoUrl"
                 type="url"
@@ -543,7 +544,7 @@ export default function SalesRoomCreatePage() {
 
             {/* Calendly Link */}
             <div className="space-y-2">
-              <Label htmlFor="calendlyLink">Calendly Link</Label>
+              <Label htmlFor="calendlyLink">Link Calendly</Label>
               <Input
                 id="calendlyLink"
                 type="url"
@@ -559,10 +560,10 @@ export default function SalesRoomCreatePage() {
                 <div className="space-y-0.5">
                   <Label htmlFor="pollEnabled" className="flex items-center gap-2">
                     <Users className="h-4 w-4" />
-                    Stakeholder Consensus Poll
+                    Ankieta dla Interesariuszy
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Add a feedback survey for stakeholders
+                    Dodaj ankietę feedbackową dla interesariuszy
                   </p>
                 </div>
                 <Switch
@@ -573,10 +574,10 @@ export default function SalesRoomCreatePage() {
               </div>
               {pollEnabled && (
                 <div className="space-y-2 pt-2">
-                  <Label htmlFor="pollQuestion">Poll Question</Label>
+                  <Label htmlFor="pollQuestion">Pytanie Ankiety</Label>
                   <Input
                     id="pollQuestion"
-                    placeholder="Does this proposal address your concerns?"
+                    placeholder="Czy ta propozycja odpowiada na Twoje obawy?"
                     value={pollQuestion}
                     onChange={(e) => setPollQuestion(e.target.value)}
                   />
@@ -590,10 +591,10 @@ export default function SalesRoomCreatePage() {
                 <div className="space-y-0.5">
                   <Label htmlFor="expiryEnabled" className="flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
-                    Link Expiry
+                    Wygaśnięcie Linku
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Set when the Sales Room link expires
+                    Ustaw, kiedy link Sales Room wygaśnie
                   </p>
                 </div>
                 <Switch
@@ -604,7 +605,7 @@ export default function SalesRoomCreatePage() {
               </div>
               {expiryEnabled && (
                 <div className="space-y-2 pt-2">
-                  <Label htmlFor="expiryDays">Expires in (days)</Label>
+                  <Label htmlFor="expiryDays">Wygasa za (dni)</Label>
                   <Input
                     id="expiryDays"
                     type="number"
@@ -614,7 +615,7 @@ export default function SalesRoomCreatePage() {
                     onChange={(e) => setExpiryDays(parseInt(e.target.value) || 7)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Link will expire on {new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                    Link wygaśnie dnia {new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toLocaleDateString('pl-PL')}
                   </p>
                 </div>
               )}
@@ -626,10 +627,10 @@ export default function SalesRoomCreatePage() {
                 <div className="space-y-0.5">
                   <Label htmlFor="passwordProtected" className="flex items-center gap-2">
                     <Lock className="h-4 w-4" />
-                    Password Protection
+                    Ochrona Hasłem
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Require a password to view the Sales Room
+                    Wymagaj hasła do wyświetlenia Sales Room
                   </p>
                 </div>
                 <Switch
@@ -640,11 +641,11 @@ export default function SalesRoomCreatePage() {
               </div>
               {passwordProtected && (
                 <div className="space-y-2 pt-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Hasło</Label>
                   <Input
                     id="password"
                     type="password"
-                    placeholder="Enter a secure password"
+                    placeholder="Wprowadź bezpieczne hasło"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
@@ -658,10 +659,10 @@ export default function SalesRoomCreatePage() {
                 <div className="space-y-0.5">
                   <Label htmlFor="brandingEnabled" className="flex items-center gap-2">
                     <Image className="h-4 w-4" />
-                    Custom Branding
+                    Własny Branding
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Add your client's logo and brand colors
+                    Dodaj logo i kolory marki klienta
                   </p>
                 </div>
                 <Switch
@@ -673,7 +674,7 @@ export default function SalesRoomCreatePage() {
               {brandingEnabled && (
                 <div className="space-y-4 pt-2">
                   <div className="space-y-2">
-                    <Label htmlFor="logoUrl">Logo URL</Label>
+                    <Label htmlFor="logoUrl">Link do Logo</Label>
                     <Input
                       id="logoUrl"
                       type="url"
@@ -683,12 +684,12 @@ export default function SalesRoomCreatePage() {
                     />
                     {logoUrl && (
                       <div className="mt-2 p-2 bg-muted rounded-lg inline-block">
-                        <img src={logoUrl} alt="Logo preview" className="h-12 w-auto object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+                        <img src={logoUrl} alt="Podgląd logo" className="h-12 w-auto object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
                       </div>
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="primaryColor">Brand Color</Label>
+                    <Label htmlFor="primaryColor">Kolor Marki</Label>
                     <div className="flex items-center gap-2">
                       <input
                         id="primaryColor"
@@ -706,10 +707,10 @@ export default function SalesRoomCreatePage() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="companyNameOverride">Company Name Override (Optional)</Label>
+                    <Label htmlFor="companyNameOverride">Nazwa Firmy (Opcjonalne)</Label>
                     <Input
                       id="companyNameOverride"
-                      placeholder="Leave blank to use deal company name"
+                      placeholder="Zostaw puste, aby użyć nazwy firmy z deala"
                       value={companyNameOverride}
                       onChange={(e) => setCompanyNameOverride(e.target.value)}
                     />
@@ -721,18 +722,18 @@ export default function SalesRoomCreatePage() {
             <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={handleBack}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
+                Wstecz
               </Button>
               <Button onClick={handleCreate} disabled={loading || (passwordProtected && !password)}>
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Creating...
+                    Tworzenie...
                   </>
                 ) : (
                   <>
                     <Check className="h-4 w-4 mr-2" />
-                    Create Sales Room
+                    Utwórz Sales Room
                   </>
                 )}
               </Button>
@@ -746,37 +747,37 @@ export default function SalesRoomCreatePage() {
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
-              Edit Section — {editingSectionIdx !== null ? sections[editingSectionIdx]?.label : ''}
+              Edytuj Sekcję — {editingSectionIdx !== null ? sections[editingSectionIdx]?.label : ''}
             </DialogTitle>
             <DialogDescription>
-              Customize the section content for this stakeholder. Use Markdown for formatting.
+              Dostosuj treść sekcji dla tego interesariusza. Użyj Markdown do formatowania.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 flex-1 overflow-y-auto">
             <div className="space-y-2">
-              <Label>Title</Label>
+              <Label>Tytuł</Label>
               <Input
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
-                placeholder="Section title"
+                placeholder="Tytuł sekcji"
               />
             </div>
             <div className="space-y-2">
-              <Label>Content (Markdown)</Label>
+              <Label>Treść (Markdown)</Label>
               <Textarea
                 value={editContentText}
                 onChange={(e) => setEditContentText(e.target.value)}
-                placeholder="Section content..."
+                placeholder="Treść sekcji..."
                 className="min-h-[250px] font-mono text-sm"
               />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => setEditingSectionIdx(null)}>
-              Cancel
+              Anuluj
             </Button>
             <Button onClick={saveSectionEdit}>
-              Save
+              Zapisz
             </Button>
           </div>
         </DialogContent>

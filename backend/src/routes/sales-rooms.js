@@ -70,10 +70,10 @@ Stakeholders:
 ${stakeholderList}
 
 For each stakeholder, write:
-- title: A short, compelling section title (e.g., "ROI & Financial Impact" for CFO)
+- title: A short, compelling section title (e.g., "ROI i Wpływ Finansowy" for CFO)
 - content: Detailed markdown content (3-5 paragraphs) focusing on aspects relevant to that role. Use headers, bullet points, and bold text for readability.
 
-IMPORTANT: Write in the same language as the offer document.
+IMPORTANT: Write all content in Polish language.
 
 Offer document:
 ${offerText.substring(0, 15000)}${kbSection}
@@ -183,6 +183,7 @@ router.post('/', async (req, res) => {
       template_type,
       offer_content,
       sections,
+      stakeholders,
       chatbot_enabled,
       video_url,
       calendly_link,
@@ -234,6 +235,32 @@ router.post('/', async (req, res) => {
       passwordHash = bcrypt.default.hashSync(password, 10);
     }
 
+    // Generate sections from Knowledge Base if stakeholders are provided
+    let generatedSections = sections ? JSON.stringify(sections) : null;
+
+    if (stakeholders && Array.isArray(stakeholders) && stakeholders.length > 0) {
+      // Fetch shared Knowledge Base materials for AI context
+      const kbItems = await all(
+        `SELECT title, content, type FROM knowledge_base WHERE is_shared = 1 ORDER BY created_at DESC LIMIT 10`
+      );
+
+      // If we have KB items, generate sections from them
+      if (kbItems && kbItems.length > 0) {
+        // Combine KB content into a single text
+        const kbText = kbItems.map(kb => {
+          const contentLimit = kb.type === 'document' ? 5000 : 2000;
+          const content = (kb.content || '').substring(0, contentLimit);
+          return `## ${kb.title}\n${content}`;
+        }).join('\n\n');
+
+        // Generate sections using Knowledge Base content
+        const aiSections = await generateSectionsFromOffer(kbText, stakeholders, kbItems);
+        if (aiSections) {
+          generatedSections = JSON.stringify(aiSections);
+        }
+      }
+    }
+
     await run(
       `INSERT INTO sales_rooms (
         id, deal_id, template_type, public_url_slug, offer_content, sections,
@@ -247,7 +274,7 @@ router.post('/', async (req, res) => {
         templateTypeValue,
         publicUrlSlug,
         offer_content || null,
-        sections ? JSON.stringify(sections) : null,
+        generatedSections,
         chatbot_enabled !== false ? 1 : 0,
         video_url || null,
         calendly_link || null,
