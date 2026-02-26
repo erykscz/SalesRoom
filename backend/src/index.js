@@ -5,10 +5,12 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Load environment variables from parent directory
+// Load environment variables from parent directory (local dev only)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
+if (!process.env.VERCEL) {
+  dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
+}
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -75,6 +77,11 @@ if (!process.env.VERCEL) {
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Simple test endpoint
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Test endpoint works!', env: process.env.NODE_ENV });
 });
 
 // Public routes (no auth required)
