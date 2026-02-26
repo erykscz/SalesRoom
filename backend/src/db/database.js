@@ -260,7 +260,7 @@ export async function run(sql, params = []) {
 
   if (isPostgres) {
     const converted = convertSQL(sql);
-    const result = await neonSql(converted, params);
+    const result = await neonSql.query(converted, params);
     return {
       lastID: null,
       changes: result.length !== undefined ? result.length : 0
@@ -283,8 +283,8 @@ export async function get(sql, params = []) {
 
   if (isPostgres) {
     const converted = convertSQL(sql);
-    const rows = await neonSql(converted, params);
-    return rows[0] || undefined;
+    const result = await neonSql.query(converted, params);
+    return result?.rows?.[0] || undefined;
   } else {
     return new Promise((resolve, reject) => {
       db.get(sql, params, (err, row) => {
@@ -303,8 +303,8 @@ export async function all(sql, params = []) {
 
   if (isPostgres) {
     const converted = convertSQL(sql);
-    const rows = await neonSql(converted, params);
-    return rows;
+    const result = await neonSql.query(converted, params);
+    return result?.rows || [];
   } else {
     return new Promise((resolve, reject) => {
       db.all(sql, params, (err, rows) => {
@@ -325,7 +325,7 @@ export async function exec(sql) {
     // Neon doesn't support multi-statement; split first, then convert each individually
     const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
     for (const stmt of statements) {
-      await neonSql(convertSQL(stmt));
+      await neonSql.query(convertSQL(stmt));
     }
   } else {
     return new Promise((resolve, reject) => {
