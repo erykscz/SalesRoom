@@ -18,6 +18,7 @@ interface DealResearchSectionProps {
   companyName: string;
   companyUrl?: string;
   personName?: string;
+  linkedinUrl?: string;
 }
 
 interface SocialProfile {
@@ -28,6 +29,7 @@ interface SocialProfile {
   display_name: string | null;
   bio: string | null;
   followers_count: number | null;
+  profile_data: Record<string, unknown> | null;
 }
 
 interface GeneratedMessage {
@@ -43,8 +45,9 @@ interface GeneratedMessage {
 
 const PLATFORM_CONFIG = [
   { key: 'linkedin', label: 'LinkedIn', icon: Linkedin, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-950' },
-  { key: 'twitter', label: 'X (Twitter)', icon: Twitter, color: 'text-sky-500', bg: 'bg-sky-50 dark:bg-sky-950' },
   { key: 'github', label: 'GitHub', icon: Github, color: 'text-gray-800 dark:text-gray-200', bg: 'bg-gray-50 dark:bg-gray-900' },
+  { key: 'website', label: 'Website', icon: Globe, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-950' },
+  { key: 'twitter', label: 'X (Twitter)', icon: Twitter, color: 'text-sky-500', bg: 'bg-sky-50 dark:bg-sky-950' },
   { key: 'reddit', label: 'Reddit', icon: MessageCircle, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-950' },
   { key: 'facebook', label: 'Facebook', icon: Facebook, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-950' },
 ];
@@ -71,7 +74,7 @@ function formatFollowers(count: number | null): string {
   return count.toString();
 }
 
-export default function DealResearchSection({ dealId, companyName, companyUrl, personName }: DealResearchSectionProps) {
+export default function DealResearchSection({ dealId, companyName, companyUrl, personName, linkedinUrl }: DealResearchSectionProps) {
   const [availablePlatforms, setAvailablePlatforms] = useState<string[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [researchStatus, setResearchStatus] = useState<string>('none');
@@ -98,6 +101,12 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
       setHints(h => ({ ...h, company_url: companyUrl }));
     }
   }, [companyUrl]);
+
+  useEffect(() => {
+    if (linkedinUrl) {
+      setHints(h => ({ ...h, linkedin_url: linkedinUrl }));
+    }
+  }, [linkedinUrl]);
 
   useEffect(() => {
     fetchPlatforms();
@@ -260,7 +269,7 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
             {!hasResults && !researching && (
               <Button size="sm" onClick={startResearch} disabled={researching || selectedPlatforms.length === 0}>
                 <Play className="h-4 w-4 mr-1" />
-                Start Research
+                RESEARCH
               </Button>
             )}
           </div>
@@ -475,6 +484,11 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium truncate">{sp.display_name || sp.username}</span>
+                            {sp.profile_data && (sp.profile_data as Record<string, unknown>)?._source === 'lix_import' && (
+                              <Badge variant="outline" className="text-xs flex-shrink-0 text-green-600 border-green-300">
+                                Lix IT
+                              </Badge>
+                            )}
                             {sp.followers_count !== null && (
                               <Badge variant="secondary" className="text-xs flex-shrink-0">
                                 <Users className="h-3 w-3 mr-1" />{formatFollowers(sp.followers_count)}
@@ -509,7 +523,7 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
               <div className="p-4 rounded-lg bg-muted/50 border">
                 <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
                   <FileText className="h-4 w-4" />
-                  AI Summary
+                  Podsumowanie AI
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">{researchData.research_summary}</p>
               </div>

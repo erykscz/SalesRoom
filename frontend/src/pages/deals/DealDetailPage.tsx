@@ -692,7 +692,7 @@ export default function DealDetailPage() {
         <div className="space-y-6">
           {/* Deep Research */}
           {id && (
-            <DealResearchSection dealId={id} companyName={deal.company_name || ''} companyUrl={deal.company_url || ''} personName={deal.name} />
+            <DealResearchSection dealId={id} companyName={deal.company_name || ''} companyUrl={deal.company_url || ''} personName={deal.name} linkedinUrl={deal.linkedin_url || ''} />
           )}
 
           {/* Next Steps Card */}

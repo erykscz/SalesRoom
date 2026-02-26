@@ -2,6 +2,236 @@
 
 const PROXYCURL_BASE = 'https://nubela.co/proxycurl/api';
 
+// ============================================================================
+// SALES NAVIGATOR URL CONVERSION
+// Sales Nav URLs (linkedin.com/sales/lead/...) contain an encoded member ID.
+// The ID can be used directly as a standard LinkedIn profile URL:
+//   /sales/lead/ACwAACyuUVEB...,NAME_SEARCH,1E3c
+//   → extract "ACwAACyuUVEB..." (between /lead/ and first , or ?)
+//   → https://www.linkedin.com/in/ACwAACyuUVEB...
+// This redirects to the person's public profile page.
+// ============================================================================
+
+function isSalesNavUrl(url) {
+  if (!url) return false;
+  return /linkedin\.com\/sales\/(lead|people|profile|company)/i.test(url);
+}
+
+function convertSalesNavUrl(url) {
+  if (!url) return null;
+  const match = url.match(/\/sales\/(?:lead|profile)\/([A-Za-z0-9_-]+)/);
+  if (!match) return null;
+  return `https://www.linkedin.com/in/${match[1]}`;
+}
+
+// ============================================================================
+// LINKEDIN URL DISCOVERY
+// Strategy 1: DuckDuckGo search for LinkedIn profiles
+// Strategy 2: Direct LinkedIn URL guessing (common slug patterns)
+// Strategy 3: Try Google search as a fallback
+// ============================================================================
+
+const SEARCH_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
+function extractLinkedInUrlsFromHtml(html, type = 'in') {
+  const results = [];
+  const pattern = type === 'in'
+    ? /linkedin\.com\/in\/([a-zA-Z0-9\-_%]+)/gi
+    : /linkedin\.com\/company\/([a-zA-Z0-9\-_%]+)/gi;
+
+  // Direct href matches
+  const hrefMatches = html.matchAll(new RegExp(`href="https?://(?:www\\.)?${pattern.source}`, 'gi'));
+  for (const match of hrefMatches) {
+    const slug = match[1];
+    if (slug && slug.length > 2 && !slug.startsWith('dir')) results.push(slug);
+  }
+
+  // DuckDuckGo uddg parameter matches
+  const uddgMatches = html.matchAll(/uddg=([^&"]+)/gi);
+  for (const match of uddgMatches) {
+    const decoded = decodeURIComponent(match[1]);
+    const liMatch = decoded.match(pattern);
+    if (liMatch) {
+      // Re-extract slug from the decoded URL
+      const slugMatch = decoded.match(type === 'in'
+        ? /linkedin\.com\/in\/([a-zA-Z0-9\-_%]+)/i
+        : /linkedin\.com\/company\/([a-zA-Z0-9\-_%]+)/i);
+      if (slugMatch && slugMatch[1] && slugMatch[1].length > 2 && !slugMatch[1].startsWith('dir')) {
+        results.push(slugMatch[1]);
+      }
+    }
+  }
+
+  return [...new Set(results)];
+}
+
+async function searchDuckDuckGo(query) {
+  try {
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, {
+      headers: SEARCH_HEADERS,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch (err) {
+    console.warn('DuckDuckGo search failed:', err.message);
+    return null;
+  }
+}
+
+async function searchGoogle(query) {
+  try {
+    const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=5`;
+    const res = await fetch(url, {
+      headers: SEARCH_HEADERS,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch (err) {
+    console.warn('Google search failed:', err.message);
+    return null;
+  }
+}
+
+// Generate common LinkedIn slug patterns from a person's name
+function generatePersonSlugs(name) {
+  const clean = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return [];
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  return [
+    `${first}-${last}`,               // john-doe
+    `${first}${last}`,                 // johndoe
+    `${last}-${first}`,               // doe-john
+  ];
+}
+
+// Generate common LinkedIn slug for a company
+function generateCompanySlugs(companyName) {
+  const clean = companyName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim()
+    // Remove common legal suffixes (S.A., Sp. z o.o., Inc, etc.)
+    .replace(/[\s,.]*(s\.?\s*a\.?|sp\.?\s*z\.?\s*o\.?\s*o\.?|inc\.?|corp\.?|ltd\.?|llc\.?|gmbh|ag|plc|co\.?|limited|group|holding)[\s.]*$/gi, '')
+    .trim();
+  const slug = clean.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const noDashes = clean.replace(/[^a-z0-9]/g, '');
+  // Also include just the first word (many companies use short names)
+  const firstWord = clean.split(/[^a-z0-9]+/)[0];
+  const slugs = [slug, noDashes];
+  if (firstWord && firstWord !== slug && firstWord.length > 2) slugs.push(firstWord);
+  return [...new Set(slugs)].filter(s => s.length > 1);
+}
+
+// Try fetching a LinkedIn URL — returns true if it resolves to a valid profile
+async function tryLinkedInUrl(url) {
+  try {
+    const res = await fetch(url, {
+      headers: SEARCH_HEADERS,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return false;
+    const html = await res.text();
+    // Check if it's a real profile page (has og:title or profile content)
+    return html.includes('og:title') && !html.includes('Page not found');
+  } catch {
+    return false;
+  }
+}
+
+async function searchLinkedInPersonUrl(name, companyName) {
+  if (!name) return null;
+
+  // Strategy 1: DuckDuckGo search
+  console.log(`Searching LinkedIn profile for "${name}" at "${companyName}" via DuckDuckGo...`);
+  const ddgHtml = await searchDuckDuckGo(`site:linkedin.com/in/ "${name}" "${companyName}"`);
+  if (ddgHtml) {
+    const slugs = extractLinkedInUrlsFromHtml(ddgHtml, 'in');
+    if (slugs.length > 0) {
+      const profileUrl = `https://www.linkedin.com/in/${decodeURIComponent(slugs[0])}`;
+      console.log(`Found LinkedIn profile via DuckDuckGo: ${profileUrl}`);
+      return profileUrl;
+    }
+  }
+
+  // Strategy 2: Google search as fallback
+  console.log(`Trying Google search for "${name}" LinkedIn profile...`);
+  const googleHtml = await searchGoogle(`"${name}" "${companyName}" site:linkedin.com/in/`);
+  if (googleHtml) {
+    const slugs = extractLinkedInUrlsFromHtml(googleHtml, 'in');
+    if (slugs.length > 0) {
+      const profileUrl = `https://www.linkedin.com/in/${decodeURIComponent(slugs[0])}`;
+      console.log(`Found LinkedIn profile via Google: ${profileUrl}`);
+      return profileUrl;
+    }
+  }
+
+  // Strategy 3: Try common URL patterns
+  const slugGuesses = generatePersonSlugs(name);
+  for (const slug of slugGuesses) {
+    const guessUrl = `https://www.linkedin.com/in/${slug}`;
+    console.log(`Trying LinkedIn URL guess: ${guessUrl}`);
+    if (await tryLinkedInUrl(guessUrl)) {
+      console.log(`Found LinkedIn profile via URL guess: ${guessUrl}`);
+      return guessUrl;
+    }
+  }
+
+  console.log(`No LinkedIn profile found for "${name}" at "${companyName}"`);
+  return null;
+}
+
+async function searchLinkedInCompanyUrl(companyName) {
+  if (!companyName) return null;
+
+  // Strategy 1: DuckDuckGo search
+  console.log(`Searching LinkedIn company page for "${companyName}" via DuckDuckGo...`);
+  const ddgHtml = await searchDuckDuckGo(`site:linkedin.com/company/ "${companyName}"`);
+  if (ddgHtml) {
+    const slugs = extractLinkedInUrlsFromHtml(ddgHtml, 'company');
+    if (slugs.length > 0) {
+      const companyUrl = `https://www.linkedin.com/company/${decodeURIComponent(slugs[0])}`;
+      console.log(`Found LinkedIn company via DuckDuckGo: ${companyUrl}`);
+      return companyUrl;
+    }
+  }
+
+  // Strategy 2: Google search
+  console.log(`Trying Google search for "${companyName}" LinkedIn company page...`);
+  const googleHtml = await searchGoogle(`"${companyName}" site:linkedin.com/company/`);
+  if (googleHtml) {
+    const slugs = extractLinkedInUrlsFromHtml(googleHtml, 'company');
+    if (slugs.length > 0) {
+      const companyUrl = `https://www.linkedin.com/company/${decodeURIComponent(slugs[0])}`;
+      console.log(`Found LinkedIn company via Google: ${companyUrl}`);
+      return companyUrl;
+    }
+  }
+
+  // Strategy 3: Try common URL patterns
+  const slugGuesses = generateCompanySlugs(companyName);
+  for (const slug of slugGuesses) {
+    const guessUrl = `https://www.linkedin.com/company/${slug}`;
+    console.log(`Trying LinkedIn company URL guess: ${guessUrl}`);
+    if (await tryLinkedInUrl(guessUrl)) {
+      console.log(`Found LinkedIn company via URL guess: ${guessUrl}`);
+      return guessUrl;
+    }
+  }
+
+  console.log(`No LinkedIn company page found for "${companyName}"`);
+  return null;
+}
+
 function getApiKey() {
   return process.env.PROXYCURL_API_KEY;
 }
@@ -303,14 +533,66 @@ export async function lookupCompany(companyName, linkedinUrl = null) {
 
   // Fallback: scrape public profile if we have a URL
   if (linkedinUrl) {
-    return await scrapePublicCompany(linkedinUrl);
+    const scrapeResult = await scrapePublicCompany(linkedinUrl);
+    if (scrapeResult.success) {
+      return scrapeResult;
+    }
+    // Scrape failed — fall through to search
+    console.log(`Company scrape failed for ${linkedinUrl}: ${scrapeResult.error} — trying search...`);
+  }
+
+  // Last resort: search for the company's LinkedIn page via search engines
+  console.log(`No usable LinkedIn company URL for "${companyName}", trying search...`);
+  const searchedUrl = await searchLinkedInCompanyUrl(companyName);
+  if (searchedUrl) {
+    return await scrapePublicCompany(searchedUrl);
   }
 
   return { success: false, error: 'No Proxycurl API key and no LinkedIn URL provided', data: null };
 }
 
+// Return a minimal "success" result with just the profile URL.
+// This lets the UI display a clickable LinkedIn link even when
+// server-side scraping fails (e.g. encoded Sales Nav member IDs
+// return 999 but work fine when opened in a browser with a login session).
+function makeUrlOnlyResult(name, linkedinUrl) {
+  return {
+    success: true,
+    data: {
+      full_name: name,
+      headline: null,
+      summary: null,
+      occupation: null,
+      city: null,
+      country: null,
+      connections: null,
+      follower_count: null,
+      linkedin_url: linkedinUrl,
+      profile_pic_url: null,
+      experiences: [],
+      education: [],
+      skills: [],
+      languages: [],
+      _source: 'url_only',
+    },
+    error: null,
+  };
+}
+
 export async function lookupPerson(name, companyName, linkedinUrl = null) {
   const apiKey = getApiKey();
+
+  // Sales Navigator URLs: extract member ID and convert to standard /in/ URL
+  if (linkedinUrl && isSalesNavUrl(linkedinUrl)) {
+    const converted = convertSalesNavUrl(linkedinUrl);
+    if (converted) {
+      console.log(`Sales Nav URL converted: ${linkedinUrl} → ${converted}`);
+      linkedinUrl = converted;
+    } else {
+      console.log(`Sales Nav URL could not be converted: ${linkedinUrl} — falling back to name-based lookup`);
+      linkedinUrl = null;
+    }
+  }
 
   // Try Proxycurl first if available
   if (apiKey) {
@@ -376,11 +658,37 @@ export async function lookupPerson(name, companyName, linkedinUrl = null) {
 
   // Fallback: scrape public profile if we have a URL
   if (linkedinUrl) {
-    return await scrapePublicPerson(linkedinUrl);
+    const scrapeResult = await scrapePublicPerson(linkedinUrl);
+    if (scrapeResult.success) {
+      return scrapeResult;
+    }
+    // Scrape failed (e.g. LinkedIn 999 for encoded Sales Nav IDs) — fall through to search
+    console.log(`Scrape failed for ${linkedinUrl}: ${scrapeResult.error} — trying search-based discovery...`);
   }
 
   if (!name) {
+    // No name to search with, but if we have a converted URL, return it as a clickable link
+    if (linkedinUrl) {
+      return makeUrlOnlyResult(null, linkedinUrl);
+    }
     return { success: false, error: 'No LinkedIn URL or name provided for person lookup', data: null };
+  }
+
+  // Last resort: search for the person's LinkedIn profile via search engines
+  console.log(`Searching LinkedIn profile for "${name}" at "${companyName}"...`);
+  const searchedUrl = await searchLinkedInPersonUrl(name, companyName);
+  if (searchedUrl) {
+    const searchScrapeResult = await scrapePublicPerson(searchedUrl);
+    if (searchScrapeResult.success) {
+      return searchScrapeResult;
+    }
+  }
+
+  // Everything failed — if we had a converted URL, return it as a clickable link
+  // (the user can open it in their browser where LinkedIn login session resolves the profile)
+  if (linkedinUrl) {
+    console.log(`All scrape/search strategies failed for "${name}" — returning profile URL only: ${linkedinUrl}`);
+    return makeUrlOnlyResult(name, linkedinUrl);
   }
 
   return { success: false, error: `Cannot look up "${name}" without Proxycurl API key or direct LinkedIn URL`, data: null };
@@ -400,11 +708,15 @@ export async function research(companyName, hints = {}) {
     : companyName;
 
   // Look up person if we have a direct URL or a name to resolve
-  if (hints.linkedin_person_url || hints.name) {
+  // Sales Navigator URLs are detected and nullified inside lookupPerson(),
+  // but we also need to ensure we attempt lookup even if the only hint is a Sales Nav URL + name
+  const personUrl = hints.linkedin_person_url || null;
+  const hasPersonHint = personUrl || hints.name;
+  if (hasPersonHint) {
     const personResult = await lookupPerson(
       hints.name || null,
       companyDomain,
-      hints.linkedin_person_url
+      personUrl
     );
     if (personResult.success) {
       results.person = personResult.data;

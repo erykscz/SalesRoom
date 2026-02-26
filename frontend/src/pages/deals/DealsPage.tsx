@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban } from 'lucide-react';
+import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban, Linkedin } from 'lucide-react';
 import KanbanBoard from '@/components/deals/KanbanBoard';
 import { API_URL } from '@/lib/api';
 
@@ -153,29 +153,60 @@ export default function DealsPage() {
     }
   };
 
-  const handleCsvFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     try {
-      const csvContent = await file.text();
+      const isXlsx = file.name.toLowerCase().endsWith('.xlsx');
 
-      const response = await fetch(`${API_URL}/deals/import/csv`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ csvContent }),
-      });
+      if (isXlsx) {
+        // Lix IT Excel import — read as binary, send as base64
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to import deals');
+        const response = await fetch(`${API_URL}/deals/import/lix`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ xlsxBase64: base64 }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to import Lix IT Excel');
+        }
+
+        const result = await response.json();
+        alert(`Successfully imported ${result.imported} deal(s) from Lix IT Excel with pre-populated research data`);
+      } else {
+        // Standard CSV import
+        const csvContent = await file.text();
+
+        const response = await fetch(`${API_URL}/deals/import/csv`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ csvContent }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to import deals');
+        }
+
+        const result = await response.json();
+        alert(`Successfully imported ${result.imported} deal(s)`);
       }
-
-      const result = await response.json();
-      alert(`Successfully imported ${result.imported} deal(s)`);
 
       // Refresh deals list
       fetchDeals();
@@ -290,14 +321,32 @@ export default function DealsPage() {
     }
   };
 
-  const formatCurrency = (value: number | null) => {
-    if (!value) return '-';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
+  const deleteAllDeals = async () => {
+    if (!confirm('Are you sure you want to delete ALL deals? This action cannot be undone.')) {
+      return;
+    }
+    if (!confirm('This will permanently delete all deals and related data. Are you ABSOLUTELY sure?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/deals/batch/all`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete all deals');
+      }
+
+      const result = await response.json();
+      alert(`Successfully deleted ${result.count} deal(s)`);
+      fetchDeals();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete all deals');
+    }
   };
 
   const formatDate = (date: string | null) => {
@@ -359,17 +408,21 @@ export default function DealsPage() {
               <Kanban className="w-4 h-4" />
             </Button>
           </div>
+          <Button variant="destructive" onClick={deleteAllDeals}>
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete All
+          </Button>
           <Button variant="outline" onClick={exportToCsv}>
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
           <label className="relative inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-11 px-4 py-2 cursor-pointer">
             <Upload className="w-4 h-4 mr-2" />
-            Import CSV
+            Import
             <input
               type="file"
-              accept=".csv"
-              onChange={handleCsvFileChange}
+              accept=".csv,.xlsx"
+              onChange={handleFileImport}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
           </label>
@@ -508,11 +561,12 @@ export default function DealsPage() {
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>
                       <div className="flex items-center">Contact<SortIcon column="name" /></div>
                     </th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('company_name')}>
+                      <div className="flex items-center">Company<SortIcon column="company_name" /></div>
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">LinkedIn</th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('stage')}>
                       <div className="flex items-center">Stage<SortIcon column="stage" /></div>
-                    </th>
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('estimated_value')}>
-                      <div className="flex items-center">Value<SortIcon column="estimated_value" /></div>
                     </th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('health_score')}>
                       <div className="flex items-center">Health<SortIcon column="health_score" /></div>
@@ -520,7 +574,6 @@ export default function DealsPage() {
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('next_step_date')}>
                       <div className="flex items-center">Next Step<SortIcon column="next_step_date" /></div>
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Owner</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
@@ -532,21 +585,27 @@ export default function DealsPage() {
                           <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }} className="font-medium hover:text-primary truncate block" title={deal.name}>
                             {deal.name}
                           </Link>
-                          {deal.company_name && (
-                            <p className="text-sm text-muted-foreground truncate" title={deal.company_name}>{deal.company_name}</p>
-                          )}
                           {deal.job_title && (
                             <p className="text-xs text-muted-foreground truncate" title={deal.job_title}>{deal.job_title}</p>
                           )}
                         </div>
                       </td>
+                      <td className="py-3 px-4 text-sm">
+                        {deal.company_name || '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {deal.linkedin_url ? (
+                          <a href={deal.linkedin_url} target="_blank" rel="noopener noreferrer" title={deal.linkedin_url} className="text-blue-600 hover:text-blue-800">
+                            <Linkedin className="w-4 h-4" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stageColors[deal.stage]}`}>
                           {stageLabels[deal.stage]}
                         </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="font-medium">{formatCurrency(deal.estimated_value)}</span>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
@@ -561,9 +620,6 @@ export default function DealsPage() {
                           <Calendar className="w-4 h-4 text-muted-foreground" />
                           {formatDate(deal.next_step_date)}
                         </div>
-                      </td>
-                      <td className="py-3 px-4 text-sm">
-                        {deal.owner_name}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">

@@ -110,7 +110,7 @@ export default function ResearchPanel({ leadId, research, socialProfiles, messag
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <FileText className="h-4 w-4" />
-              Research Summary
+              Podsumowanie AI
             </CardTitle>
           </CardHeader>
           <CardContent>

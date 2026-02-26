@@ -1,5 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import * as XLSX from 'xlsx';
 import { get, run, all } from '../db/database.js';
 import { createNotification } from './notifications.js';
 import { calculateHealthScore } from '../utils/healthScore.js';
@@ -642,6 +643,28 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/deals/batch/all - Delete all deals (double confirmation on frontend)
+router.delete('/batch/all', async (req, res) => {
+  try {
+    const countResult = await get('SELECT COUNT(*) as count FROM deals');
+    const count = countResult?.count || 0;
+
+    if (count === 0) {
+      return res.json({ message: 'No deals to delete', count: 0 });
+    }
+
+    // Clear deal_id in leads (FK without ON DELETE CASCADE)
+    await run('UPDATE leads SET deal_id = NULL WHERE deal_id IS NOT NULL');
+
+    await run('DELETE FROM deals');
+
+    res.json({ message: 'All deals deleted', count });
+  } catch (error) {
+    console.error('Error deleting all deals:', error);
+    res.status(500).json({ error: 'Failed to delete all deals' });
+  }
+});
+
 // DELETE /api/deals/:id - Delete a deal
 router.delete('/:id', async (req, res) => {
   try {
@@ -774,13 +797,13 @@ router.post('/import/csv', async (req, res) => {
 
     // Find column indices - person fields
     const nameIndex = headers.findIndex(h => h === 'name' || h === 'contact name' || h === 'contact_name');
-    const jobTitleIndex = headers.findIndex(h => h === 'job title' || h === 'job_title' || h === 'jobtitle');
+    const jobTitleIndex = headers.findIndex(h => h === 'job title' || h === 'job_title' || h === 'jobtitle' || h === 'title');
     const emailIndex = headers.findIndex(h => h === 'email');
     const phoneIndex = headers.findIndex(h => h === 'phone');
-    const linkedinUrlIndex = headers.findIndex(h => h === 'linkedin url' || h === 'linkedin_url' || h === 'linkedinurl' || h === 'linkedin');
+    const linkedinUrlIndex = headers.findIndex(h => h === 'linkedin url' || h === 'linkedin_url' || h === 'linkedinurl' || h === 'linkedin' || h === 'profile link' || h === 'profile_link' || h === 'linkedin profile' || h === 'linkedin profile url' || h === 'person linkedin url');
 
     // Find column indices - deal fields
-    const companyNameIndex = headers.findIndex(h => h === 'company name' || h === 'company_name' || h === 'companyname');
+    const companyNameIndex = headers.findIndex(h => h === 'company name' || h === 'company_name' || h === 'companyname' || h === 'company');
     const industryIndex = headers.findIndex(h => h === 'industry');
     const stageIndex = headers.findIndex(h => h === 'stage');
     const valueIndex = headers.findIndex(h => h === 'estimated value' || h === 'estimated_value' || h === 'value');
@@ -919,6 +942,243 @@ router.post('/import/csv', async (req, res) => {
   } catch (error) {
     console.error('Error importing deals:', error);
     res.status(500).json({ error: 'Failed to import deals' });
+  }
+});
+
+// POST /api/deals/import/lix - Import deals from Lix IT Excel (.xlsx)
+// Pre-populates research data with LinkedIn person info extracted by the Lix IT extension
+router.post('/import/lix', async (req, res) => {
+  try {
+    const { xlsxBase64 } = req.body;
+
+    if (!xlsxBase64) {
+      return res.status(400).json({ error: 'Excel file content (xlsxBase64) is required' });
+    }
+
+    if (xlsxBase64.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: 'File too large. Maximum 10MB.' });
+    }
+
+    // Parse xlsx
+    const buffer = Buffer.from(xlsxBase64, 'base64');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'Excel file is empty' });
+    }
+
+    // Validate Lix IT format by checking for known column signatures
+    const columns = Object.keys(rows[0]);
+    const hasLinkedInName = columns.some(c => c === 'LinkedIn Name');
+    const hasOrganisation = columns.some(c => c === 'Organisation');
+    const hasProfileLink = columns.some(c => c === 'Profile Link');
+
+    if (!hasLinkedInName && !hasOrganisation && !hasProfileLink) {
+      return res.status(400).json({
+        error: 'This does not appear to be a Lix IT export. Expected columns: "LinkedIn Name", "Organisation", "Profile Link".',
+      });
+    }
+
+    // Helper: normalize URL (add https:// if missing)
+    function normalizeUrl(url) {
+      if (!url || typeof url !== 'string') return null;
+      url = url.trim();
+      if (!url) return null;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      return url;
+    }
+
+    // Helper: parse "Title at Company" format from Current/Past Role(s)
+    function parseRoles(roleStr) {
+      if (!roleStr) return [];
+      // Roles may be separated by semicolons or newlines
+      return roleStr.split(/[;\n]+/).map(role => {
+        const trimmed = role.trim();
+        if (!trimmed) return null;
+        const atMatch = trimmed.match(/^(.+?)\s+at\s+(.+)$/i);
+        if (atMatch) {
+          return { title: atMatch[1].trim(), company: atMatch[2].trim(), starts_at: null, ends_at: null, description: null };
+        }
+        return { title: trimmed, company: null, starts_at: null, ends_at: null, description: null };
+      }).filter(Boolean);
+    }
+
+    // Helper: parse education (semicolon-separated school names)
+    function parseEducation(eduStr) {
+      if (!eduStr) return [];
+      return eduStr.split(/[;\n]+/).map(e => {
+        const trimmed = e.trim();
+        if (!trimmed) return null;
+        return { school: trimmed, degree_name: null, field_of_study: null };
+      }).filter(Boolean).slice(0, 3);
+    }
+
+    // Default next_step_date: current date + 30 days
+    const defaultNextStepDate = new Date();
+    defaultNextStepDate.setDate(defaultNextStepDate.getDate() + 30);
+    const nextStepDateStr = defaultNextStepDate.toISOString().split('T')[0];
+
+    const createdDeals = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      // Extract fields from Lix IT columns
+      const firstName = (row['First Name'] || '').trim();
+      const lastName = (row['Last Name'] || '').trim();
+      const fullName = `${firstName} ${lastName}`.trim() || (row['LinkedIn Name'] || '').trim();
+
+      if (!fullName) {
+        errors.push(`Row ${i + 2}: Name is empty — skipped`);
+        continue;
+      }
+
+      const headline = (row['Description'] || '').trim() || null;
+      const companyName = (row['Organisation'] || '').trim() || null;
+      const companyUrl = normalizeUrl(row['Organisation Website']);
+      const profileLink = normalizeUrl(row['Profile Link']);
+      const industry = (row['Industry'] || '').trim() || null;
+      const location = (row['Location'] || '').trim() || null;
+      const about = (row['About'] || '').trim() || null;
+      const currentRoles = (row['Current Role(s)'] || '').trim() || null;
+      const pastRoles = (row['Past Role(s)'] || '').trim() || null;
+      const education = (row['Education'] || '').trim() || null;
+      const seniority = (row['Seniority'] || '').trim() || null;
+      const jobFunction = (row['Job Function'] || '').trim() || null;
+      const orgSize = (row['Organisation Size'] || '').trim() || null;
+
+      // Determine job_title: prefer Description (headline), fallback to Current Role(s)
+      const jobTitle = headline || currentRoles || null;
+
+      const dealId = uuidv4();
+      const researchProfileId = uuidv4();
+
+      try {
+        // 1. Create deal
+        await run(
+          `INSERT INTO deals (
+            id, name, job_title, email, phone, linkedin_url,
+            company_name, company_url, industry, stage, estimated_value, close_date,
+            next_step_date, next_step_description, health_score, owner_id, source, priority
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            dealId,
+            fullName,
+            jobTitle,
+            null, // email — not in Lix IT export
+            null, // phone — not in Lix IT export
+            profileLink,
+            companyName,
+            companyUrl,
+            industry,
+            'new_signal',
+            null, // estimated_value
+            null, // close_date
+            nextStepDateStr,
+            null, // next_step_description
+            50,
+            req.user.id,
+            'import',
+            'medium'
+          ]
+        );
+
+        // 2. Build LinkedIn person data from Lix IT fields
+        const experiences = [
+          ...parseRoles(currentRoles),
+          ...parseRoles(pastRoles),
+        ].slice(0, 5);
+
+        const personData = {
+          full_name: fullName,
+          headline: headline,
+          summary: about,
+          occupation: currentRoles || headline,
+          city: location,
+          country: null,
+          connections: null,
+          follower_count: null,
+          linkedin_url: profileLink,
+          profile_pic_url: null,
+          experiences: experiences,
+          education: parseEducation(education),
+          skills: [],
+          languages: [],
+          seniority: seniority,
+          job_function: jobFunction,
+          _source: 'lix_import',
+        };
+
+        const linkedinData = JSON.stringify({
+          company: null, // Will be fetched when user runs Deep Research
+          person: personData,
+        });
+
+        // 3. Create research profile (pre-populated with person data)
+        await run(
+          `INSERT INTO research_profiles (
+            id, lead_id, deal_id, status, linkedin_data,
+            platforms_searched, platforms_succeeded,
+            requested_by, created_at, updated_at, completed_at
+          ) VALUES (?, NULL, ?, 'partial', ?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'))`,
+          [
+            researchProfileId,
+            dealId,
+            linkedinData,
+            JSON.stringify(['linkedin']),
+            JSON.stringify(['linkedin']),
+            req.user.id,
+          ]
+        );
+
+        // 4. Create social profile for LinkedIn
+        await run(
+          `INSERT INTO social_profiles (
+            id, lead_id, deal_id, research_profile_id,
+            platform, profile_url, username, display_name, bio, followers_count, profile_data
+          ) VALUES (?, NULL, ?, ?, 'linkedin', ?, ?, ?, ?, NULL, ?)`,
+          [
+            uuidv4(),
+            dealId,
+            researchProfileId,
+            profileLink,
+            fullName,
+            fullName,
+            headline,
+            JSON.stringify(personData),
+          ]
+        );
+
+        // 5. Activity log
+        await run(
+          `INSERT INTO activities (id, deal_id, activity_type, description, created_by)
+           VALUES (?, ?, ?, ?, ?)`,
+          [uuidv4(), dealId, 'deal_created', `Deal imported from Lix IT Excel for ${fullName}`, req.user.id]
+        );
+
+        createdDeals.push({ id: dealId, name: fullName, company_name: companyName });
+      } catch (err) {
+        errors.push(`Row ${i + 2}: Failed to create deal for ${fullName} — ${err.message}`);
+      }
+    }
+
+    console.log(`Lix IT import: ${createdDeals.length} deals created, ${errors.length} errors`);
+
+    res.json({
+      success: true,
+      imported: createdDeals.length,
+      deals: createdDeals,
+      source: 'lix_it',
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    console.error('Error importing Lix IT Excel:', error);
+    res.status(500).json({ error: 'Failed to import Lix IT Excel: ' + error.message });
   }
 });
 

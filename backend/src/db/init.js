@@ -458,7 +458,7 @@ async function initDatabase() {
         lead_id TEXT,
         deal_id TEXT,
         research_profile_id TEXT NOT NULL,
-        platform TEXT CHECK(platform IN ('linkedin', 'twitter', 'github', 'reddit', 'facebook')) NOT NULL,
+        platform TEXT CHECK(platform IN ('linkedin', 'twitter', 'github', 'reddit', 'facebook', 'website')) NOT NULL,
         profile_url TEXT,
         username TEXT,
         display_name TEXT,

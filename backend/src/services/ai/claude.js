@@ -34,7 +34,7 @@ Rules:
 ${channelConf.hasSubject ? '- Include a compelling subject line (max 80 characters).' : '- No subject line needed.'}
 - Include a clear, non-pushy call to action.
 - Do NOT use salesy cliches, buzzwords, or generic phrases like "I hope this finds you well".
-- Write in the language that matches the prospect's likely language based on their location, but default to English.
+- Write in Polish.
 - Output ONLY valid JSON, nothing else.`;
 }
 

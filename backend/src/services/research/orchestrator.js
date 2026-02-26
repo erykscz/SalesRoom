@@ -5,6 +5,7 @@ import { research as githubResearch } from './github.js';
 import { research as twitterResearch } from './twitter.js';
 import { research as redditResearch } from './reddit.js';
 import { research as facebookResearch } from './facebook.js';
+import { research as websiteResearch } from './website.js';
 
 const platformAdapters = {
   linkedin: linkedinResearch,
@@ -12,13 +13,15 @@ const platformAdapters = {
   twitter: twitterResearch,
   reddit: redditResearch,
   facebook: facebookResearch,
+  website: websiteResearch,
 };
 
 // Determine which platforms have API keys configured
 export function getAvailablePlatforms() {
   const available = [];
-  available.push('linkedin'); // Works with Proxycurl API or public profile scraper
+  available.push('linkedin'); // Works with Proxycurl API or public profile scraper + DuckDuckGo search
   available.push('github'); // GitHub works without token (lower rate limit)
+  available.push('website'); // Company website scraper — no API key needed
   if (process.env.TWITTER_BEARER_TOKEN) available.push('twitter');
   if (process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET) available.push('reddit');
   if (process.env.FACEBOOK_ACCESS_TOKEN) available.push('facebook');
@@ -78,6 +81,29 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
     if (personContext.linkedin_url && !enrichedHints.linkedin_person_url) {
       enrichedHints.linkedin_person_url = personContext.linkedin_url;
     }
+    if (personContext.company_url && !enrichedHints.company_url) {
+      enrichedHints.company_url = personContext.company_url;
+    }
+
+    // Check for existing Lix IT research data (pre-populated on import)
+    let existingLixPersonData = null;
+    if (dealId) {
+      const existingProfile = await get(
+        `SELECT linkedin_data FROM research_profiles
+         WHERE deal_id = ? AND id != ? AND linkedin_data IS NOT NULL
+         ORDER BY created_at DESC LIMIT 1`,
+        [dealId, researchProfileId]
+      );
+      if (existingProfile?.linkedin_data) {
+        try {
+          const parsed = JSON.parse(existingProfile.linkedin_data);
+          if (parsed.person?._source === 'lix_import') {
+            existingLixPersonData = parsed.person;
+            console.log(`Found existing Lix IT person data for deal ${dealId} — will merge with new research`);
+          }
+        } catch { /* ignore parse errors */ }
+      }
+    }
 
     // Execute all platform adapters in parallel
     const results = await Promise.allSettled(
@@ -108,21 +134,51 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         succeeded.push(platform);
         platformData[platform] = data;
 
-        // Store social profile
+        // Store social profile (wrapped in try/catch to prevent one platform's DB error from crashing all research)
         if (profile) {
-          await run(
-            `INSERT INTO social_profiles (id, lead_id, deal_id, research_profile_id, platform, profile_url, username, display_name, bio, followers_count, profile_data)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              uuidv4(), leadId || null, dealId || null, researchProfileId, profile.platform,
-              profile.profile_url, profile.username, profile.display_name,
-              profile.bio, profile.followers_count, JSON.stringify(data),
-            ]
-          );
+          try {
+            await run(
+              `INSERT INTO social_profiles (id, lead_id, deal_id, research_profile_id, platform, profile_url, username, display_name, bio, followers_count, profile_data)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                uuidv4(), leadId || null, dealId || null, researchProfileId, profile.platform,
+                profile.profile_url, profile.username, profile.display_name,
+                profile.bio, profile.followers_count, JSON.stringify(data),
+              ]
+            );
+          } catch (dbErr) {
+            console.error(`Failed to store social profile for ${profile.platform}:`, dbErr.message);
+          }
         }
       } else {
         errors.push({ platform, error: error || 'No data returned' });
       }
+    }
+
+    // Merge Lix IT person data with LinkedIn results if available
+    if (existingLixPersonData && platformData.linkedin) {
+      const li = platformData.linkedin;
+      if (!li.person || li.person._source === 'url_only') {
+        // Research couldn't get person data (e.g. HTTP 999) — use Lix IT data
+        li.person = existingLixPersonData;
+        console.log('Merged Lix IT person data into LinkedIn results (replaced url_only)');
+      } else if (li.person) {
+        // Research got some person data — fill gaps from Lix IT
+        const lp = li.person;
+        const lx = existingLixPersonData;
+        if (!lp.summary && lx.summary) lp.summary = lx.summary;
+        if (!lp.city && lx.city) lp.city = lx.city;
+        if ((!lp.experiences || lp.experiences.length === 0) && lx.experiences?.length > 0) lp.experiences = lx.experiences;
+        if ((!lp.education || lp.education.length === 0) && lx.education?.length > 0) lp.education = lx.education;
+        if (lx.seniority) lp.seniority = lx.seniority;
+        if (lx.job_function) lp.job_function = lx.job_function;
+        console.log('Merged Lix IT person data into LinkedIn results (filled gaps)');
+      }
+    } else if (existingLixPersonData && !platformData.linkedin) {
+      // LinkedIn adapter failed entirely but we have Lix IT data — add it
+      platformData.linkedin = { company: null, person: existingLixPersonData };
+      succeeded.push('linkedin');
+      console.log('Added Lix IT person data as LinkedIn results (adapter had failed)');
     }
 
     // Determine final status
@@ -133,6 +189,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         : 'failed';
 
     // Update research profile with results
+    // Note: website data is stored in tavily_data column (repurposed — tavily is unused)
     await run(
       `UPDATE research_profiles SET
         status = ?,
@@ -141,6 +198,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         github_data = ?,
         reddit_data = ?,
         facebook_data = ?,
+        tavily_data = ?,
         platforms_succeeded = ?,
         error_log = ?,
         updated_at = datetime('now'),
@@ -153,6 +211,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         platformData.github ? JSON.stringify(platformData.github) : null,
         platformData.reddit ? JSON.stringify(platformData.reddit) : null,
         platformData.facebook ? JSON.stringify(platformData.facebook) : null,
+        platformData.website ? JSON.stringify(platformData.website) : null,
         JSON.stringify(succeeded),
         errors.length > 0 ? JSON.stringify(errors) : null,
         researchProfileId,
@@ -223,9 +282,15 @@ async function generateResearchSummary(companyName, platformData, personContext 
     const fb = platformData.facebook;
     sections.push(`Facebook: ${fb.name || companyName} - ${fb.fan_count || 0} fans. ${fb.category || ''}`);
   }
-
-  // Add company website context
-  if (personContext.company_url) {
+  if (platformData.website) {
+    const ws = platformData.website;
+    let websiteSection = `Company Website (${ws.website || personContext.company_url || 'N/A'}): ${ws.name || companyName}`;
+    if (ws.description) websiteSection += `. ${ws.description.substring(0, 300)}`;
+    if (ws.industry) websiteSection += `. Industry: ${ws.industry}`;
+    if (ws.keywords && ws.keywords.length > 0) websiteSection += `. Keywords: ${ws.keywords.slice(0, 5).join(', ')}`;
+    if (ws.address) websiteSection += `. Address: ${ws.address}`;
+    sections.push(websiteSection);
+  } else if (personContext.company_url) {
     sections.push(`Company website: ${personContext.company_url}`);
   }
 
@@ -235,23 +300,63 @@ async function generateResearchSummary(companyName, platformData, personContext 
     ? `${personName}${jobTitle ? ` (${jobTitle})` : ''} at ${companyName}`
     : companyName;
 
-  const prompt = `Summarize the following research data about ${subjectDesc} in 3-5 sentences. Focus on what would be useful for a sales representative crafting personalized outreach${personName ? `, specifically targeting ${personName}` : ''}. Highlight personal interests, professional background, and any hooks for conversation. Write in English.\n\n${sections.join('\n\n')}`;
+  const prompt = `Summarize the following research data about ${subjectDesc} in 3-5 sentences. Focus on what would be useful for a sales representative crafting personalized outreach${personName ? `, specifically targeting ${personName}` : ''}. Highlight personal interests, professional background, and any hooks for conversation. Write in Polish.\n\n${sections.join('\n\n')}`;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 512,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+  // Try with primary model first, then fallback model if primary is unavailable
+  const models = [
+    process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+    'claude-3-haiku-20240307', // fallback: cheaper, more available
+  ];
 
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.content?.[0]?.text || null;
+  for (const model of models) {
+    // Retry up to 2 times per model for transient errors
+    const maxRetries = 2;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': process.env.ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 512,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          return data.content?.[0]?.text || null;
+        }
+
+        // Retryable errors: 429 (rate limit), 529 (overloaded), 500/502/503 (server errors)
+        const retryable = [429, 500, 502, 503, 529];
+        if (retryable.includes(res.status) && attempt < maxRetries) {
+          const waitMs = attempt * 2000;
+          console.log(`Anthropic API (${model}) returned ${res.status}, retrying in ${waitMs}ms (attempt ${attempt}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+          continue;
+        }
+
+        // Not retryable or last attempt — try next model
+        console.log(`Anthropic API (${model}) returned ${res.status} after ${attempt} attempt(s), trying next model...`);
+        break;
+      } catch (err) {
+        if (attempt < maxRetries) {
+          const waitMs = attempt * 2000;
+          console.log(`Anthropic API (${model}) error: ${err.message}, retrying in ${waitMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+          continue;
+        }
+        console.log(`Anthropic API (${model}) failed after ${attempt} attempt(s): ${err.message}, trying next model...`);
+        break;
+      }
+    }
+  }
+
+  console.error('All Anthropic models failed for research summary generation');
+  return null;
 }

@@ -16,6 +16,7 @@ function parseResearchProfile(research) {
     github_data: research.github_data ? JSON.parse(research.github_data) : null,
     reddit_data: research.reddit_data ? JSON.parse(research.reddit_data) : null,
     facebook_data: research.facebook_data ? JSON.parse(research.facebook_data) : null,
+    website_data: research.tavily_data ? JSON.parse(research.tavily_data) : null,
     platforms_searched: JSON.parse(research.platforms_searched || '[]'),
     platforms_succeeded: JSON.parse(research.platforms_succeeded || '[]'),
     error_log: JSON.parse(research.error_log || '[]'),
