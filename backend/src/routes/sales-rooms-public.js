@@ -129,9 +129,9 @@ router.get('/:slug', async (req, res) => {
     // Attach financial data to salesRoom for frontend
     salesRoom.roiData = financialData;
 
-    // Add attachment URL if exists
+    // Add attachment URL if exists - use proxy endpoint for secure access
     if (salesRoom.attachment_filename && salesRoom.attachment_path) {
-      salesRoom.attachment_url = `/api/uploads/${path.basename(salesRoom.attachment_path)}`;
+      salesRoom.attachment_url = `/api/sales-rooms/public/${slug}/attachment`;
     }
 
     // Remove sensitive fields
@@ -494,6 +494,60 @@ router.post('/:slug/chat', async (req, res) => {
   } catch (error) {
     console.error('Error processing chat message:', error);
     res.status(500).json({ error: 'Failed to process message' });
+  }
+});
+
+// GET /api/sales-rooms/public/:slug/attachment - Download attachment (NO AUTH REQUIRED)
+router.get('/:slug/attachment', async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    const salesRoom = await get(
+      `SELECT id, is_expired, attachment_filename, attachment_path, attachment_mimetype
+       FROM sales_rooms
+       WHERE public_url_slug = ?`,
+      [slug]
+    );
+
+    if (!salesRoom) {
+      return res.status(404).json({ error: 'Sales Room not found' });
+    }
+
+    if (salesRoom.is_expired) {
+      return res.status(410).json({ error: 'This Sales Room has expired' });
+    }
+
+    if (!salesRoom.attachment_filename || !salesRoom.attachment_path) {
+      return res.status(404).json({ error: 'No attachment available' });
+    }
+
+    const useBlob = !!process.env.BLOB_READ_WRITE_TOKEN;
+
+    if (useBlob && salesRoom.attachment_path.startsWith('http')) {
+      // Fetch from Vercel Blob Storage
+      try {
+        const response = await fetch(salesRoom.attachment_path);
+        if (!response.ok) {
+          throw new Error('Failed to fetch file from Blob Storage');
+        }
+
+        const buffer = await response.arrayBuffer();
+
+        res.setHeader('Content-Type', salesRoom.attachment_mimetype || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${salesRoom.attachment_filename}"`);
+        res.send(Buffer.from(buffer));
+      } catch (err) {
+        console.error('Error downloading from Blob Storage:', err);
+        return res.status(500).json({ error: 'Failed to download attachment' });
+      }
+    } else {
+      // Local disk storage - redirect to static file endpoint
+      const filename = path.basename(salesRoom.attachment_path);
+      return res.redirect(`/api/uploads/${filename}`);
+    }
+  } catch (error) {
+    console.error('Error downloading attachment:', error);
+    res.status(500).json({ error: 'Failed to download attachment' });
   }
 });
 
