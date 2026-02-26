@@ -72,3 +72,4 @@ temp/
 
 # Features database (managed separately)
 features.db
+.vercel

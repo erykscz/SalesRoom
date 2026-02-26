@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -74,6 +74,7 @@ export default function DealsPage() {
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>(
     (searchParams.get('view') as 'table' | 'kanban') || 'table'
   );
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Get current URL with search params for passing to detail pages
   const currentUrl = location.pathname + location.search;
@@ -416,14 +417,14 @@ export default function DealsPage() {
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
-          <label className="relative inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-11 px-4 py-2 cursor-pointer">
+          <label className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-11 px-4 py-2 cursor-pointer">
             <Upload className="w-4 h-4 mr-2" />
             Import
             <input
               type="file"
               accept=".csv,.xlsx"
               onChange={handleFileImport}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              className="sr-only"
             />
           </label>
           <Link to="/deals/new">

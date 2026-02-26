@@ -50,7 +50,7 @@ export async function storeFile(file, subdir = '') {
     const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname);
     const pathname = subdir ? `${subdir}/${uniqueName}` : uniqueName;
     const { url } = await put(pathname, file.buffer, {
-      access: 'public',
+      access: 'private',
       contentType: file.mimetype,
     });
     return { url, storagePath: url };
