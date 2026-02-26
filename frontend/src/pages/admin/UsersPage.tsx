@@ -93,6 +93,7 @@ export default function UsersPage() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    confirmPassword: '',
     name: '',
     role: 'rep',
     isActive: true,
@@ -141,6 +142,15 @@ export default function UsersPage() {
       return;
     }
 
+    if (formData.password !== formData.confirmPassword) {
+      toast({
+        title: 'Validation Error',
+        description: 'Passwords do not match',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
@@ -164,7 +174,7 @@ export default function UsersPage() {
       });
 
       setShowCreateDialog(false);
-      setFormData({ email: '', password: '', name: '', role: 'rep', isActive: true, phone: '', jobTitle: '' });
+      setFormData({ email: '', password: '', confirmPassword: '', name: '', role: 'rep', isActive: true, phone: '', jobTitle: '' });
       fetchUsers();
     } catch (error: any) {
       toast({
@@ -346,6 +356,7 @@ export default function UsersPage() {
     setFormData({
       email: user.email,
       password: '',
+      confirmPassword: '',
       name: user.name,
       role: user.role,
       isActive: user.isActive,
@@ -392,7 +403,7 @@ export default function UsersPage() {
             <CardDescription>Manage system users and their permissions</CardDescription>
           </div>
           <Button onClick={() => {
-            setFormData({ email: '', password: '', name: '', role: 'rep', isActive: true, phone: '', jobTitle: '' });
+            setFormData({ email: '', password: '', confirmPassword: '', name: '', role: 'rep', isActive: true, phone: '', jobTitle: '' });
             setShowCreateDialog(true);
           }}>
             <Plus className="h-4 w-4 mr-2" />
@@ -511,6 +522,16 @@ export default function UsersPage() {
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 placeholder="Min 8 chars with uppercase, lowercase, number, special"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                placeholder="Re-enter password"
               />
             </div>
             <div className="space-y-2">
