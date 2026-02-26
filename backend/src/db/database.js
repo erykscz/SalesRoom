@@ -263,7 +263,7 @@ export async function run(sql, params = []) {
     const result = await neonSql.query(converted, params);
     return {
       lastID: null,
-      changes: result?.rowCount || 0
+      changes: Array.isArray(result) ? result.length : 0
     };
   } else {
     return new Promise((resolve, reject) => {
@@ -284,7 +284,7 @@ export async function get(sql, params = []) {
   if (isPostgres) {
     const converted = convertSQL(sql);
     const result = await neonSql.query(converted, params);
-    return result?.rows?.[0] || undefined;
+    return Array.isArray(result) ? result[0] : undefined;
   } else {
     return new Promise((resolve, reject) => {
       db.get(sql, params, (err, row) => {
@@ -304,8 +304,8 @@ export async function all(sql, params = []) {
   if (isPostgres) {
     const converted = convertSQL(sql);
     const result = await neonSql.query(converted, params);
-    return result?.rows || [];
-  } else {
+    return Array.isArray(result) ? result : [];
+  } else{
     return new Promise((resolve, reject) => {
       db.all(sql, params, (err, rows) => {
         if (err) reject(err);
