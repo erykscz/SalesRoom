@@ -793,7 +793,33 @@ router.post('/import/csv', async (req, res) => {
 
     // Parse header
     const headerLine = lines[0];
-    const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    let headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+
+    // Detect if this is LinkedIn Sales Navigator export
+    const linkedInSignatures = ['linkedin name', 'sales navigator profile link', 'organisation'];
+    const isLinkedInFormat = linkedInSignatures.some(sig => headers.includes(sig));
+
+    console.log(`CSV Format detected: ${isLinkedInFormat ? 'LinkedIn Sales Navigator' : 'Standard'}`);
+
+    // Preprocess LinkedIn headers to map to standard format
+    if (isLinkedInFormat) {
+      const linkedInMap = new Map([
+        ['first name', 'first_name_temp'],
+        ['last name', 'last_name_temp'],
+        ['linkedin name', 'linkedin_name_temp'],
+        ['organisation', 'company name'],
+        ['organisation website', 'company_url_temp'],
+        ['current role(s)', 'job title'],
+        ['sales navigator profile link', 'linkedin url'],
+        ['profile link', 'linkedin_url_alt_temp'],
+        ['about', 'about_temp'],
+        ['location', 'location_temp'],
+        ['organisation size', 'company_size_temp']
+      ]);
+
+      headers = headers.map(h => linkedInMap.get(h) || h);
+      console.log('LinkedIn headers mapped:', headers);
+    }
 
     // Find column indices - person fields
     const nameIndex = headers.findIndex(h => h === 'name' || h === 'contact name' || h === 'contact_name');
@@ -854,7 +880,36 @@ router.post('/import/csv', async (req, res) => {
       if (!line) continue;
 
       const values = parseCSVLine(line);
-      const contactName = values[nameIndex]?.replace(/^"|"$/g, '');
+
+      // Skip locked rows from LinkedIn (contains LOCKED text or lock emoji)
+      if (isLinkedInFormat && values.length > 0) {
+        const firstValue = values[0] || '';
+        if (firstValue.includes('LOCKED') || firstValue.includes('🔒')) {
+          console.log(`Skipping locked row ${i + 1}`);
+          continue;
+        }
+      }
+
+      // Get contact name - try standard field first
+      let contactName = nameIndex >= 0 ? values[nameIndex]?.replace(/^"|"$/g, '').trim() : null;
+
+      // For LinkedIn format, try to build name from alternative fields
+      if (isLinkedInFormat && !contactName) {
+        const firstNameIdx = headers.indexOf('first_name_temp');
+        const lastNameIdx = headers.indexOf('last_name_temp');
+        const linkedinNameIdx = headers.indexOf('linkedin_name_temp');
+
+        const firstName = firstNameIdx >= 0 ? values[firstNameIdx]?.replace(/^"|"$/g, '').trim() : '';
+        const lastName = lastNameIdx >= 0 ? values[lastNameIdx]?.replace(/^"|"$/g, '').trim() : '';
+        const linkedinName = linkedinNameIdx >= 0 ? values[linkedinNameIdx]?.replace(/^"|"$/g, '').trim() : '';
+
+        // Priority: First+Last > LinkedIn Name
+        if (firstName || lastName) {
+          contactName = [firstName, lastName].filter(Boolean).join(' ');
+        } else if (linkedinName) {
+          contactName = linkedinName;
+        }
+      }
 
       if (!contactName) {
         errors.push(`Row ${i + 1}: Name is required`);
@@ -866,6 +921,11 @@ router.post('/import/csv', async (req, res) => {
       const csvPhone = phoneIndex >= 0 ? values[phoneIndex]?.replace(/^"|"$/g, '') || null : null;
       const linkedinUrl = linkedinUrlIndex >= 0 ? values[linkedinUrlIndex]?.replace(/^"|"$/g, '') || null : null;
       const companyName = companyNameIndex >= 0 ? values[companyNameIndex]?.replace(/^"|"$/g, '') || null : null;
+
+      // Extract LinkedIn About/Bio (if present)
+      const aboutIdx = headers.indexOf('about_temp');
+      const aboutContent = isLinkedInFormat && aboutIdx >= 0 ?
+        values[aboutIdx]?.replace(/^"|"$/g, '').trim() : null;
 
       const industry = industryIndex >= 0 ? values[industryIndex]?.replace(/^"|"$/g, '') || null : null;
       let stage = stageIndex >= 0 ? values[stageIndex]?.replace(/^"|"$/g, '').toLowerCase().replace(/ /g, '_') || 'new_signal' : 'new_signal';
@@ -927,6 +987,21 @@ router.post('/import/csv', async (req, res) => {
           [uuidv4(), dealId, 'deal_created', `Deal imported for ${contactName}`, req.user.id]
         );
 
+        // Save LinkedIn About as a note if available
+        if (isLinkedInFormat && aboutContent) {
+          try {
+            const noteId = uuidv4();
+            await run(
+              `INSERT INTO deal_notes (id, deal_id, content, created_by, created_at)
+               VALUES (?, ?, ?, ?, datetime('now'))`,
+              [noteId, dealId, `📝 LinkedIn Bio:\n\n${aboutContent}`, req.user.id]
+            );
+          } catch (noteErr) {
+            console.error('Failed to save LinkedIn bio note:', noteErr);
+            // Don't fail the import if note creation fails
+          }
+        }
+
         createdDeals.push({ id: dealId, name: contactName, company_name: companyName });
       } catch (err) {
         errors.push(`Row ${i + 1}: Failed to create deal for ${contactName} - ${err.message}`);
@@ -936,6 +1011,7 @@ router.post('/import/csv', async (req, res) => {
     res.json({
       success: true,
       imported: createdDeals.length,
+      format: isLinkedInFormat ? 'linkedin' : 'standard',
       deals: createdDeals,
       errors: errors.length > 0 ? errors : undefined
     });
