@@ -933,6 +933,10 @@ router.post('/import/csv', async (req, res) => {
       const linkedinUrl = linkedinUrlIndex >= 0 ? values[linkedinUrlIndex]?.replace(/^"|"$/g, '') || null : null;
       const companyName = companyNameIndex >= 0 ? values[companyNameIndex]?.replace(/^"|"$/g, '') || null : null;
 
+      // Extract company URL (from LinkedIn or standard CSV)
+      const companyUrlIdx = headers.indexOf('company_url_temp');
+      const companyUrl = companyUrlIdx >= 0 ? values[companyUrlIdx]?.replace(/^"|"$/g, '').trim() || null : null;
+
       // Extract LinkedIn About/Bio (if present)
       const aboutIdx = headers.indexOf('about_temp');
       const aboutContent = isLinkedInFormat && aboutIdx >= 0 ?
@@ -967,9 +971,9 @@ router.post('/import/csv', async (req, res) => {
         await run(
           `INSERT INTO deals (
             id, name, job_title, email, phone, linkedin_url,
-            company_name, industry, stage, estimated_value, close_date,
+            company_name, company_url, industry, stage, estimated_value, close_date,
             next_step_date, next_step_description, health_score, owner_id, source, priority
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             dealId,
             contactName,
@@ -978,6 +982,7 @@ router.post('/import/csv', async (req, res) => {
             csvPhone,
             linkedinUrl,
             companyName,
+            companyUrl,
             industry,
             stage,
             estimatedValue,
