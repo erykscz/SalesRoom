@@ -838,8 +838,19 @@ router.post('/import/csv', async (req, res) => {
     const nextStepDescIndex = headers.findIndex(h => h === 'next step description' || h === 'next_step_description');
     const priorityIndex = headers.findIndex(h => h === 'priority');
 
+    // Validate name column - for LinkedIn format, check alternative fields
     if (nameIndex === -1) {
-      return res.status(400).json({ error: 'CSV must have a "Name" column' });
+      if (isLinkedInFormat) {
+        // For LinkedIn, check if we have alternative name fields
+        const hasLinkedInNameFields = headers.includes('first_name_temp') ||
+                                        headers.includes('last_name_temp') ||
+                                        headers.includes('linkedin_name_temp');
+        if (!hasLinkedInNameFields) {
+          return res.status(400).json({ error: 'CSV must have name fields (First Name, Last Name, or LinkedIn Name)' });
+        }
+      } else {
+        return res.status(400).json({ error: 'CSV must have a "Name" column' });
+      }
     }
 
     // Parse CSV values (handle quoted fields)
