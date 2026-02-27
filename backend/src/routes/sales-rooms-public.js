@@ -568,12 +568,11 @@ router.get('/:slug/attachment', async (req, res) => {
     const useBlob = !!process.env.BLOB_READ_WRITE_TOKEN;
 
     if (useBlob && salesRoom.attachment_path.startsWith('http')) {
-      // Fetch from Vercel Blob Storage using authenticated downloadUrl
+      // Fetch from Vercel Blob Storage (private access requires auth token)
       try {
-        const { head } = await import('@vercel/blob');
-        const blobDetails = await head(salesRoom.attachment_path);
-
-        const response = await fetch(blobDetails.downloadUrl);
+        const response = await fetch(salesRoom.attachment_path, {
+          headers: { 'Authorization': `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` }
+        });
         if (!response.ok) {
           throw new Error(`Failed to fetch file from Blob Storage: ${response.status}`);
         }
