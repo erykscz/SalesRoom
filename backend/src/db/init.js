@@ -553,6 +553,12 @@ async function initDatabase() {
 
     console.log('Indexes created successfully');
 
+    // ── Migrations for existing tables ───────────────────────────────
+    if (isPostgres) {
+      await runStmt('ALTER TABLE users ADD COLUMN IF NOT EXISTS master_prompt TEXT');
+    }
+    console.log('Migrations applied successfully');
+
     // ── Seed admin user ─────────────────────────────────────────────
 
     const existingAdmin = await getRow('SELECT id FROM users WHERE email = ?', ['admin@salesroom.local']);
