@@ -46,7 +46,7 @@ async function extractTextFromFile(buffer, mimetype) {
 }
 
 // Generate stakeholder sections using Claude AI
-async function generateSectionsFromOffer(offerText, stakeholders, knowledgeBase) {
+async function generateSectionsFromOffer(offerText, stakeholders, knowledgeBase, masterPrompt) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === 'your_anthropic_api_key_here') {
     return null;
@@ -73,7 +73,8 @@ For each stakeholder, write:
 - title: A short, compelling section title (e.g., "ROI i Wpływ Finansowy" for CFO)
 - content: Detailed markdown content (3-5 paragraphs) focusing on aspects relevant to that role. Use headers, bullet points, and bold text for readability.
 
-IMPORTANT: Write all content in Polish language.
+IMPORTANT USER INSTRUCTIONS (follow these strictly):
+${masterPrompt || 'Pisz wszystkie treści w języku polskim. Zachowaj profesjonalny, ale przystępny ton. Skupiaj się na korzyściach biznesowych i konkretnych wynikach.'}
 
 Offer document:
 ${offerText.substring(0, 15000)}${kbSection}
@@ -238,6 +239,10 @@ router.post('/', async (req, res) => {
     // Generate sections from Knowledge Base if stakeholders are provided
     let generatedSections = sections ? JSON.stringify(sections) : null;
 
+    // Fetch user's master prompt for AI generation
+    const userRecord = await get('SELECT master_prompt FROM users WHERE id = ?', [req.user.id]);
+    const masterPrompt = userRecord?.master_prompt || null;
+
     if (stakeholders && Array.isArray(stakeholders) && stakeholders.length > 0) {
       // Fetch shared Knowledge Base materials for AI context
       const kbItems = await all(
@@ -254,7 +259,7 @@ router.post('/', async (req, res) => {
         }).join('\n\n');
 
         // Generate sections using Knowledge Base content
-        const aiSections = await generateSectionsFromOffer(kbText, stakeholders, kbItems);
+        const aiSections = await generateSectionsFromOffer(kbText, stakeholders, kbItems, masterPrompt);
         if (aiSections) {
           generatedSections = JSON.stringify(aiSections);
         }
@@ -707,7 +712,9 @@ router.post('/:id/attachment', upload.single('attachment'), async (req, res) => 
         const kbItems = await all(
           `SELECT title, content, type FROM knowledge_base WHERE is_shared = 1 ORDER BY created_at DESC LIMIT 10`
         );
-        generatedSections = await generateSectionsFromOffer(extractedText, stakeholders, kbItems);
+        // Fetch user's master prompt
+        const userRec = await get('SELECT master_prompt FROM users WHERE id = ?', [req.user.id]);
+        generatedSections = await generateSectionsFromOffer(extractedText, stakeholders, kbItems, userRec?.master_prompt || null);
         if (generatedSections) {
           await run(
             `UPDATE sales_rooms SET sections = ?, updated_at = datetime('now') WHERE id = ?`,
@@ -1019,6 +1026,89 @@ router.post('/public/:slug/track', async (req, res) => {
   } catch (error) {
     console.error('Error tracking view:', error);
     res.status(500).json({ error: 'Failed to track view' });
+  }
+});
+
+// ── Sales Room Messages (authenticated - for sales rep) ─────────────
+
+// GET /api/sales-rooms/:id/messages - Get messages for sales rep (AUTH REQUIRED)
+router.get('/:id/messages', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { since } = req.query;
+
+    const salesRoom = await get(
+      `SELECT sr.id, sr.created_by, d.owner_id FROM sales_rooms sr
+       LEFT JOIN deals d ON sr.deal_id = d.id WHERE sr.id = ?`,
+      [id]
+    );
+
+    if (!salesRoom) return res.status(404).json({ error: 'Sales Room not found' });
+    if (req.user.role !== 'admin' && req.user.role !== 'manager' && salesRoom.owner_id !== req.user.id && salesRoom.created_by !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    let sql = `SELECT id, sender_type, sender_name, sender_email, content, attachment_filename, attachment_path, attachment_mimetype, attachment_size, is_read, created_at
+               FROM sales_room_messages WHERE sales_room_id = ?`;
+    const params = [id];
+
+    if (since) {
+      sql += ` AND created_at > ?`;
+      params.push(since);
+    }
+
+    sql += ` ORDER BY created_at ASC`;
+
+    const messages = await all(sql, params);
+    const unreadCount = messages.filter(m => m.sender_type === 'client' && !m.is_read).length;
+
+    res.json({ messages, unreadCount });
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// POST /api/sales-rooms/:id/messages - Send message from sales rep (AUTH REQUIRED)
+router.post('/:id/messages', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    const salesRoom = await get(
+      `SELECT sr.id, sr.created_by, d.owner_id FROM sales_rooms sr
+       LEFT JOIN deals d ON sr.deal_id = d.id WHERE sr.id = ?`,
+      [id]
+    );
+
+    if (!salesRoom) return res.status(404).json({ error: 'Sales Room not found' });
+    if (req.user.role !== 'admin' && req.user.role !== 'manager' && salesRoom.owner_id !== req.user.id && salesRoom.created_by !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const messageId = uuidv4();
+    await run(
+      `INSERT INTO sales_room_messages (id, sales_room_id, sender_type, sender_id, sender_name, content)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [messageId, id, 'user', req.user.id, req.user.name, content.trim()]
+    );
+
+    // Mark all client messages as read
+    await run(
+      `UPDATE sales_room_messages SET is_read = 1 WHERE sales_room_id = ? AND sender_type = 'client' AND is_read = 0`,
+      [id]
+    );
+
+    res.status(201).json({
+      message: { id: messageId, sender_type: 'user', sender_name: req.user.name, content: content.trim(), created_at: new Date().toISOString() }
+    });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({ error: 'Failed to send message' });
   }
 });
 

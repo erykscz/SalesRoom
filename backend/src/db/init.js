@@ -140,6 +140,7 @@ async function initDatabase() {
         phone TEXT,
         job_title TEXT,
         notification_preferences TEXT,
+        master_prompt TEXT,
         is_active INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
@@ -494,6 +495,27 @@ async function initDatabase() {
       );
     `);
 
+    // ── Sales Room Messages (user ↔ client communication) ──────────
+
+    await execMulti(`
+      CREATE TABLE IF NOT EXISTS sales_room_messages (
+        id TEXT PRIMARY KEY,
+        sales_room_id TEXT NOT NULL,
+        sender_type TEXT CHECK(sender_type IN ('user', 'client')) NOT NULL,
+        sender_id TEXT,
+        sender_name TEXT NOT NULL,
+        sender_email TEXT,
+        content TEXT NOT NULL,
+        attachment_filename TEXT,
+        attachment_path TEXT,
+        attachment_mimetype TEXT,
+        attachment_size INTEGER,
+        is_read INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (sales_room_id) REFERENCES sales_rooms(id) ON DELETE CASCADE
+      );
+    `);
+
     console.log('Tables created successfully');
 
     // ── Create indexes ──────────────────────────────────────────────
@@ -525,6 +547,8 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_generated_messages_lead ON generated_messages(lead_id);
       CREATE INDEX IF NOT EXISTS idx_generated_messages_deal ON generated_messages(deal_id);
       CREATE INDEX IF NOT EXISTS idx_generated_messages_channel ON generated_messages(channel);
+      CREATE INDEX IF NOT EXISTS idx_sales_room_messages_room ON sales_room_messages(sales_room_id);
+      CREATE INDEX IF NOT EXISTS idx_sales_room_messages_created ON sales_room_messages(created_at);
     `);
 
     console.log('Indexes created successfully');

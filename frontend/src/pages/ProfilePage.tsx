@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { User, Bell, Loader2, CheckCircle, XCircle, Camera, Upload, Phone, Briefcase } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { User, Bell, Loader2, CheckCircle, XCircle, Camera, Upload, Phone, Briefcase, Sparkles } from 'lucide-react';
 
 interface NotificationPreferences {
   deal_transferred: boolean;
@@ -48,10 +49,51 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [phone, setPhone] = useState('');
   const [jobTitle, setJobTitle] = useState('');
+  const [masterPrompt, setMasterPrompt] = useState('');
+  const [savingMasterPrompt, setSavingMasterPrompt] = useState(false);
 
   useEffect(() => {
     fetchPreferences();
+    fetchMasterPrompt();
   }, []);
+
+  const fetchMasterPrompt = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/auth/master-prompt`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMasterPrompt(data.masterPrompt || '');
+      }
+    } catch (err) {
+      console.error('Failed to fetch master prompt:', err);
+    }
+  };
+
+  const handleSaveMasterPrompt = async () => {
+    try {
+      setSavingMasterPrompt(true);
+      setError(null);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/auth/master-prompt`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ masterPrompt: masterPrompt || null })
+      });
+      if (!response.ok) throw new Error('Failed to save master prompt');
+      setSuccess('Instrukcje AI zapisane!');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSavingMasterPrompt(false);
+    }
+  };
 
   // Sync phone/jobTitle from user context
   useEffect(() => {
@@ -318,6 +360,39 @@ export default function ProfilePage() {
               ) : null}
               Save Details
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Master Prompt / AI Instructions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5" />
+            Instrukcje AI (Master Prompt)
+          </CardTitle>
+          <CardDescription>
+            Kontroluj język, ton i styl generowanych treści. Te instrukcje będą stosowane przy generowaniu sekcji Sales Room.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <Textarea
+              value={masterPrompt}
+              onChange={(e) => setMasterPrompt(e.target.value)}
+              placeholder="np. Pisz wszystkie treści w języku polskim. Zachowaj profesjonalny ton. Unikaj żargonu technicznego. Skupiaj się na korzyściach biznesowych."
+              rows={4}
+              maxLength={2000}
+            />
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-muted-foreground">
+                {masterPrompt.length}/2000 znaków
+              </p>
+              <Button onClick={handleSaveMasterPrompt} disabled={savingMasterPrompt}>
+                {savingMasterPrompt ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Zapisz instrukcje
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

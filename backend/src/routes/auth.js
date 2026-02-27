@@ -340,4 +340,41 @@ router.put('/preferences', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/auth/master-prompt - Get user's master prompt for AI content generation
+router.get('/master-prompt', authMiddleware, async (req, res) => {
+  try {
+    const user = await get('SELECT master_prompt FROM users WHERE id = ?', [req.user.id]);
+    res.json({
+      masterPrompt: user?.master_prompt || null,
+      defaultPrompt: 'Pisz wszystkie treści w języku polskim. Zachowaj profesjonalny, ale przystępny ton. Skupiaj się na korzyściach biznesowych i konkretnych wynikach.'
+    });
+  } catch (error) {
+    console.error('Get master prompt error:', error);
+    res.status(500).json({ error: 'Failed to get master prompt' });
+  }
+});
+
+// PUT /api/auth/master-prompt - Update user's master prompt
+router.put('/master-prompt', authMiddleware, async (req, res) => {
+  try {
+    const { masterPrompt } = req.body;
+
+    if (masterPrompt !== undefined && masterPrompt !== null && typeof masterPrompt !== 'string') {
+      return res.status(400).json({ error: 'Master prompt must be a string' });
+    }
+
+    const cleanPrompt = masterPrompt ? masterPrompt.substring(0, 2000) : null;
+
+    await run(
+      'UPDATE users SET master_prompt = ?, updated_at = datetime("now") WHERE id = ?',
+      [cleanPrompt, req.user.id]
+    );
+
+    res.json({ message: 'Master prompt updated', masterPrompt: cleanPrompt });
+  } catch (error) {
+    console.error('Update master prompt error:', error);
+    res.status(500).json({ error: 'Failed to update master prompt' });
+  }
+});
+
 export default router;

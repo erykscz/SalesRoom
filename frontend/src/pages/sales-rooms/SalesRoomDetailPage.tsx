@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { API_URL } from '@/lib/api';
 import { type StakeholderSection } from '@/lib/sales-room-defaults';
@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowLeft, ExternalLink, Eye, Clock, Users, BarChart3, Copy, CheckCircle2, CopyPlus, Edit3, MessageCircle, Upload, Trash2, FileText, Pencil } from 'lucide-react';
+import { Loader2, ArrowLeft, ExternalLink, Eye, Clock, Users, BarChart3, Copy, CheckCircle2, CopyPlus, Edit3, MessageCircle, Upload, Trash2, FileText, Pencil, Mail, Send } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -90,6 +90,13 @@ export default function SalesRoomDetailPage() {
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [deletingAttachment, setDeletingAttachment] = useState(false);
 
+  // Client Messages
+  const [roomMessages, setRoomMessages] = useState<Array<{ id: string; sender_type: string; sender_name: string; sender_email?: string; content: string; is_read: number; created_at: string }>>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [replyInput, setReplyInput] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const token = localStorage.getItem('token');
 
   useEffect(() => {
@@ -138,6 +145,53 @@ export default function SalesRoomDetailPage() {
 
     fetchSalesRoom();
   }, [id]);
+
+  // Fetch & poll client messages
+  useEffect(() => {
+    if (!id || !token) return;
+    const fetchMessages = async () => {
+      try {
+        const response = await fetch(`${API_URL}/sales-rooms/${id}/messages`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setRoomMessages(data.messages || []);
+          setUnreadCount(data.unreadCount || 0);
+        }
+      } catch { /* silent */ }
+    };
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 15000);
+    return () => clearInterval(interval);
+  }, [id, token]);
+
+  // Auto-scroll messages
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [roomMessages]);
+
+  const sendReply = async () => {
+    if (!replyInput.trim() || sendingReply || !id) return;
+    const content = replyInput.trim();
+    setReplyInput('');
+    setSendingReply(true);
+    try {
+      const response = await fetch(`${API_URL}/sales-rooms/${id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRoomMessages(prev => [...prev, data.message]);
+        setUnreadCount(0);
+      }
+    } catch { /* silent */ }
+    finally { setSendingReply(false); }
+  };
 
   const copyPublicUrl = () => {
     if (salesRoom) {
@@ -828,6 +882,59 @@ export default function SalesRoomDetailPage() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Client Messages */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Wiadomości od klientów
+            {unreadCount > 0 && (
+              <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5 ml-1">{unreadCount}</span>
+            )}
+          </CardTitle>
+          <CardDescription>Bezpośrednie wiadomości od odwiedzających Sales Room</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-80 overflow-y-auto space-y-3 mb-4 border rounded-lg p-4 bg-muted/20">
+            {roomMessages.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">
+                Brak wiadomości od klientów.
+              </p>
+            ) : (
+              roomMessages.map(msg => (
+                <div key={msg.id} className={`flex ${msg.sender_type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
+                    msg.sender_type === 'user' ? 'bg-primary text-primary-foreground' : 'bg-background border shadow-sm'
+                  }`}>
+                    <p className="text-xs font-medium mb-1">
+                      {msg.sender_name} {msg.sender_type === 'client' && msg.sender_email ? `(${msg.sender_email})` : ''}
+                    </p>
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <p className={`text-xs mt-1 ${msg.sender_type === 'user' ? 'opacity-60' : 'text-muted-foreground'}`}>
+                      {new Date(msg.created_at).toLocaleString('pl-PL')}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Napisz odpowiedź..."
+              value={replyInput}
+              onChange={e => setReplyInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendReply()}
+              disabled={sendingReply}
+              className="flex-1"
+            />
+            <Button onClick={sendReply} disabled={sendingReply || !replyInput.trim()}>
+              {sendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

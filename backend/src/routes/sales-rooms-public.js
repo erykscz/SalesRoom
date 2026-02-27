@@ -373,7 +373,7 @@ router.post('/:slug/track', async (req, res) => {
   }
 });
 
-// POST /api/sales-rooms/public/:slug/chat - RAG chatbot for Sales Room (NO AUTH REQUIRED)
+// POST /api/sales-rooms/public/:slug/chat - RAG chatbot with Claude AI for Sales Room (NO AUTH REQUIRED)
 router.post('/:slug/chat', async (req, res) => {
   try {
     const { slug } = req.params;
@@ -384,7 +384,7 @@ router.post('/:slug/chat', async (req, res) => {
     }
 
     const salesRoom = await get(
-      `SELECT sr.*, d.company_name as deal_company
+      `SELECT sr.*, d.company_name as deal_company, d.id as deal_id_ref
        FROM sales_rooms sr
        LEFT JOIN deals d ON sr.deal_id = d.id
        WHERE sr.public_url_slug = ?`,
@@ -403,94 +403,138 @@ router.post('/:slug/chat', async (req, res) => {
       return res.status(400).json({ error: 'Chatbot is not enabled for this Sales Room' });
     }
 
-    // Simple RAG implementation - search for relevant content in offer_content
-    const userMessage = message.toLowerCase().trim();
-    let response = '';
+    // --- Build RAG context from multiple sources ---
+    const contextParts = [];
 
-    // Get the offer content and section content
-    const content = salesRoom.offer_content || '';
-    const sections = salesRoom.sections ? JSON.parse(salesRoom.sections) : null;
+    // 1. Offer content
+    if (salesRoom.offer_content) {
+      contextParts.push(`## Treść oferty\n${salesRoom.offer_content.substring(0, 8000)}`);
+    }
 
-    // Build knowledge base from all available content
-    let knowledgeBase = content;
-    if (sections) {
-      Object.values(sections).forEach(section => {
-        if (typeof section === 'string') {
-          knowledgeBase += '\n' + section;
-        } else if (section && section.content) {
-          knowledgeBase += '\n' + section.content;
+    // 2. Stakeholder sections
+    if (salesRoom.sections) {
+      try {
+        const sections = JSON.parse(salesRoom.sections);
+        if (Array.isArray(sections)) {
+          const sectionTexts = sections.map(s =>
+            `### ${s.label}: ${s.title}\n${(s.content || '').substring(0, 3000)}`
+          ).join('\n\n');
+          contextParts.push(`## Sekcje dla stakeholderów\n${sectionTexts}`);
         }
+      } catch (e) { /* skip invalid JSON */ }
+    }
+
+    // 3. Knowledge Base (shared items)
+    const kbItems = await all(
+      `SELECT title, content, type FROM knowledge_base WHERE is_shared = 1 ORDER BY created_at DESC LIMIT 5`
+    );
+    if (kbItems.length > 0) {
+      const kbText = kbItems.map(kb =>
+        `### [${kb.type}] ${kb.title}\n${(kb.content || '').substring(0, 2000)}`
+      ).join('\n\n');
+      contextParts.push(`## Baza wiedzy firmy\n${kbText}`);
+    }
+
+    // 4. Deep Research data for the deal
+    if (salesRoom.deal_id) {
+      const research = await get(
+        `SELECT research_summary, linkedin_data
+         FROM research_profiles
+         WHERE deal_id = ? AND status IN ('completed', 'partial')
+         ORDER BY created_at DESC LIMIT 1`,
+        [salesRoom.deal_id]
+      );
+      if (research) {
+        if (research.research_summary) {
+          contextParts.push(`## Wyniki badania (Deep Research)\n${research.research_summary.substring(0, 3000)}`);
+        }
+        if (research.linkedin_data) {
+          try {
+            const li = JSON.parse(research.linkedin_data);
+            const company = li.company || li;
+            if (company.description || company.industry) {
+              contextParts.push(`## Informacje o firmie (LinkedIn)\nBranża: ${company.industry || 'N/A'}\nOpis: ${(company.description || '').substring(0, 1000)}`);
+            }
+          } catch (e) { /* skip */ }
+        }
+      }
+    }
+
+    // 5. Conversation history (last 10 exchanges)
+    const recentLogs = await all(
+      `SELECT question, answer FROM chatbot_logs
+       WHERE sales_room_id = ?
+       ORDER BY asked_at DESC LIMIT 10`,
+      [salesRoom.id]
+    );
+    const conversationHistory = recentLogs.reverse().flatMap(log => [
+      { role: 'user', content: log.question },
+      { role: 'assistant', content: log.answer }
+    ]);
+
+    // --- Call Claude API ---
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey || apiKey === 'your_anthropic_api_key_here') {
+      return res.json({
+        response: 'Asystent AI nie jest skonfigurowany. Skontaktuj się z przedstawicielem handlowym.',
+        timestamp: new Date().toISOString()
       });
     }
 
-    // Extract relevant sections based on keywords
-    const paragraphs = knowledgeBase.split(/\n\n+/).filter(p => p.trim().length > 20);
+    const systemPrompt = `Jesteś pomocnym asystentem sprzedażowym dla ${salesRoom.deal_company || 'naszej firmy'}.
+Odpowiadasz na pytania dotyczące naszej propozycji/oferty WYŁĄCZNIE na podstawie dostarczonego kontekstu.
+Bądź pomocny, profesjonalny i zwięzły. Jeśli nie znasz odpowiedzi na podstawie kontekstu, powiedz o tym grzecznie i zasugeruj kontakt z przedstawicielem handlowym.
+WAŻNE: Odpowiadaj w tym samym języku co treść kontekstu. Jeśli treść jest po polsku, odpowiadaj po polsku.
+NIE wymyślaj informacji, których nie ma w kontekście.
+Odpowiedzi powinny być zwięzłe (2-4 akapity max).
 
-    // Score paragraphs by relevance to the question
-    const keywords = userMessage.split(/\s+/).filter(w => w.length > 2);
-    const scoredParagraphs = paragraphs.map(p => {
-      const pLower = p.toLowerCase();
-      let score = 0;
-      keywords.forEach(kw => {
-        if (pLower.includes(kw)) {
-          score += 1;
-        }
-      });
-      // Boost for section headers that match
-      if (pLower.includes('###') || pLower.includes('##')) {
-        score += 0.5;
-      }
-      return { text: p, score };
-    }).filter(p => p.score > 0).sort((a, b) => b.score - a.score);
+## Kontekst naszej propozycji:
+${contextParts.join('\n\n')}`;
 
-    // Build response from top matching paragraphs
-    if (scoredParagraphs.length > 0) {
-      const topMatches = scoredParagraphs.slice(0, 3);
-      const relevantInfo = topMatches.map(p => p.text.replace(/[#*]+/g, '').trim()).join('\n\n');
+    const messages = [
+      ...conversationHistory,
+      { role: 'user', content: message }
+    ];
 
-      // Generate a conversational response
-      if (userMessage.includes('price') || userMessage.includes('cost') || userMessage.includes('pricing')) {
-        response = `Based on our proposal, here's the pricing information:\n\n${relevantInfo}`;
-      } else if (userMessage.includes('timeline') || userMessage.includes('how long') || userMessage.includes('when')) {
-        response = `Regarding the timeline:\n\n${relevantInfo}`;
-      } else if (userMessage.includes('feature') || userMessage.includes('include') || userMessage.includes('offer')) {
-        response = `Here are the key features we offer:\n\n${relevantInfo}`;
-      } else if (userMessage.includes('support') || userMessage.includes('help')) {
-        response = `About our support services:\n\n${relevantInfo}`;
-      } else if (userMessage.includes('contact') || userMessage.includes('reach') || userMessage.includes('talk')) {
-        response = `Here's how to get in touch:\n\n${relevantInfo}`;
-      } else {
-        response = `Based on our proposal, I found this relevant information:\n\n${relevantInfo}`;
-      }
+    const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: messages,
+      }),
+    });
+
+    let response;
+    if (apiResponse.ok) {
+      const data = await apiResponse.json();
+      response = data.content?.[0]?.text || 'Nie udało się wygenerować odpowiedzi. Spróbuj ponownie.';
     } else {
-      // Default responses for common questions
-      if (userMessage.includes('hello') || userMessage.includes('hi') || userMessage.includes('hey')) {
-        response = `Hello! I'm the Sales Room assistant for ${salesRoom.deal_company || 'this proposal'}. I can help answer questions about our offer, pricing, timeline, and features. What would you like to know?`;
-      } else if (userMessage.includes('thank')) {
-        response = `You're welcome! Is there anything else you'd like to know about our proposal?`;
-      } else {
-        response = `I don't have specific information about that in our proposal. Here's a summary of what's included:\n\n${content ? content.substring(0, 500) + '...' : 'Our proposal details are being prepared. Please check back later or contact the sales representative.'}`;
-      }
+      console.error('Claude API error in chatbot:', apiResponse.status);
+      response = 'Asystent jest chwilowo niedostępny. Spróbuj ponownie później lub skontaktuj się z przedstawicielem handlowym.';
     }
 
-    // Log the chat interaction for analytics
+    // Log analytics
     await run(
       `INSERT INTO sales_room_analytics (id, sales_room_id, visitor_role, section_viewed, time_spent_seconds)
        VALUES (?, ?, ?, ?, ?)`,
       [uuidv4(), salesRoom.id, null, 'chatbot', 0]
     );
 
-    // Log the chatbot conversation
+    // Log the conversation
     await run(
       `INSERT INTO chatbot_logs (id, sales_room_id, question, answer)
        VALUES (?, ?, ?, ?)`,
       [uuidv4(), salesRoom.id, message, response]
     );
 
-    res.json({
-      response,
-      timestamp: new Date().toISOString()
-    });
+    res.json({ response, timestamp: new Date().toISOString() });
   } catch (error) {
     console.error('Error processing chat message:', error);
     res.status(500).json({ error: 'Failed to process message' });
@@ -524,17 +568,23 @@ router.get('/:slug/attachment', async (req, res) => {
     const useBlob = !!process.env.BLOB_READ_WRITE_TOKEN;
 
     if (useBlob && salesRoom.attachment_path.startsWith('http')) {
-      // Fetch from Vercel Blob Storage
+      // Fetch from Vercel Blob Storage using authenticated downloadUrl
       try {
-        const response = await fetch(salesRoom.attachment_path);
+        const { head } = await import('@vercel/blob');
+        const blobDetails = await head(salesRoom.attachment_path);
+
+        const response = await fetch(blobDetails.downloadUrl);
         if (!response.ok) {
-          throw new Error('Failed to fetch file from Blob Storage');
+          throw new Error(`Failed to fetch file from Blob Storage: ${response.status}`);
         }
 
         const buffer = await response.arrayBuffer();
+        const encodedFilename = encodeURIComponent(salesRoom.attachment_filename);
 
         res.setHeader('Content-Type', salesRoom.attachment_mimetype || 'application/octet-stream');
-        res.setHeader('Content-Disposition', `attachment; filename="${salesRoom.attachment_filename}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${salesRoom.attachment_filename}"; filename*=UTF-8''${encodedFilename}`);
+        res.setHeader('Content-Length', buffer.byteLength);
+        res.setHeader('Cache-Control', 'no-cache');
         res.send(Buffer.from(buffer));
       } catch (err) {
         console.error('Error downloading from Blob Storage:', err);
@@ -548,6 +598,79 @@ router.get('/:slug/attachment', async (req, res) => {
   } catch (error) {
     console.error('Error downloading attachment:', error);
     res.status(500).json({ error: 'Failed to download attachment' });
+  }
+});
+
+// ── Client ↔ User Messaging ──────────────────────────────────────────
+
+// GET /api/sales-rooms/public/:slug/messages - Get messages (NO AUTH REQUIRED)
+router.get('/:slug/messages', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { since } = req.query;
+
+    const salesRoom = await get(
+      'SELECT id, is_expired FROM sales_rooms WHERE public_url_slug = ?',
+      [slug]
+    );
+
+    if (!salesRoom) return res.status(404).json({ error: 'Sales Room not found' });
+    if (salesRoom.is_expired) return res.status(410).json({ error: 'This Sales Room has expired' });
+
+    let sql = `SELECT id, sender_type, sender_name, content, attachment_filename, attachment_path, attachment_mimetype, attachment_size, created_at
+               FROM sales_room_messages
+               WHERE sales_room_id = ?`;
+    const params = [salesRoom.id];
+
+    if (since) {
+      sql += ` AND created_at > ?`;
+      params.push(since);
+    }
+
+    sql += ` ORDER BY created_at ASC LIMIT 100`;
+
+    const messages = await all(sql, params);
+    res.json({ messages });
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// POST /api/sales-rooms/public/:slug/messages - Send message from client (NO AUTH REQUIRED)
+router.post('/:slug/messages', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { content, senderName, senderEmail } = req.body;
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+    if (!senderName || typeof senderName !== 'string' || senderName.trim().length === 0) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const salesRoom = await get(
+      'SELECT id, is_expired, created_by FROM sales_rooms WHERE public_url_slug = ?',
+      [slug]
+    );
+
+    if (!salesRoom) return res.status(404).json({ error: 'Sales Room not found' });
+    if (salesRoom.is_expired) return res.status(410).json({ error: 'This Sales Room has expired' });
+
+    const messageId = uuidv4();
+    await run(
+      `INSERT INTO sales_room_messages (id, sales_room_id, sender_type, sender_name, sender_email, content)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [messageId, salesRoom.id, 'client', senderName.trim(), senderEmail?.trim() || null, content.trim()]
+    );
+
+    res.status(201).json({
+      message: { id: messageId, sender_type: 'client', sender_name: senderName.trim(), content: content.trim(), created_at: new Date().toISOString() }
+    });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({ error: 'Failed to send message' });
   }
 });
 

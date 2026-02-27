@@ -289,6 +289,16 @@ export default function SalesRoomPublicPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Messaging state (user ↔ client)
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [directMessages, setDirectMessages] = useState<Array<{ id: string; sender_type: string; sender_name: string; content: string; created_at: string }>>([]);
+  const [msgInput, setMsgInput] = useState('');
+  const [msgSending, setMsgSending] = useState(false);
+  const [clientName, setClientName] = useState(() => localStorage.getItem('sr_client_name') || '');
+  const [clientEmail, setClientEmail] = useState(() => localStorage.getItem('sr_client_email') || '');
+  const [clientIdentified, setClientIdentified] = useState(() => !!localStorage.getItem('sr_client_name'));
+  const msgEndRef = useRef<HTMLDivElement>(null);
+
   // Auto-scroll chat to bottom
   useEffect(() => {
     if (chatEndRef.current) {
@@ -322,6 +332,62 @@ export default function SalesRoomPublicPage() {
     } finally {
       setChatLoading(false);
     }
+  };
+
+  // Messaging: auto-scroll
+  useEffect(() => {
+    if (msgEndRef.current) {
+      msgEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [directMessages]);
+
+  // Messaging: polling
+  useEffect(() => {
+    if (!slug || !msgOpen) return;
+
+    const fetchMessages = async () => {
+      try {
+        const response = await fetch(`${API_URL}/sales-rooms/public/${slug}/messages`);
+        if (response.ok) {
+          const data = await response.json();
+          setDirectMessages(data.messages);
+        }
+      } catch { /* silent */ }
+    };
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 10000);
+    return () => clearInterval(interval);
+  }, [slug, msgOpen]);
+
+  const handleIdentifyClient = () => {
+    if (clientName.trim()) {
+      localStorage.setItem('sr_client_name', clientName.trim());
+      if (clientEmail.trim()) localStorage.setItem('sr_client_email', clientEmail.trim());
+      setClientIdentified(true);
+    }
+  };
+
+  const sendDirectMessage = async () => {
+    if (!msgInput.trim() || msgSending || !slug) return;
+
+    const content = msgInput.trim();
+    setMsgInput('');
+    setMsgSending(true);
+
+    try {
+      const response = await fetch(`${API_URL}/sales-rooms/public/${slug}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, senderName: clientName, senderEmail: clientEmail || undefined }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDirectMessages(prev => [...prev, data.message]);
+      }
+    } catch { /* silent */ }
+    finally { setMsgSending(false); }
   };
 
   const fetchSalesRoom = async (pwd?: string) => {
@@ -704,12 +770,26 @@ export default function SalesRoomPublicPage() {
                         )}
                       </div>
                     </div>
-                    <a href={salesRoom.attachment_url} download={salesRoom.attachment_filename} target="_blank" rel="noopener noreferrer">
-                      <Button>
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
-                    </a>
+                    <Button onClick={async () => {
+                      try {
+                        const response = await fetch(salesRoom.attachment_url!);
+                        if (!response.ok) throw new Error('Download failed');
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = salesRoom.attachment_filename || 'document';
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                      } catch (err) {
+                        console.error('Download error:', err);
+                      }
+                    }}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Pobierz dokument
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -972,6 +1052,78 @@ export default function SalesRoomPublicPage() {
         )}
       </main>
 
+      {/* Direct Messaging Widget (bottom-left) */}
+      <div className="fixed bottom-4 left-4 z-50">
+        {msgOpen ? (
+          <Card className="w-80 sm:w-96 shadow-2xl">
+            <CardHeader className="bg-green-600 text-white rounded-t-lg py-3 px-4 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5" />
+                <CardTitle className="text-sm font-medium text-white">Wiadomość do konsultanta</CardTitle>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10 text-white" onClick={() => setMsgOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              {!clientIdentified ? (
+                <div className="p-4 space-y-3">
+                  <p className="text-sm text-muted-foreground">Przedstaw się, aby rozpocząć rozmowę:</p>
+                  <Input placeholder="Twoje imię *" value={clientName} onChange={e => setClientName(e.target.value)} />
+                  <Input placeholder="Email (opcjonalnie)" type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} />
+                  <Button className="w-full bg-green-600 hover:bg-green-700" onClick={handleIdentifyClient} disabled={!clientName.trim()}>
+                    Rozpocznij rozmowę
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="h-72 overflow-y-auto p-4 space-y-3 bg-muted/30">
+                    {directMessages.length === 0 && (
+                      <div className="text-center text-muted-foreground text-sm py-8">
+                        <Mail className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p>Napisz wiadomość do konsultanta.</p>
+                        <p className="mt-1">Odpowiedź otrzymasz tutaj.</p>
+                      </div>
+                    )}
+                    {directMessages.map(msg => (
+                      <div key={msg.id} className={`flex ${msg.sender_type === 'client' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                          msg.sender_type === 'client' ? 'bg-green-600 text-white' : 'bg-background border shadow-sm'
+                        }`}>
+                          {msg.sender_type === 'user' && <p className="text-xs font-medium mb-1">{msg.sender_name}</p>}
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                          <p className={`text-xs mt-1 ${msg.sender_type === 'client' ? 'text-green-100' : 'text-muted-foreground'}`}>
+                            {new Date(msg.created_at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={msgEndRef} />
+                  </div>
+                  <div className="border-t p-3 flex gap-2">
+                    <Input
+                      placeholder="Napisz wiadomość..."
+                      value={msgInput}
+                      onChange={e => setMsgInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendDirectMessage()}
+                      disabled={msgSending}
+                      className="flex-1"
+                    />
+                    <Button size="icon" onClick={sendDirectMessage} disabled={msgSending || !msgInput.trim()} className="bg-green-600 hover:bg-green-700">
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Button size="lg" className="rounded-full h-14 w-14 shadow-lg bg-green-600 hover:bg-green-700" onClick={() => setMsgOpen(true)}>
+            <Mail className="h-6 w-6" />
+          </Button>
+        )}
+      </div>
+
       {/* Chatbot Widget */}
       {salesRoom.chatbot_enabled && (
         <div className="fixed bottom-4 right-4 z-50">
@@ -991,8 +1143,8 @@ export default function SalesRoomPublicPage() {
                   {chatMessages.length === 0 && (
                     <div className="text-center text-muted-foreground text-sm py-8">
                       <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p>Hi! I can help answer questions about this proposal.</p>
-                      <p className="mt-1">Try asking about pricing, features, or timeline.</p>
+                      <p>Cześć! Jestem asystentem AI tej propozycji.</p>
+                      <p className="mt-1">Zapytaj mnie o szczegóły oferty, cennik, harmonogram lub funkcjonalności.</p>
                     </div>
                   )}
                   {chatMessages.map((msg, idx) => (
@@ -1013,8 +1165,9 @@ export default function SalesRoomPublicPage() {
                   ))}
                   {chatLoading && (
                     <div className="flex justify-start">
-                      <div className="bg-background border rounded-lg px-3 py-2 shadow-sm">
+                      <div className="bg-background border rounded-lg px-3 py-2 shadow-sm flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm text-muted-foreground">Myślę...</span>
                       </div>
                     </div>
                   )}
