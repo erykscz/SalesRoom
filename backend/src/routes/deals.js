@@ -41,17 +41,21 @@ router.get('/', async (req, res) => {
       countParams.push(stage);
     }
 
-    // Filter by owner (managers can see all, reps can only see their own)
-    if (req.user.role === 'rep' || req.user.role === 'sdr' || req.user.role === 'ae') {
+    // Filter by owner: Admins and managers can see all deals, others only their own
+    if (req.user.role === 'admin' || req.user.role === 'manager') {
+      // Admins/managers can see all deals, but can filter by specific owner if needed
+      if (owner) {
+        sql += ' AND d.owner_id = ?';
+        countSql += ' AND d.owner_id = ?';
+        params.push(owner);
+        countParams.push(owner);
+      }
+    } else {
+      // Regular users (rep, sdr, ae, or any other role) only see their own deals
       sql += ' AND d.owner_id = ?';
       countSql += ' AND d.owner_id = ?';
       params.push(req.user.id);
       countParams.push(req.user.id);
-    } else if (owner) {
-      sql += ' AND d.owner_id = ?';
-      countSql += ' AND d.owner_id = ?';
-      params.push(owner);
-      countParams.push(owner);
     }
 
     // Filter by health score range
@@ -140,8 +144,8 @@ router.get('/kanban', async (req, res) => {
     `;
     const params = [];
 
-    // Filter by owner for non-managers
-    if (req.user.role === 'rep' || req.user.role === 'sdr' || req.user.role === 'ae') {
+    // Filter by owner: Admins and managers can see all deals, others only their own
+    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
       sql += ' AND d.owner_id = ?';
       params.push(req.user.id);
     }
@@ -1293,13 +1297,17 @@ router.get('/export/csv', async (req, res) => {
       params.push(stage);
     }
 
-    // Filter by owner (managers can see all, reps can only see their own)
-    if (req.user.role === 'rep' || req.user.role === 'sdr' || req.user.role === 'ae') {
+    // Filter by owner: Admins and managers can see all deals, others only their own
+    if (req.user.role === 'admin' || req.user.role === 'manager') {
+      // Admins/managers can export all deals, but can filter by specific owner if needed
+      if (owner) {
+        sql += ' AND d.owner_id = ?';
+        params.push(owner);
+      }
+    } else {
+      // Regular users can only export their own deals
       sql += ' AND d.owner_id = ?';
       params.push(req.user.id);
-    } else if (owner) {
-      sql += ' AND d.owner_id = ?';
-      params.push(owner);
     }
 
     // Filter by search term
@@ -1763,8 +1771,8 @@ router.get('/tasks/list', async (req, res) => {
       sql += ' AND t.is_completed = 0';
     }
 
-    // Filter by user (non-admin can only see their own tasks)
-    if (req.user.role === 'rep' || req.user.role === 'sdr' || req.user.role === 'ae') {
+    // Filter by user: Admins and managers can see all tasks, others only their own
+    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
       sql += ' AND t.user_id = ?';
       params.push(req.user.id);
     }
