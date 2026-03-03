@@ -22,12 +22,30 @@ if (process.env.RESEARCH_PROVIDER === 'tinyfish' && process.env.TINYFISH_API_KEY
   }
 }
 
+// Conditionally load Apify adapters when configured (replaces Twitter/Reddit/Facebook official APIs)
+let apifyTwitter = null;
+let apifyReddit = null;
+let apifyFacebook = null;
+if (process.env.APIFY_API_TOKEN) {
+  try {
+    const apTw = await import('../apify/twitter.js');
+    const apRd = await import('../apify/reddit.js');
+    const apFb = await import('../apify/facebook.js');
+    apifyTwitter = apTw.research;
+    apifyReddit = apRd.research;
+    apifyFacebook = apFb.research;
+    console.log('Apify adapters loaded for Twitter, Reddit, Facebook research');
+  } catch (err) {
+    console.error('Failed to load Apify adapters:', err.message);
+  }
+}
+
 const platformAdapters = {
   linkedin: tinyfishLinkedIn || linkedinResearch,
   github: githubResearch,
-  twitter: twitterResearch,
-  reddit: redditResearch,
-  facebook: facebookResearch,
+  twitter: apifyTwitter || twitterResearch,
+  reddit: apifyReddit || redditResearch,
+  facebook: apifyFacebook || facebookResearch,
   website: tinyfishWebsite || websiteResearch,
 };
 
@@ -37,9 +55,10 @@ export function getAvailablePlatforms() {
   available.push('linkedin'); // Works with Proxycurl API or public profile scraper + DuckDuckGo search
   available.push('github'); // GitHub works without token (lower rate limit)
   available.push('website'); // Company website scraper — no API key needed
-  if (process.env.TWITTER_BEARER_TOKEN) available.push('twitter');
-  if (process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET) available.push('reddit');
-  if (process.env.FACEBOOK_ACCESS_TOKEN) available.push('facebook');
+  const hasApify = !!process.env.APIFY_API_TOKEN;
+  if (hasApify || process.env.TWITTER_BEARER_TOKEN) available.push('twitter');
+  if (hasApify || (process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET)) available.push('reddit');
+  if (hasApify || process.env.FACEBOOK_ACCESS_TOKEN) available.push('facebook');
   return available;
 }
 
