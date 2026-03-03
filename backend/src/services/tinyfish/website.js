@@ -1,30 +1,36 @@
-// Company website extraction via AgentQL
+// Company website extraction via TinyFish Web Agent
 
-import { queryData } from './client.js';
+import { runAutomation } from './client.js';
 
-const WEBSITE_QUERY = `{
-  company_info {
-    name
-    description
-    industry
-    services[]
-    products[]
-    technologies[]
-    team_members[] {
-      name
-      role
-    }
-    contact {
-      email
-      phone
-      address
+const WEBSITE_GOAL = `Extract the following information from this company website and return it as JSON:
+- name: company name
+- description: what the company does (brief summary)
+- industry: industry or sector
+- services: array of services offered (strings)
+- products: array of products (strings)
+- technologies: array of technologies used or offered (strings)
+- team_members: array of team members, each with { name, role } (max 10)
+- contact_email: contact email address
+- contact_phone: contact phone number
+- address: physical address
+
+Return ONLY valid JSON with these fields. If a field is not found, use null or empty array.`;
+
+function parseResult(data) {
+  if (!data) return null;
+  if (typeof data === 'string') {
+    try {
+      const cleaned = data.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+      return JSON.parse(cleaned);
+    } catch {
+      return null;
     }
   }
-}`;
+  return data;
+}
 
 function normalizeWebsiteData(raw, url) {
-  const c = raw?.company_info || raw || {};
-  const contact = c.contact || {};
+  const c = raw || {};
 
   return {
     name: c.name || null,
@@ -41,10 +47,10 @@ function normalizeWebsiteData(raw, url) {
       ...(Array.isArray(c.technologies) ? c.technologies.slice(0, 3) : []),
     ],
     social_links: {},
-    emails: contact.email ? [contact.email] : [],
-    phones: contact.phone ? [contact.phone] : [],
+    emails: c.contact_email ? [c.contact_email] : [],
+    phones: c.contact_phone ? [c.contact_phone] : [],
     logo: null,
-    address: contact.address || null,
+    address: c.address || null,
     founding_date: null,
     _source: 'tinyfish',
   };
@@ -59,16 +65,20 @@ export async function researchWebsite(url) {
   if (!fullUrl.startsWith('http')) fullUrl = `https://${fullUrl}`;
 
   console.log(`TinyFish: Extracting website data from ${fullUrl}`);
-  const result = await queryData(fullUrl, WEBSITE_QUERY, {
-    browserProfile: 'light',
-    waitMs: 1000,
+  const result = await runAutomation(fullUrl, WEBSITE_GOAL, {
+    browserProfile: 'lite',
   });
 
   if (!result.success) {
     return { success: false, data: null, error: result.error };
   }
 
-  const normalized = normalizeWebsiteData(result.data, fullUrl);
+  const parsed = parseResult(result.data);
+  if (!parsed) {
+    return { success: false, data: null, error: 'TinyFish returned unparseable result' };
+  }
+
+  const normalized = normalizeWebsiteData(parsed, fullUrl);
   return { success: true, data: normalized, error: null };
 }
 

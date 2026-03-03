@@ -1,6 +1,6 @@
-// LinkedIn extraction via AgentQL
+// LinkedIn extraction via TinyFish Web Agent
 
-import { queryData } from './client.js';
+import { runAutomation } from './client.js';
 
 function isSalesNavUrl(url) {
   if (!url) return false;
@@ -14,42 +14,31 @@ function convertSalesNavUrl(url) {
   return `https://www.linkedin.com/in/${match[1]}`;
 }
 
-const PERSON_QUERY = `{
-  profile {
-    full_name
-    headline
-    about_summary
-    location
-    experiences[] {
-      title
-      company
-      duration
-      description
-    }
-    education[] {
-      school
-      degree
-      field_of_study
-    }
-    skills[]
-  }
-}`;
+const PERSON_GOAL = `Extract the following information from this LinkedIn profile page and return it as JSON:
+- full_name: the person's full name
+- headline: their professional headline
+- about_summary: the "About" section text
+- location: their location
+- experiences: array of work experiences, each with { title, company, duration, description }
+- education: array of education entries, each with { school, degree, field_of_study }
+- skills: array of skill names (strings)
 
-const COMPANY_QUERY = `{
-  company {
-    name
-    description
-    industry
-    company_size
-    headquarters
-    website
-    specialties
-    founded
-  }
-}`;
+Return ONLY valid JSON with these fields. If a field is not found, use null.`;
+
+const COMPANY_GOAL = `Extract the following information from this LinkedIn company page and return it as JSON:
+- name: company name
+- description: company description/about text
+- industry: industry
+- company_size: number of employees or size range
+- headquarters: location of headquarters
+- website: company website URL
+- specialties: areas of specialization (as array of strings)
+- founded: year founded
+
+Return ONLY valid JSON with these fields. If a field is not found, use null.`;
 
 function normalizePersonData(raw, linkedinUrl) {
-  const p = raw?.profile || raw || {};
+  const p = raw || {};
   return {
     full_name: p.full_name || null,
     headline: p.headline || null,
@@ -80,7 +69,7 @@ function normalizePersonData(raw, linkedinUrl) {
 }
 
 function normalizeCompanyData(raw, linkedinUrl) {
-  const c = raw?.company || raw || {};
+  const c = raw || {};
   return {
     name: c.name || null,
     description: c.description || null,
@@ -97,6 +86,21 @@ function normalizeCompanyData(raw, linkedinUrl) {
     profile_pic_url: null,
     _source: 'tinyfish',
   };
+}
+
+function parseResult(data) {
+  if (!data) return null;
+  // TinyFish returns result which may be a string or object
+  if (typeof data === 'string') {
+    try {
+      // Strip markdown code fences if present
+      const cleaned = data.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+      return JSON.parse(cleaned);
+    } catch {
+      return null;
+    }
+  }
+  return data;
 }
 
 export async function researchLinkedInPerson(url, hints = {}) {
@@ -117,16 +121,20 @@ export async function researchLinkedInPerson(url, hints = {}) {
   }
 
   console.log(`TinyFish: Extracting LinkedIn person data from ${linkedinUrl}`);
-  const result = await queryData(linkedinUrl, PERSON_QUERY, {
+  const result = await runAutomation(linkedinUrl, PERSON_GOAL, {
     browserProfile: 'stealth',
-    waitMs: 2000,
   });
 
   if (!result.success) {
     return { success: false, data: null, error: result.error };
   }
 
-  const normalized = normalizePersonData(result.data, linkedinUrl);
+  const parsed = parseResult(result.data);
+  if (!parsed) {
+    return { success: false, data: null, error: 'TinyFish returned unparseable result' };
+  }
+
+  const normalized = normalizePersonData(parsed, linkedinUrl);
   return { success: true, data: normalized, error: null };
 }
 
@@ -136,16 +144,20 @@ export async function researchLinkedInCompany(url) {
   }
 
   console.log(`TinyFish: Extracting LinkedIn company data from ${url}`);
-  const result = await queryData(url, COMPANY_QUERY, {
+  const result = await runAutomation(url, COMPANY_GOAL, {
     browserProfile: 'stealth',
-    waitMs: 2000,
   });
 
   if (!result.success) {
     return { success: false, data: null, error: result.error };
   }
 
-  const normalized = normalizeCompanyData(result.data, url);
+  const parsed = parseResult(result.data);
+  if (!parsed) {
+    return { success: false, data: null, error: 'TinyFish returned unparseable result' };
+  }
+
+  const normalized = normalizeCompanyData(parsed, url);
   return { success: true, data: normalized, error: null };
 }
 
@@ -153,7 +165,6 @@ export async function researchLinkedInCompany(url) {
 export async function research(companyName, hints = {}) {
   const results = { company: null, person: null };
 
-  // Person lookup
   const personUrl = hints.linkedin_person_url || null;
   if (personUrl) {
     const personResult = await researchLinkedInPerson(personUrl, hints);
@@ -162,7 +173,6 @@ export async function research(companyName, hints = {}) {
     }
   }
 
-  // Company lookup — try company URL or construct from company name
   const companyUrl = hints.linkedin_company_url || null;
   if (companyUrl) {
     const companyResult = await researchLinkedInCompany(companyUrl);

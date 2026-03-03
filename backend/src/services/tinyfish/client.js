@@ -1,13 +1,13 @@
-// AgentQL REST API client
-// Note: read env vars dynamically (not at module level) because dotenv
-// may not have loaded yet when ESM static imports are resolved.
+// TinyFish Web Agent API client
+// Docs: https://docs.tinyfish.ai/
+// Endpoint: POST /v1/automation/run (synchronous)
 
 function getApiKey() {
-  return process.env.TINYFISH_API_KEY;
+  return (process.env.TINYFISH_API_KEY || '').trim();
 }
 
 function getApiUrl() {
-  return process.env.TINYFISH_API_URL || 'https://api.agentql.com/v1';
+  return (process.env.TINYFISH_API_URL || 'https://agent.tinyfish.ai/v1').trim();
 }
 
 export function isConfigured() {
@@ -15,7 +15,14 @@ export function isConfigured() {
   return !!(key && key.length > 0);
 }
 
-export async function queryData(url, query, options = {}) {
+/**
+ * Run a TinyFish automation task synchronously.
+ * @param {string} url - Target website URL
+ * @param {string} goal - Natural language description of what to extract
+ * @param {object} options - { browserProfile: 'lite'|'stealth', maxRetries: number }
+ * @returns {{ success: boolean, data: object|null, error: string|null }}
+ */
+export async function runAutomation(url, goal, options = {}) {
   if (!isConfigured()) {
     return { success: false, data: null, error: 'TinyFish API key not configured' };
   }
@@ -25,26 +32,21 @@ export async function queryData(url, query, options = {}) {
 
   const {
     browserProfile = 'stealth',
-    waitMs = 2000,
     maxRetries = 2,
   } = options;
 
   const body = {
     url,
-    query,
-    params: {
-      wait_for: waitMs,
-      is_scroll_to_bottom_enabled: false,
-      mode: browserProfile === 'stealth' ? 'standard' : 'fast',
-    },
+    goal,
+    browser_profile: browserProfile,
   };
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
+      const timeout = setTimeout(() => controller.abort(), 120000); // 2 min — TinyFish can be slow
 
-      const res = await fetch(`${apiUrl}/query-data`, {
+      const res = await fetch(`${apiUrl}/automation/run`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,38 +60,46 @@ export async function queryData(url, query, options = {}) {
 
       if (res.ok) {
         const data = await res.json();
-        return { success: true, data: data.data || data, error: null };
+        // Synchronous endpoint returns { status, run_id, result, error }
+        if (data.status === 'COMPLETED' && data.result) {
+          return { success: true, data: data.result, error: null };
+        }
+        if (data.status === 'FAILED') {
+          return { success: false, data: null, error: `TinyFish run failed: ${data.error?.message || 'unknown'}` };
+        }
+        // Fallback — return whatever we got
+        return { success: true, data: data.result || data, error: null };
       }
 
-      const retryable = [429, 500, 502, 503, 529];
+      const retryable = [429, 500, 502, 503];
       if (retryable.includes(res.status) && attempt < maxRetries) {
-        const waitTime = attempt * 2000;
-        console.log(`AgentQL API returned ${res.status}, retrying in ${waitTime}ms (attempt ${attempt}/${maxRetries})...`);
+        const waitTime = attempt * 3000;
+        console.log(`TinyFish API returned ${res.status}, retrying in ${waitTime}ms (attempt ${attempt}/${maxRetries})...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         continue;
       }
 
       const errorText = await res.text().catch(() => '');
-      return { success: false, data: null, error: `AgentQL API error ${res.status}: ${errorText}` };
+      return { success: false, data: null, error: `TinyFish API error ${res.status}: ${errorText}` };
     } catch (err) {
       if (err.name === 'AbortError') {
         if (attempt < maxRetries) {
-          console.log(`AgentQL request timed out, retrying (attempt ${attempt}/${maxRetries})...`);
+          console.log(`TinyFish request timed out, retrying (attempt ${attempt}/${maxRetries})...`);
           continue;
         }
-        return { success: false, data: null, error: 'AgentQL request timed out after 30s' };
+        return { success: false, data: null, error: 'TinyFish request timed out after 120s' };
       }
 
       if (attempt < maxRetries) {
-        const waitTime = attempt * 2000;
-        console.log(`AgentQL error: ${err.message}, retrying in ${waitTime}ms...`);
+        const waitTime = attempt * 3000;
+        console.log(`TinyFish error: ${err.message}, retrying in ${waitTime}ms...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         continue;
       }
 
-      return { success: false, data: null, error: `AgentQL request failed: ${err.message}` };
+      return { success: false, data: null, error: `TinyFish request failed: ${err.message}` };
     }
   }
 
-  return { success: false, data: null, error: 'AgentQL request failed after all retries' };
+  return { success: false, data: null, error: 'TinyFish request failed after all retries' };
 }
