@@ -35,35 +35,29 @@ export async function enrichEntity(jobId, entityType, entityId, userId) {
     let linkedinData = null;
     let websiteData = null;
 
-    // LinkedIn person research
+    // Run LinkedIn + website research in parallel to fit within Vercel timeout
     const linkedinUrl = entity.linkedin_url || null;
+    const companyUrl = entity.company_url || entity.company_website || null;
+
+    const tasks = [];
+
     if (linkedinUrl) {
-      try {
-        const liResult = await researchLinkedInPerson(linkedinUrl);
-        if (liResult.success) {
-          linkedinData = liResult.data;
-        } else {
-          errors.push({ source: 'linkedin', error: liResult.error });
-        }
-      } catch (err) {
-        errors.push({ source: 'linkedin', error: err.message });
-      }
+      tasks.push(
+        researchLinkedInPerson(linkedinUrl)
+          .then(r => { if (r.success) linkedinData = r.data; else errors.push({ source: 'linkedin', error: r.error }); })
+          .catch(err => errors.push({ source: 'linkedin', error: err.message }))
+      );
     }
 
-    // Website research
-    const companyUrl = entity.company_url || entity.company_website || null;
     if (companyUrl) {
-      try {
-        const wsResult = await researchWebsite(companyUrl);
-        if (wsResult.success) {
-          websiteData = wsResult.data;
-        } else {
-          errors.push({ source: 'website', error: wsResult.error });
-        }
-      } catch (err) {
-        errors.push({ source: 'website', error: err.message });
-      }
+      tasks.push(
+        researchWebsite(companyUrl)
+          .then(r => { if (r.success) websiteData = r.data; else errors.push({ source: 'website', error: r.error }); })
+          .catch(err => errors.push({ source: 'website', error: err.message }))
+      );
     }
+
+    await Promise.all(tasks);
 
     // Determine final status
     const hasData = linkedinData || websiteData;

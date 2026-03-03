@@ -32,7 +32,7 @@ export async function runAutomation(url, goal, options = {}) {
 
   const {
     browserProfile = 'stealth',
-    maxRetries = 2,
+    maxRetries = 1,
   } = options;
 
   const body = {
@@ -44,7 +44,7 @@ export async function runAutomation(url, goal, options = {}) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120000); // 2 min — TinyFish can be slow
+      const timeout = setTimeout(() => controller.abort(), 55000); // 55s — must fit Vercel's 60s maxDuration
 
       const res = await fetch(`${apiUrl}/automation/run`, {
         method: 'POST',
