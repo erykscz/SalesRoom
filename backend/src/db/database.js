@@ -330,7 +330,49 @@ async function initNeon() {
   const { neon } = await import('@neondatabase/serverless');
   neonSql = neon(DATABASE_URL);
   console.log('Connected to Neon PostgreSQL');
+  await runPostgresMigrations();
   return neonSql;
+}
+
+async function runPostgresMigrations() {
+  try {
+    // Enrichment columns on leads
+    for (const col of ['enrichment_data', 'enriched_at', 'enrichment_status', 'company_website']) {
+      await neonSql(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
+    }
+
+    // TinyFish columns on deals
+    for (const col of ['tinyfish_research', 'last_enriched']) {
+      await neonSql(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
+    }
+
+    // Enrichment Jobs table
+    await neonSql(`
+      CREATE TABLE IF NOT EXISTS enrichment_jobs (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        provider TEXT DEFAULT 'tinyfish',
+        linkedin_data TEXT,
+        website_data TEXT,
+        error_log TEXT,
+        requested_by TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        FOREIGN KEY (requested_by) REFERENCES users(id)
+      )
+    `);
+
+    await neonSql(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_entity ON enrichment_jobs(entity_type, entity_id)`).catch(() => {});
+    await neonSql(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_status ON enrichment_jobs(status)`).catch(() => {});
+    await neonSql(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_requested_by ON enrichment_jobs(requested_by)`).catch(() => {});
+
+    console.log('PostgreSQL enrichment migrations completed');
+  } catch (err) {
+    console.error('PostgreSQL migration error:', err.message);
+  }
 }
 
 // ─── UNIFIED DATABASE INTERFACE ──────────────────────────────────────
