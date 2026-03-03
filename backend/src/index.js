@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 if (!process.env.VERCEL) {
   dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
+  dotenv.config({ path: path.resolve(__dirname, '../../.env.local'), override: true });
 }
 
 // Import routes
