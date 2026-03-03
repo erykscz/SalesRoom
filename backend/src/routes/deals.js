@@ -7,10 +7,78 @@ import { calculateHealthScore } from '../utils/healthScore.js';
 
 const router = express.Router();
 
+// Parse CSV values (handle quoted fields) - shared between endpoints
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+// Extended column matching patterns for flexible CSV import
+const COLUMN_PATTERNS = {
+  name: ['name', 'contact name', 'full name', 'person', 'lead name', 'prospect', 'display name', 'linkedin name'],
+  first_name: ['first name', 'firstname', 'given name', 'fname'],
+  last_name: ['last name', 'lastname', 'surname', 'lname'],
+  email: ['email', 'email address', 'e-mail', 'mail', 'work email'],
+  phone: ['phone', 'telephone', 'mobile', 'cell'],
+  job_title: ['job title', 'title', 'position', 'role', 'current role(s)'],
+  company_name: ['company name', 'company', 'organization', 'organisation', 'account', 'employer', 'firm'],
+  company_url: ['company url', 'website', 'company website', 'organisation website', 'domain'],
+  industry: ['industry', 'sector', 'vertical'],
+  linkedin_url: ['linkedin url', 'linkedin', 'profile link', 'linkedin profile', 'sales navigator profile link', 'person linkedin url', 'linkedin profile url'],
+  stage: ['stage', 'deal stage', 'pipeline stage'],
+  estimated_value: ['estimated value', 'value', 'deal value', 'amount', 'revenue'],
+  close_date: ['close date', 'expected close', 'closing date'],
+  next_step_date: ['next step date', 'next step', 'follow up date', 'follow-up date'],
+  next_step_description: ['next step description', 'next step desc', 'next action'],
+  priority: ['priority', 'urgency', 'importance'],
+};
+
+function detectColumnMappings(headers) {
+  const mappings = {};
+  const normalizedHeaders = headers.map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+
+  for (const [field, patterns] of Object.entries(COLUMN_PATTERNS)) {
+    const index = normalizedHeaders.findIndex(h => patterns.includes(h));
+    if (index >= 0) {
+      mappings[field] = index;
+    }
+  }
+
+  return mappings;
+}
+
+function detectFormat(headers) {
+  const normalizedHeaders = headers.map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+  const linkedInSignatures = ['linkedin name', 'sales navigator profile link', 'organisation'];
+  const isLinkedIn = linkedInSignatures.some(sig => normalizedHeaders.includes(sig));
+  if (isLinkedIn) return 'linkedin';
+  return 'standard';
+}
+
 // GET /api/deals - List all deals
 router.get('/', async (req, res) => {
   try {
-    const { stage, owner, health_score_min, health_score_max, search, archived, sort_by, sort_order, page, limit, date_filter } = req.query;
+    const { stage, owner, health_score_min, health_score_max, search, archived, sort_by, sort_order, page, limit, date_filter, list } = req.query;
 
     // Pagination defaults
     const pageNum = parseInt(page) || 1;
@@ -87,6 +155,14 @@ router.get('/', async (req, res) => {
     } else {
       sql += ' AND d.is_archived = 0';
       countSql += ' AND d.is_archived = 0';
+    }
+
+    // Filter by deal list
+    if (list) {
+      sql += ' AND d.id IN (SELECT deal_id FROM deal_list_items WHERE deal_list_id = ?)';
+      countSql += ' AND d.id IN (SELECT deal_id FROM deal_list_items WHERE deal_list_id = ?)';
+      params.push(list);
+      countParams.push(list);
     }
 
     // Filter by date (today, this_week)
@@ -780,10 +856,55 @@ router.get('/:id/activities', async (req, res) => {
   }
 });
 
+// POST /api/deals/import/csv/preview - Preview CSV headers and detect mappings
+router.post('/import/csv/preview', async (req, res) => {
+  try {
+    const { csvContent } = req.body;
+
+    if (!csvContent) {
+      return res.status(400).json({ error: 'CSV content is required' });
+    }
+
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) {
+      return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
+    }
+
+    const headerLine = lines[0];
+    const headers = parseCSVLine(headerLine).map(h => h.replace(/^"|"$/g, '').trim());
+    const format = detectFormat(headers);
+    const detectedMappings = detectColumnMappings(headers);
+
+    // Parse up to 3 sample rows
+    const sampleRows = [];
+    for (let i = 1; i < Math.min(lines.length, 4); i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      sampleRows.push(parseCSVLine(line).map(v => v.replace(/^"|"$/g, '').trim()));
+    }
+
+    const totalRows = lines.filter((l, i) => i > 0 && l.trim()).length;
+
+    const availableFields = Object.keys(COLUMN_PATTERNS);
+
+    res.json({
+      headers,
+      detectedMappings,
+      sampleRows,
+      totalRows,
+      format,
+      availableFields,
+    });
+  } catch (error) {
+    console.error('Error previewing CSV:', error);
+    res.status(500).json({ error: 'Failed to preview CSV' });
+  }
+});
+
 // POST /api/deals/import/csv - Import deals from CSV
 router.post('/import/csv', async (req, res) => {
   try {
-    const { csvContent } = req.body;
+    const { csvContent, columnMappings, listId, createList, listName } = req.body;
 
     if (!csvContent) {
       return res.status(400).json({ error: 'CSV content is required' });
@@ -797,7 +918,8 @@ router.post('/import/csv', async (req, res) => {
 
     // Parse header
     const headerLine = lines[0];
-    let headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    const rawHeaders = parseCSVLine(headerLine).map(h => h.replace(/^"|"$/g, '').trim());
+    let headers = rawHeaders.map(h => h.toLowerCase());
 
     // Detect if this is LinkedIn Sales Navigator export
     const linkedInSignatures = ['linkedin name', 'sales navigator profile link', 'organisation'];
@@ -805,83 +927,74 @@ router.post('/import/csv', async (req, res) => {
 
     console.log(`CSV Format detected: ${isLinkedInFormat ? 'LinkedIn Sales Navigator' : 'Standard'}`);
 
-    // Preprocess LinkedIn headers to map to standard format
-    if (isLinkedInFormat) {
-      const linkedInMap = new Map([
-        ['first name', 'first_name_temp'],
-        ['last name', 'last_name_temp'],
-        ['linkedin name', 'linkedin_name_temp'],
-        ['organisation', 'company name'],
-        ['organisation website', 'company_url_temp'],
-        ['current role(s)', 'job title'],
-        ['sales navigator profile link', 'linkedin url'],
-        ['profile link', 'linkedin_url_alt_temp'],
-        ['about', 'about_temp'],
-        ['location', 'location_temp'],
-        ['organisation size', 'company_size_temp']
-      ]);
-
-      headers = headers.map(h => linkedInMap.get(h) || h);
-      console.log('LinkedIn headers mapped:', headers);
-    }
-
-    // Find column indices - person fields
-    const nameIndex = headers.findIndex(h => h === 'name' || h === 'contact name' || h === 'contact_name');
-    const jobTitleIndex = headers.findIndex(h => h === 'job title' || h === 'job_title' || h === 'jobtitle' || h === 'title');
-    const emailIndex = headers.findIndex(h => h === 'email');
-    const phoneIndex = headers.findIndex(h => h === 'phone');
-    const linkedinUrlIndex = headers.findIndex(h => h === 'linkedin url' || h === 'linkedin_url' || h === 'linkedinurl' || h === 'linkedin' || h === 'profile link' || h === 'profile_link' || h === 'linkedin profile' || h === 'linkedin profile url' || h === 'person linkedin url');
-
-    // Find column indices - deal fields
-    const companyNameIndex = headers.findIndex(h => h === 'company name' || h === 'company_name' || h === 'companyname' || h === 'company');
-    const industryIndex = headers.findIndex(h => h === 'industry');
-    const stageIndex = headers.findIndex(h => h === 'stage');
-    const valueIndex = headers.findIndex(h => h === 'estimated value' || h === 'estimated_value' || h === 'value');
-    const closeDateIndex = headers.findIndex(h => h === 'close date' || h === 'close_date');
-    const nextStepDateIndex = headers.findIndex(h => h === 'next step date' || h === 'next_step_date');
-    const nextStepDescIndex = headers.findIndex(h => h === 'next step description' || h === 'next_step_description');
-    const priorityIndex = headers.findIndex(h => h === 'priority');
-
-    // Validate name column - for LinkedIn format, check alternative fields
-    if (nameIndex === -1) {
+    // Determine column indices - use provided mappings or auto-detect
+    let mappings;
+    if (columnMappings && Object.keys(columnMappings).length > 0) {
+      // Use provided mappings (values are column indices)
+      mappings = {};
+      for (const [field, index] of Object.entries(columnMappings)) {
+        if (index >= 0) {
+          mappings[field] = index;
+        }
+      }
+    } else {
+      // Preprocess LinkedIn headers for auto-detection
       if (isLinkedInFormat) {
-        // For LinkedIn, check if we have alternative name fields
-        const hasLinkedInNameFields = headers.includes('first_name_temp') ||
-                                        headers.includes('last_name_temp') ||
-                                        headers.includes('linkedin_name_temp');
-        if (!hasLinkedInNameFields) {
-          return res.status(400).json({ error: 'CSV must have name fields (First Name, Last Name, or LinkedIn Name)' });
-        }
-      } else {
-        return res.status(400).json({ error: 'CSV must have a "Name" column' });
+        const linkedInMap = new Map([
+          ['first name', 'first_name_temp'],
+          ['last name', 'last_name_temp'],
+          ['linkedin name', 'linkedin_name_temp'],
+          ['organisation', 'company name'],
+          ['organisation website', 'company_url_temp'],
+          ['current role(s)', 'job title'],
+          ['sales navigator profile link', 'linkedin url'],
+          ['profile link', 'linkedin_url_alt_temp'],
+          ['about', 'about_temp'],
+          ['location', 'location_temp'],
+          ['organisation size', 'company_size_temp']
+        ]);
+        headers = headers.map(h => linkedInMap.get(h) || h);
+      }
+
+      // Auto-detect with extended patterns
+      mappings = detectColumnMappings(headers);
+
+      // LinkedIn-specific: add temp fields for name composition
+      if (isLinkedInFormat) {
+        const firstNameIdx = headers.indexOf('first_name_temp');
+        const lastNameIdx = headers.indexOf('last_name_temp');
+        const linkedinNameIdx = headers.indexOf('linkedin_name_temp');
+        if (firstNameIdx >= 0) mappings._first_name_temp = firstNameIdx;
+        if (lastNameIdx >= 0) mappings._last_name_temp = lastNameIdx;
+        if (linkedinNameIdx >= 0) mappings._linkedin_name_temp = linkedinNameIdx;
+
+        const aboutIdx = headers.indexOf('about_temp');
+        if (aboutIdx >= 0) mappings._about_temp = aboutIdx;
+
+        // Map company_url from temp
+        const companyUrlIdx = headers.indexOf('company_url_temp');
+        if (companyUrlIdx >= 0 && !mappings.company_url) mappings.company_url = companyUrlIdx;
       }
     }
 
-    // Parse CSV values (handle quoted fields)
-    const parseCSVLine = (line) => {
-      const result = [];
-      let current = '';
-      let inQuotes = false;
-
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          if (inQuotes && line[i + 1] === '"') {
-            current += '"';
-            i++;
-          } else {
-            inQuotes = !inQuotes;
-          }
-        } else if (char === ',' && !inQuotes) {
-          result.push(current.trim());
-          current = '';
-        } else {
-          current += char;
-        }
-      }
-      result.push(current.trim());
-      return result;
-    };
+    const nameIndex = mappings.name ?? -1;
+    const firstNameIndex = mappings.first_name ?? mappings._first_name_temp ?? -1;
+    const lastNameIndex = mappings.last_name ?? mappings._last_name_temp ?? -1;
+    const jobTitleIndex = mappings.job_title ?? -1;
+    const emailIndex = mappings.email ?? -1;
+    const phoneIndex = mappings.phone ?? -1;
+    const linkedinUrlIndex = mappings.linkedin_url ?? -1;
+    const companyNameIndex = mappings.company_name ?? -1;
+    const companyUrlIndex = mappings.company_url ?? -1;
+    const industryIndex = mappings.industry ?? -1;
+    const stageIndex = mappings.stage ?? -1;
+    const valueIndex = mappings.estimated_value ?? -1;
+    const closeDateIndex = mappings.close_date ?? -1;
+    const nextStepDateIndex = mappings.next_step_date ?? -1;
+    const nextStepDescIndex = mappings.next_step_description ?? -1;
+    const priorityIndex = mappings.priority ?? -1;
+    const linkedinNameIndex = mappings._linkedin_name_temp ?? -1;
+    const aboutIndex = mappings._about_temp ?? -1;
 
     const validStages = ['new_signal', 'qualified', 'discovery', 'solution_design', 'negotiation', 'closed_won', 'closed_lost'];
     const validPriorities = ['low', 'medium', 'high'];
@@ -905,64 +1018,49 @@ router.post('/import/csv', async (req, res) => {
         }
       }
 
-      // Get contact name - try standard field first
-      let contactName = nameIndex >= 0 ? values[nameIndex]?.replace(/^"|"$/g, '').trim() : null;
+      const getVal = (idx) => idx >= 0 ? values[idx]?.replace(/^"|"$/g, '').trim() || null : null;
 
-      // For LinkedIn format, try to build name from alternative fields
-      if (isLinkedInFormat && !contactName) {
-        const firstNameIdx = headers.indexOf('first_name_temp');
-        const lastNameIdx = headers.indexOf('last_name_temp');
-        const linkedinNameIdx = headers.indexOf('linkedin_name_temp');
-
-        const firstName = firstNameIdx >= 0 ? values[firstNameIdx]?.replace(/^"|"$/g, '').trim() : '';
-        const lastName = lastNameIdx >= 0 ? values[lastNameIdx]?.replace(/^"|"$/g, '').trim() : '';
-        const linkedinName = linkedinNameIdx >= 0 ? values[linkedinNameIdx]?.replace(/^"|"$/g, '').trim() : '';
-
-        // Priority: First+Last > LinkedIn Name
+      // Determine contact name with fallback chain
+      let contactName = getVal(nameIndex);
+      if (!contactName) {
+        const firstName = getVal(firstNameIndex) || '';
+        const lastName = getVal(lastNameIndex) || '';
         if (firstName || lastName) {
           contactName = [firstName, lastName].filter(Boolean).join(' ');
-        } else if (linkedinName) {
-          contactName = linkedinName;
         }
       }
-
+      if (!contactName && linkedinNameIndex >= 0) {
+        contactName = getVal(linkedinNameIndex);
+      }
       if (!contactName) {
-        errors.push(`Row ${i + 1}: Name is required`);
-        continue;
+        contactName = getVal(companyNameIndex);
+      }
+      if (!contactName) {
+        contactName = `Unknown (Row ${i + 1})`;
       }
 
-      const jobTitle = jobTitleIndex >= 0 ? values[jobTitleIndex]?.replace(/^"|"$/g, '') || null : null;
-      const csvEmail = emailIndex >= 0 ? values[emailIndex]?.replace(/^"|"$/g, '') || null : null;
-      const csvPhone = phoneIndex >= 0 ? values[phoneIndex]?.replace(/^"|"$/g, '') || null : null;
-      const linkedinUrl = linkedinUrlIndex >= 0 ? values[linkedinUrlIndex]?.replace(/^"|"$/g, '') || null : null;
-      const companyName = companyNameIndex >= 0 ? values[companyNameIndex]?.replace(/^"|"$/g, '') || null : null;
+      const jobTitle = getVal(jobTitleIndex);
+      const csvEmail = getVal(emailIndex);
+      const csvPhone = getVal(phoneIndex);
+      const linkedinUrl = getVal(linkedinUrlIndex);
+      const companyName = getVal(companyNameIndex);
+      const companyUrl = getVal(companyUrlIndex);
+      const aboutContent = isLinkedInFormat ? getVal(aboutIndex) : null;
+      const industry = getVal(industryIndex);
 
-      // Extract company URL (from LinkedIn or standard CSV)
-      const companyUrlIdx = headers.indexOf('company_url_temp');
-      const companyUrl = companyUrlIdx >= 0 ? values[companyUrlIdx]?.replace(/^"|"$/g, '').trim() || null : null;
+      let stage = getVal(stageIndex);
+      stage = stage ? stage.toLowerCase().replace(/ /g, '_') : 'new_signal';
+      if (!validStages.includes(stage)) stage = 'new_signal';
 
-      // Extract LinkedIn About/Bio (if present)
-      const aboutIdx = headers.indexOf('about_temp');
-      const aboutContent = isLinkedInFormat && aboutIdx >= 0 ?
-        values[aboutIdx]?.replace(/^"|"$/g, '').trim() : null;
+      const rawValue = getVal(valueIndex);
+      const estimatedValue = rawValue ? parseFloat(rawValue.replace(/[^0-9.]/g, '')) || null : null;
+      const closeDate = getVal(closeDateIndex);
+      const nextStepDate = getVal(nextStepDateIndex);
+      const nextStepDesc = getVal(nextStepDescIndex);
 
-      const industry = industryIndex >= 0 ? values[industryIndex]?.replace(/^"|"$/g, '') || null : null;
-      let stage = stageIndex >= 0 ? values[stageIndex]?.replace(/^"|"$/g, '').toLowerCase().replace(/ /g, '_') || 'new_signal' : 'new_signal';
-      const estimatedValue = valueIndex >= 0 ? parseFloat(values[valueIndex]?.replace(/[^0-9.]/g, '')) || null : null;
-      const closeDate = closeDateIndex >= 0 ? values[closeDateIndex]?.replace(/^"|"$/g, '') || null : null;
-      const nextStepDate = nextStepDateIndex >= 0 ? values[nextStepDateIndex]?.replace(/^"|"$/g, '') || null : null;
-      const nextStepDesc = nextStepDescIndex >= 0 ? values[nextStepDescIndex]?.replace(/^"|"$/g, '') || null : null;
-      let priority = priorityIndex >= 0 ? values[priorityIndex]?.replace(/^"|"$/g, '').toLowerCase() || 'medium' : 'medium';
-
-      // Validate and normalize stage
-      if (!validStages.includes(stage)) {
-        stage = 'new_signal';
-      }
-
-      // Validate and normalize priority
-      if (!validPriorities.includes(priority)) {
-        priority = 'medium';
-      }
+      let priority = getVal(priorityIndex);
+      priority = priority ? priority.toLowerCase() : 'medium';
+      if (!validPriorities.includes(priority)) priority = 'medium';
 
       // Use current date + 30 days for next_step_date if not provided
       const defaultNextStepDate = new Date();
@@ -1018,7 +1116,6 @@ router.post('/import/csv', async (req, res) => {
             );
           } catch (noteErr) {
             console.error('Failed to save LinkedIn bio note:', noteErr);
-            // Don't fail the import if note creation fails
           }
         }
 
@@ -1028,11 +1125,42 @@ router.post('/import/csv', async (req, res) => {
       }
     }
 
+    // Handle list creation/assignment
+    let assignedListId = listId || null;
+    if (createList && createdDeals.length > 0) {
+      const newListId = uuidv4();
+      const newListName = listName || `Import - ${new Date().toISOString().split('T')[0]}`;
+      try {
+        await run(
+          `INSERT INTO deal_lists (id, name, owner_id) VALUES (?, ?, ?)`,
+          [newListId, newListName, req.user.id]
+        );
+        assignedListId = newListId;
+      } catch (err) {
+        console.error('Failed to create list for import:', err);
+      }
+    }
+
+    // Assign deals to list
+    if (assignedListId && createdDeals.length > 0) {
+      for (const deal of createdDeals) {
+        try {
+          await run(
+            `INSERT INTO deal_list_items (id, deal_list_id, deal_id) VALUES (?, ?, ?)`,
+            [uuidv4(), assignedListId, deal.id]
+          );
+        } catch (err) {
+          console.error(`Failed to assign deal ${deal.id} to list:`, err);
+        }
+      }
+    }
+
     res.json({
       success: true,
       imported: createdDeals.length,
       format: isLinkedInFormat ? 'linkedin' : 'standard',
       deals: createdDeals,
+      listId: assignedListId || undefined,
       errors: errors.length > 0 ? errors : undefined
     });
   } catch (error) {

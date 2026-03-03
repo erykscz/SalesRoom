@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban, Linkedin } from 'lucide-react';
 import KanbanBoard from '@/components/deals/KanbanBoard';
+import CsvMappingDialog from './components/CsvMappingDialog';
+import DealListManager from './components/DealListManager';
 import { API_URL } from '@/lib/api';
 
 interface Deal {
@@ -76,6 +78,15 @@ export default function DealsPage() {
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // CSV Mapping Dialog state
+  const [csvMappingOpen, setCsvMappingOpen] = useState(false);
+  const [pendingCsvContent, setPendingCsvContent] = useState('');
+  const [pendingFileName, setPendingFileName] = useState('');
+
+  // Deal Lists state
+  const [selectedListId, setSelectedListId] = useState<string | null>(searchParams.get('list'));
+  const [listRefreshKey, setListRefreshKey] = useState(0);
+
   // Get current URL with search params for passing to detail pages
   const currentUrl = location.pathname + location.search;
 
@@ -102,17 +113,18 @@ export default function DealsPage() {
     if (showArchived) params.set('archived', 'true');
     if (dateFilter && dateFilter !== 'all') params.set('date_filter', dateFilter);
     if (viewMode && viewMode !== 'table') params.set('view', viewMode);
+    if (selectedListId) params.set('list', selectedListId);
     setSearchParams(params, { replace: true });
-  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, showArchived, dateFilter, viewMode, setSearchParams]);
+  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, showArchived, dateFilter, viewMode, selectedListId, setSearchParams]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, showArchived, dateFilter]);
+  }, [searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, showArchived, dateFilter, selectedListId]);
 
   useEffect(() => {
     fetchDeals();
-  }, [token, searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, showArchived, dateFilter]);
+  }, [token, searchTerm, selectedStage, healthScoreFilter, sortBy, sortOrder, currentPage, showArchived, dateFilter, selectedListId]);
 
   const fetchDeals = async () => {
     try {
@@ -130,6 +142,7 @@ export default function DealsPage() {
       if (dateFilter && dateFilter !== 'all') params.append('date_filter', dateFilter);
       if (sortBy) params.append('sort_by', sortBy);
       if (sortOrder) params.append('sort_order', sortOrder);
+      if (selectedListId) params.append('list', selectedListId);
       params.append('page', currentPage.toString());
       params.append('limit', pageSize.toString());
 
@@ -187,36 +200,29 @@ export default function DealsPage() {
 
         const result = await response.json();
         alert(`Successfully imported ${result.imported} deal(s) from Lix IT Excel with pre-populated research data`);
+        fetchDeals();
       } else {
-        // Standard CSV import
+        // CSV import — open mapping dialog instead of direct import
         const csvContent = await file.text();
-
-        const response = await fetch(`${API_URL}/deals/import/csv`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ csvContent }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to import deals');
-        }
-
-        const result = await response.json();
-        alert(`Successfully imported ${result.imported} deal(s)`);
+        setPendingCsvContent(csvContent);
+        setPendingFileName(file.name);
+        setCsvMappingOpen(true);
       }
-
-      // Refresh deals list
-      fetchDeals();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to import deals');
     }
 
     // Reset so same file can be re-imported
     event.target.value = '';
+  };
+
+  const handleImportComplete = (result: { imported: number; listId?: string }) => {
+    alert(`Successfully imported ${result.imported} deal(s)`);
+    fetchDeals();
+    setListRefreshKey(prev => prev + 1);
+    if (result.listId) {
+      setSelectedListId(result.listId);
+    }
   };
 
   const exportToCsv = async () => {
@@ -269,6 +275,7 @@ export default function DealsPage() {
 
       // Refresh deals list
       fetchDeals();
+      setListRefreshKey(prev => prev + 1);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete deal');
     }
@@ -345,6 +352,7 @@ export default function DealsPage() {
       const result = await response.json();
       alert(`Successfully deleted ${result.count} deal(s)`);
       fetchDeals();
+      setListRefreshKey(prev => prev + 1);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete all deals');
     }
@@ -435,6 +443,16 @@ export default function DealsPage() {
           </Link>
         </div>
       </div>
+
+      {/* Deal Lists */}
+      {token && (
+        <DealListManager
+          selectedListId={selectedListId}
+          onSelectList={setSelectedListId}
+          token={token}
+          refreshKey={listRefreshKey}
+        />
+      )}
 
       {/* Filters */}
       <Card>
@@ -752,6 +770,18 @@ export default function DealsPage() {
           )}
           </CardContent>
         </Card>
+      )}
+
+      {/* CSV Mapping Dialog */}
+      {token && (
+        <CsvMappingDialog
+          open={csvMappingOpen}
+          onOpenChange={setCsvMappingOpen}
+          csvContent={pendingCsvContent}
+          fileName={pendingFileName}
+          token={token}
+          onImportComplete={handleImportComplete}
+        />
       )}
     </div>
   );

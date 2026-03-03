@@ -29,6 +29,7 @@ import adminRoutes from './routes/admin.js';
 import dashboardRoutes from './routes/dashboard.js';
 import icpTemplateRoutes from './routes/icp-templates.js';
 import researchRoutes from './routes/research.js';
+import dealListRoutes from './routes/deal-lists.js';
 
 // Import middleware
 import { authMiddleware } from './middleware/auth.js';
@@ -100,6 +101,7 @@ app.use('/api/admin', authMiddleware, adminRoutes);
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
 app.use('/api/icp-templates', authMiddleware, icpTemplateRoutes);
 app.use('/api/research', authMiddleware, researchRoutes);
+app.use('/api/deal-lists', authMiddleware, dealListRoutes);
 
 // Error handling
 app.use(errorHandler);

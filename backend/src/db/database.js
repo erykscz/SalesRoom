@@ -245,6 +245,36 @@ function runSQLiteMigrations(db) {
     }
   });
   db.run('CREATE INDEX IF NOT EXISTS idx_sales_room_messages_room ON sales_room_messages(sales_room_id)', () => {});
+
+  // Deal Lists tables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS deal_lists (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      color TEXT DEFAULT '#3b82f6',
+      owner_id TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS deal_list_items (
+      id TEXT PRIMARY KEY,
+      deal_list_id TEXT NOT NULL,
+      deal_id TEXT NOT NULL,
+      added_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (deal_list_id) REFERENCES deal_lists(id) ON DELETE CASCADE,
+      FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_deal_lists_owner ON deal_lists(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_deal_list_items_list ON deal_list_items(deal_list_id);
+    CREATE INDEX IF NOT EXISTS idx_deal_list_items_deal ON deal_list_items(deal_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_deal_list_items_unique ON deal_list_items(deal_list_id, deal_id);
+  `, (err) => {
+    if (err) console.error('Deal lists migration error:', err.message);
+  });
 }
 
 // ─── NEON POSTGRESQL MODE ────────────────────────────────────────────
