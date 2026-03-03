@@ -59,7 +59,7 @@ router.post('/enrich', async (req, res) => {
     });
   } catch (error) {
     console.error('Error starting enrichment:', error);
-    res.status(500).json({ error: 'Failed to start enrichment' });
+    res.status(500).json({ error: 'Failed to start enrichment', details: error.message || String(error) });
   }
 });
 
