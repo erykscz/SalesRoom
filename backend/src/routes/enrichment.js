@@ -2,7 +2,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { run, get, all } from '../db/database.js';
 import { isConfigured } from '../services/tinyfish/client.js';
-import { enrichEntity, enrichBulk } from '../services/tinyfish/enrichment.js';
+import { startEnrichment, checkEnrichment } from '../services/tinyfish/enrichment.js';
 
 const router = express.Router();
 
@@ -10,11 +10,11 @@ const router = express.Router();
 router.get('/status', (req, res) => {
   res.json({
     configured: isConfigured(),
-    provider: process.env.RESEARCH_PROVIDER || 'proxycurl',
+    provider: (process.env.RESEARCH_PROVIDER || 'proxycurl').trim(),
   });
 });
 
-// POST /api/enrichment/enrich — Enrich single lead or deal (async, returns jobId)
+// POST /api/enrichment/enrich — Start enrichment (async, returns jobId immediately)
 router.post('/enrich', async (req, res) => {
   try {
     const { entityType, entityId } = req.body;
@@ -23,16 +23,14 @@ router.post('/enrich', async (req, res) => {
     if (!entityType || !entityId) {
       return res.status(400).json({ error: 'entityType and entityId are required' });
     }
-
     if (!['lead', 'deal'].includes(entityType)) {
       return res.status(400).json({ error: 'entityType must be "lead" or "deal"' });
     }
-
     if (!isConfigured()) {
-      return res.status(400).json({ error: 'TinyFish API is not configured. Set TINYFISH_API_KEY in environment.' });
+      return res.status(400).json({ error: 'TinyFish API is not configured' });
     }
 
-    // Row-level security: non-admin users can only enrich their own entities
+    // Row-level security
     const table = entityType === 'deal' ? 'deals' : 'leads';
     const entity = await get(`SELECT id, owner_id FROM ${table} WHERE id = ?`, [entityId]);
     if (!entity) {
@@ -49,85 +47,38 @@ router.post('/enrich', async (req, res) => {
       [jobId, entityType, entityId, userId]
     );
 
-    // Run enrichment synchronously (Vercel serverless kills process after response)
-    const result = await enrichEntity(jobId, entityType, entityId, userId);
+    // Start async TinyFish runs (returns immediately)
+    const result = await startEnrichment(jobId, entityType, entityId, userId);
 
-    res.json({
+    res.status(202).json({
       jobId,
-      status: result.status,
-      message: result.status === 'completed' ? 'Enrichment completed.' : `Enrichment finished with status: ${result.status}`,
-      errors: result.errors?.length > 0 ? result.errors : undefined,
+      status: result.started ? 'running' : 'failed',
+      message: result.started
+        ? 'Enrichment started. Poll /api/enrichment/jobs/:jobId/status for results.'
+        : result.error,
     });
   } catch (error) {
     console.error('Error starting enrichment:', error);
-    res.status(500).json({ error: 'Failed to start enrichment', details: error.message || String(error) });
+    res.status(500).json({ error: 'Failed to start enrichment', details: error.message });
   }
 });
 
-// POST /api/enrichment/bulk — Bulk enrich multiple entities (max 50)
-router.post('/bulk', async (req, res) => {
-  try {
-    const { jobs } = req.body;
-    const userId = req.user.id;
-
-    if (!Array.isArray(jobs) || jobs.length === 0) {
-      return res.status(400).json({ error: 'jobs array is required and must not be empty' });
-    }
-
-    if (jobs.length > 50) {
-      return res.status(400).json({ error: 'Maximum 50 entities per bulk request' });
-    }
-
-    if (!isConfigured()) {
-      return res.status(400).json({ error: 'TinyFish API is not configured. Set TINYFISH_API_KEY in environment.' });
-    }
-
-    // Validate all jobs
-    for (const job of jobs) {
-      if (!job.entityType || !job.entityId) {
-        return res.status(400).json({ error: 'Each job must have entityType and entityId' });
-      }
-      if (!['lead', 'deal'].includes(job.entityType)) {
-        return res.status(400).json({ error: 'entityType must be "lead" or "deal"' });
-      }
-    }
-
-    // Row-level security check for non-admin users
-    if (req.user.role !== 'admin') {
-      for (const job of jobs) {
-        const table = job.entityType === 'deal' ? 'deals' : 'leads';
-        const entity = await get(`SELECT id, owner_id FROM ${table} WHERE id = ?`, [job.entityId]);
-        if (!entity || entity.owner_id !== userId) {
-          return res.status(403).json({ error: `Not authorized to enrich ${job.entityType} ${job.entityId}` });
-        }
-      }
-    }
-
-    const results = await enrichBulk(jobs, userId);
-
-    res.status(202).json({
-      jobs: results,
-      message: `${results.length} enrichment jobs started.`,
-    });
-  } catch (error) {
-    console.error('Error starting bulk enrichment:', error);
-    res.status(500).json({ error: 'Failed to start bulk enrichment' });
-  }
-});
-
-// GET /api/enrichment/jobs/:jobId/status — Poll job status
+// GET /api/enrichment/jobs/:jobId/status — Poll job status (also checks TinyFish)
 router.get('/jobs/:jobId/status', async (req, res) => {
   try {
     const { jobId } = req.params;
+
+    // First check if we need to poll TinyFish
+    const checkResult = await checkEnrichment(jobId);
+
+    if (checkResult.status === 'not_found') {
+      return res.status(404).json({ error: 'Enrichment job not found' });
+    }
 
     const job = await get(
       'SELECT id, entity_type, entity_id, status, error_log, created_at, updated_at, completed_at FROM enrichment_jobs WHERE id = ?',
       [jobId]
     );
-
-    if (!job) {
-      return res.status(404).json({ error: 'Enrichment job not found' });
-    }
 
     res.json({
       id: job.id,
@@ -145,7 +96,45 @@ router.get('/jobs/:jobId/status', async (req, res) => {
   }
 });
 
-// GET /api/enrichment/entity/:entityType/:entityId — Get enrichment results for entity
+// POST /api/enrichment/bulk — Bulk enrich multiple entities
+router.post('/bulk', async (req, res) => {
+  try {
+    const { jobs } = req.body;
+    const userId = req.user.id;
+
+    if (!Array.isArray(jobs) || jobs.length === 0) {
+      return res.status(400).json({ error: 'jobs array is required' });
+    }
+    if (jobs.length > 50) {
+      return res.status(400).json({ error: 'Maximum 50 entities per bulk request' });
+    }
+    if (!isConfigured()) {
+      return res.status(400).json({ error: 'TinyFish API is not configured' });
+    }
+
+    const results = [];
+    for (const job of jobs) {
+      if (!job.entityType || !job.entityId || !['lead', 'deal'].includes(job.entityType)) continue;
+
+      const jobId = uuidv4();
+      await run(
+        `INSERT INTO enrichment_jobs (id, entity_type, entity_id, status, provider, requested_by)
+         VALUES (?, ?, ?, 'pending', 'tinyfish', ?)`,
+        [jobId, job.entityType, job.entityId, userId]
+      );
+
+      await startEnrichment(jobId, job.entityType, job.entityId, userId);
+      results.push({ jobId, entityType: job.entityType, entityId: job.entityId });
+    }
+
+    res.status(202).json({ jobs: results, message: `${results.length} enrichment jobs started.` });
+  } catch (error) {
+    console.error('Error starting bulk enrichment:', error);
+    res.status(500).json({ error: 'Failed to start bulk enrichment' });
+  }
+});
+
+// GET /api/enrichment/entity/:entityType/:entityId — Get enrichment results
 router.get('/entity/:entityType/:entityId', async (req, res) => {
   try {
     const { entityType, entityId } = req.params;
@@ -155,7 +144,6 @@ router.get('/entity/:entityType/:entityId', async (req, res) => {
       return res.status(400).json({ error: 'entityType must be "lead" or "deal"' });
     }
 
-    // Row-level security
     const table = entityType === 'deal' ? 'deals' : 'leads';
     const entity = await get(`SELECT * FROM ${table} WHERE id = ?`, [entityId]);
     if (!entity) {
@@ -165,18 +153,24 @@ router.get('/entity/:entityType/:entityId', async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to view this entity' });
     }
 
-    // Get the latest enrichment job for this entity
     const job = await get(
       `SELECT * FROM enrichment_jobs WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC LIMIT 1`,
       [entityType, entityId]
     );
 
-    // Get enrichment data from entity
+    // If job is still running, check TinyFish
+    if (job && (job.status === 'running' || job.status === 'pending')) {
+      await checkEnrichment(job.id);
+      // Re-fetch after check
+      const updatedJob = await get('SELECT * FROM enrichment_jobs WHERE id = ?', [job.id]);
+      if (updatedJob) Object.assign(job, updatedJob);
+    }
+
     let enrichmentData = null;
     if (entityType === 'deal' && entity.tinyfish_research) {
-      try { enrichmentData = JSON.parse(entity.tinyfish_research); } catch { /* ignore */ }
+      try { enrichmentData = JSON.parse(entity.tinyfish_research); } catch {}
     } else if (entityType === 'lead' && entity.enrichment_data) {
-      try { enrichmentData = JSON.parse(entity.enrichment_data); } catch { /* ignore */ }
+      try { enrichmentData = JSON.parse(entity.enrichment_data); } catch {}
     }
 
     res.json({
@@ -187,7 +181,7 @@ router.get('/entity/:entityType/:entityId', async (req, res) => {
       job: job ? {
         id: job.id,
         status: job.status,
-        linkedinData: job.linkedin_data ? JSON.parse(job.linkedin_data) : null,
+        linkedinData: job.linkedin_data && !job.linkedin_data.includes('_tinyfish_runs') ? JSON.parse(job.linkedin_data) : null,
         websiteData: job.website_data ? JSON.parse(job.website_data) : null,
         errors: job.error_log ? JSON.parse(job.error_log) : null,
         created_at: job.created_at,
