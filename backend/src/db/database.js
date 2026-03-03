@@ -338,16 +338,16 @@ async function runPostgresMigrations() {
   try {
     // Enrichment columns on leads
     for (const col of ['enrichment_data', 'enriched_at', 'enrichment_status', 'company_website']) {
-      await neonSql(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
+      try { await neonSql.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${col} TEXT`); } catch {}
     }
 
     // TinyFish columns on deals
     for (const col of ['tinyfish_research', 'last_enriched']) {
-      await neonSql(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
+      try { await neonSql.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS ${col} TEXT`); } catch {}
     }
 
     // Enrichment Jobs table
-    await neonSql(`
+    await neonSql.query(`
       CREATE TABLE IF NOT EXISTS enrichment_jobs (
         id TEXT PRIMARY KEY,
         entity_type TEXT NOT NULL,
@@ -365,9 +365,9 @@ async function runPostgresMigrations() {
       )
     `);
 
-    await neonSql(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_entity ON enrichment_jobs(entity_type, entity_id)`).catch(() => {});
-    await neonSql(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_status ON enrichment_jobs(status)`).catch(() => {});
-    await neonSql(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_requested_by ON enrichment_jobs(requested_by)`).catch(() => {});
+    try { await neonSql.query(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_entity ON enrichment_jobs(entity_type, entity_id)`); } catch {}
+    try { await neonSql.query(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_status ON enrichment_jobs(status)`); } catch {}
+    try { await neonSql.query(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_requested_by ON enrichment_jobs(requested_by)`); } catch {}
 
     console.log('PostgreSQL enrichment migrations completed');
   } catch (err) {
