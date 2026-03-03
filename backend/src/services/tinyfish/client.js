@@ -1,16 +1,27 @@
 // AgentQL REST API client
+// Note: read env vars dynamically (not at module level) because dotenv
+// may not have loaded yet when ESM static imports are resolved.
 
-const TINYFISH_API_URL = process.env.TINYFISH_API_URL || 'https://api.agentql.com/v1';
-const TINYFISH_API_KEY = process.env.TINYFISH_API_KEY;
+function getApiKey() {
+  return process.env.TINYFISH_API_KEY;
+}
+
+function getApiUrl() {
+  return process.env.TINYFISH_API_URL || 'https://api.agentql.com/v1';
+}
 
 export function isConfigured() {
-  return !!(TINYFISH_API_KEY && TINYFISH_API_KEY.length > 0);
+  const key = getApiKey();
+  return !!(key && key.length > 0);
 }
 
 export async function queryData(url, query, options = {}) {
   if (!isConfigured()) {
     return { success: false, data: null, error: 'TinyFish API key not configured' };
   }
+
+  const apiKey = getApiKey();
+  const apiUrl = getApiUrl();
 
   const {
     browserProfile = 'stealth',
@@ -33,11 +44,11 @@ export async function queryData(url, query, options = {}) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
 
-      const res = await fetch(`${TINYFISH_API_URL}/query-data`, {
+      const res = await fetch(`${apiUrl}/query-data`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': TINYFISH_API_KEY,
+          'X-API-Key': apiKey,
         },
         body: JSON.stringify(body),
         signal: controller.signal,
