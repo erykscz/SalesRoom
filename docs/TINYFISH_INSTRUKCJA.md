@@ -1,4 +1,4 @@
-# TinyFish (AgentQL) — Instrukcja Obsługi
+# TinyFish — Instrukcja Obsługi
 
 ## Spis treści
 1. [Co to jest TinyFish?](#1-co-to-jest-tinyfish)
@@ -13,51 +13,66 @@
 
 ## 1. Co to jest TinyFish?
 
-TinyFish to integracja z **AgentQL** — AI-powered web scraping API, który wyciąga ustrukturyzowane dane z profili LinkedIn i stron firmowych. W odróżnieniu od Deep Research (Proxycurl + scrapery), TinyFish używa inteligentnej ekstrakcji danych za pomocą zapytań strukturalnych.
+TinyFish to integracja z **TinyFish Web Agent** (https://agent.tinyfish.ai) — AI-powered web automation API, który wyciąga ustrukturyzowane dane z profili LinkedIn i stron firmowych za pomocą poleceń w języku naturalnym. W odróżnieniu od Deep Research (Proxycurl + scrapery HTML), TinyFish używa inteligentnej przeglądarki headless z trybem stealth do omijania blokad bot-detection.
 
 **Co wyciąga TinyFish:**
 - **LinkedIn (osoba):** imię i nazwisko, headline, podsumowanie, lokalizacja, doświadczenie zawodowe, edukacja, umiejętności
 - **Strona firmowa:** nazwa firmy, opis, branża, usługi, produkty, technologie, zespół, dane kontaktowe
 
+**Jak działa:**
+1. Wysyłamy URL + cel (goal) w języku naturalnym do TinyFish API
+2. TinyFish uruchamia przeglądarkę headless, ładuje stronę, wyciąga dane
+3. Wyniki wracają jako ustrukturyzowany JSON
+
 ---
 
 ## 2. Konfiguracja
 
-### Krok 1: Uzyskaj klucz API AgentQL
+### Krok 1: Uzyskaj klucz API TinyFish
 
-1. Wejdź na [agentql.com](https://agentql.com) i zarejestruj się
-2. Wygeneruj klucz API w panelu użytkownika
-3. Skopiuj klucz (format: `aq_...`)
+1. Wejdź na [agent.tinyfish.ai/signup](https://agent.tinyfish.ai/signup) i zarejestruj się
+2. Wygeneruj klucz API w dashboardzie
+3. Skopiuj klucz (format: `sk-tinyfish-...`)
 
 ### Krok 2: Ustaw zmienne środowiskowe
 
-Dodaj do pliku `.env` (w katalogu głównym projektu):
+#### Lokalnie (development)
+
+Dodaj do pliku `.env.local` (w katalogu głównym projektu):
 
 ```env
-TINYFISH_API_KEY=aq_twoj_klucz_tutaj
-TINYFISH_API_URL=https://api.agentql.com/v1
+TINYFISH_API_KEY=sk-tinyfish-twoj_klucz_tutaj
+TINYFISH_API_URL=https://agent.tinyfish.ai/v1
 RESEARCH_PROVIDER=tinyfish
 ```
 
-> **Uwaga:** Jeśli używasz `.env.local` (Vercel), dodaj tam te same zmienne.
->
-> Jeśli nie masz pliku `.env` w katalogu głównym, stwórz go kopiując `.env.example`:
-> ```bash
-> cp .env.example .env
-> ```
-> A następnie uzupełnij wartości.
+#### Na Vercel (production)
 
-### Krok 3: Zrestartuj backend
+```bash
+echo -n "sk-tinyfish-twoj_klucz" | vercel env add TINYFISH_API_KEY production
+echo -n "https://agent.tinyfish.ai/v1" | vercel env add TINYFISH_API_URL production
+echo -n "tinyfish" | vercel env add RESEARCH_PROVIDER production
+vercel --prod
+```
 
+> **Uwaga:** Użyj `echo -n` żeby uniknąć dodania znaku nowej linii do wartości.
+
+### Krok 3: Zrestartuj/zdeployuj
+
+Lokalnie:
 ```bash
 cd backend && npm run dev
 ```
 
+Na Vercel:
+```bash
+vercel --prod
+```
+
 ### Krok 4: Zweryfikuj konfigurację
 
-W przeglądarce lub Postmanie:
 ```
-GET http://localhost:3001/api/enrichment/status
+GET /api/enrichment/status
 Authorization: Bearer <twoj_token>
 ```
 
@@ -76,9 +91,9 @@ Jeśli `configured: false` — klucz API nie jest ustawiony lub jest pusty.
 | Wartość | Zachowanie |
 |---------|-----------|
 | `proxycurl` (domyślna) | Deep Research używa Proxycurl + scrapery HTML |
-| `tinyfish` | Deep Research używa AgentQL do LinkedIn i stron WWW |
+| `tinyfish` | Deep Research używa TinyFish do LinkedIn i stron WWW |
 
-> Niezależnie od tej opcji, endpointy `/api/enrichment/*` zawsze używają AgentQL (jeśli klucz jest ustawiony).
+> Niezależnie od tej opcji, endpointy `/api/enrichment/*` zawsze używają TinyFish (jeśli klucz jest ustawiony).
 
 ---
 
@@ -93,16 +108,20 @@ Na stronie **szczegółów deala** (Deal Detail), w **prawej kolumnie** pojawia 
 1. Otwórz dowolny deal w aplikacji
 2. W prawej kolumnie zobaczysz kartę **"Prospect Intelligence"** z przyciskiem **"Enrich"**
 3. Kliknij **"Enrich"** — system rozpocznie ekstrakcję danych
-4. Poczekaj kilka sekund (karta pokaże spinner "Extracting data...")
-5. Po zakończeniu zobaczysz:
+4. Poczekaj — karta pokaże spinner "Extracting data..."
+   - **Website:** ~30-40 sekund
+   - **LinkedIn:** ~3-10 minut (tryb stealth, LinkedIn jest wolny)
+5. Frontend automatycznie polluje status co kilka sekund
+6. Po zakończeniu zobaczysz:
    - **Sekcja "Person"** — dane osoby (imię, stanowisko, lokalizacja, umiejętności, doświadczenie, edukacja)
    - **Sekcja "Company"** — dane firmy (branża, opis, technologie, usługi)
-6. Data ostatniego enrichmentu jest wyświetlona na dole karty
-7. Przycisk zmienia się na **"Refresh"** — kliknij, żeby ponownie pobrać dane
+7. Data ostatniego enrichmentu jest wyświetlona na dole karty
+8. Przycisk zmienia się na **"Refresh"** — kliknij, żeby ponownie pobrać dane
 
 ### Wymagania:
 - Deal musi mieć **LinkedIn URL** (pole `linkedin_url`) i/lub **Company URL** (pole `company_url`)
 - Bez tych pól enrichment nie będzie miał skąd wyciągać danych
+- LinkedIn i website research uruchamiają się **równolegle** (nie trzeba czekać na jedno, żeby drugie się zaczęło)
 
 ### Screenshot lokalizacji:
 ```
@@ -110,7 +129,7 @@ Na stronie **szczegółów deala** (Deal Detail), w **prawej kolumnie** pojawia 
 │ Deal Detail Page                            │
 │                                             │
 │  ┌──────────────┐  ┌──────────────────────┐ │
-│  │              │  │ ★ Prospect Intel  [↻] │ │  <-- NOWA KARTA
+│  │              │  │ ★ Prospect Intel  [↻] │ │  <-- KARTA
 │  │  Main Info   │  │   Person: Jan Kowal.. │ │
 │  │  Activities  │  │   Company: Acme...    │ │
 │  │  Research    │  ├──────────────────────┤ │
@@ -149,7 +168,6 @@ Na stronie **Intent Scraper** (lista leadów), w zakładce z leadami.
 
 ### Limity:
 - Maksymalnie **50 leadów** w jednym bulk request
-- Między każdym leadem jest 500ms opóźnienia (ochrona przed rate limitem AgentQL)
 
 ### Screenshot:
 ```
@@ -177,7 +195,7 @@ Na stronie **Intent Scraper** (lista leadów), w zakładce z leadami.
 
 ## 5. Integracja z Deep Research
 
-Jeśli ustawisz `RESEARCH_PROVIDER=tinyfish`, system **Deep Research** (na stronie deala, sekcja "Research") będzie automatycznie używał AgentQL zamiast Proxycurl/scraperów HTML dla:
+Jeśli ustawisz `RESEARCH_PROVIDER=tinyfish`, system **Deep Research** (na stronie deala, sekcja "Research") będzie automatycznie używał TinyFish zamiast Proxycurl/scraperów HTML dla:
 - **LinkedIn** — ekstrakcja profilu osoby i firmy
 - **Website** — ekstrakcja danych ze strony firmowej
 
@@ -200,7 +218,9 @@ Sprawdza, czy TinyFish jest skonfigurowany.
 ```
 
 ### POST `/api/enrichment/enrich`
-Wzbogaca pojedynczego leada lub deala (asynchronicznie).
+Wzbogaca pojedynczego leada lub deala.
+
+Endpoint uruchamia **asynchroniczne** TinyFish runy i zwraca `jobId` natychmiast. Wyniki są dostępne po pollowaniu statusu.
 
 **Body:**
 ```json
@@ -211,8 +231,8 @@ Wzbogaca pojedynczego leada lub deala (asynchronicznie).
 ```json
 {
   "jobId": "uuid-of-job",
-  "status": "pending",
-  "message": "Enrichment started. Poll /api/enrichment/jobs/:jobId/status for progress."
+  "status": "running",
+  "message": "Enrichment started. Poll /api/enrichment/jobs/:jobId/status for results."
 }
 ```
 
@@ -243,6 +263,8 @@ Wzbogaca wiele encji naraz (max 50).
 ### GET `/api/enrichment/jobs/:jobId/status`
 Sprawdza status pojedynczego joba.
 
+**Ważne:** Ten endpoint jednocześnie sprawdza status w TinyFish i aktualizuje bazę danych gdy wyniki są gotowe. Frontend powinien pollować ten endpoint co 5-10 sekund.
+
 **Odpowiedź:**
 ```json
 {
@@ -251,15 +273,15 @@ Sprawdza status pojedynczego joba.
   "entityId": "lead-uuid",
   "status": "completed",
   "errors": null,
-  "created_at": "2026-03-03 12:00:00",
-  "completed_at": "2026-03-03 12:00:15"
+  "created_at": "2026-03-03T12:00:00Z",
+  "completed_at": "2026-03-03T12:05:15Z"
 }
 ```
 
 Statusy: `pending` → `running` → `completed` / `partial` / `failed`
 
 ### GET `/api/enrichment/entity/:entityType/:entityId`
-Pobiera wyniki enrichmentu dla danej encji.
+Pobiera wyniki enrichmentu dla danej encji. Jeśli job jest wciąż w toku, automatycznie sprawdza TinyFish.
 
 **Odpowiedź:**
 ```json
@@ -267,11 +289,11 @@ Pobiera wyniki enrichmentu dla danej encji.
   "entityType": "deal",
   "entityId": "deal-uuid",
   "enrichmentData": {
-    "linkedin": { "full_name": "Jan Kowalski", "headline": "CEO at Acme", ... },
-    "website": { "name": "Acme Corp", "industry": "IT", "technologies": ["React", "Node.js"], ... }
+    "linkedin": { "full_name": "Jan Kowalski", "headline": "CEO at Acme", "..." },
+    "website": { "name": "Acme Corp", "industry": "IT", "technologies": ["React", "Node.js"], "..." }
   },
-  "lastEnriched": "2026-03-03 12:00:15",
-  "job": { ... }
+  "lastEnriched": "2026-03-03T12:05:15Z",
+  "job": { "..." }
 }
 ```
 
@@ -281,31 +303,47 @@ Pobiera wyniki enrichmentu dla danej encji.
 
 ### Nie widzę karty "Prospect Intelligence" na stronie deala
 - **Przyczyna:** `TINYFISH_API_KEY` nie jest ustawiony
-- **Rozwiązanie:** Dodaj klucz do `.env` i zrestartuj backend
+- **Rozwiązanie:** Dodaj klucz do `.env.local` (lokalnie) lub do Vercel env vars (production)
 - **Weryfikacja:** `GET /api/enrichment/status` powinien zwrócić `"configured": true`
 
 ### Nie widzę checkboxów przy leadach w Intent Scraper
 - **Przyczyna:** Jak wyżej — frontend ukrywa checkboxy gdy TinyFish nie jest skonfigurowany
-- **Rozwiązanie:** Ustaw `TINYFISH_API_KEY` i zrestartuj backend
+- **Rozwiązanie:** Ustaw `TINYFISH_API_KEY` i zdeployuj/zrestartuj
 
-### Enrichment zwraca "failed"
+### Enrichment zwraca "failed to start enrichment"
+- **Przyczyna:** Tabela `enrichment_jobs` nie istnieje w bazie danych
+- **Rozwiązanie:** Migracje uruchamiają się automatycznie. Zdeployuj najnowszą wersję kodu
+- **Przyczyna 2:** Nieprawidłowy klucz API TinyFish
+- **Rozwiązanie:** Sprawdź klucz na [agent.tinyfish.ai](https://agent.tinyfish.ai)
+
+### Enrichment zwraca "failed" z błędem API
 - **Przyczyna:** Brak LinkedIn URL lub Company URL na encji
 - **Rozwiązanie:** Uzupełnij pola `linkedin_url` i/lub `company_url` na dealu/leadzie
-- **Przyczyna 2:** Nieprawidłowy klucz API AgentQL
-- **Rozwiązanie:** Sprawdź klucz na [agentql.com](https://agentql.com)
+- **Przyczyna 2:** Klucz API wygasł lub jest nieaktywny
+- **Rozwiązanie:** Wygeneruj nowy klucz na dashboardzie TinyFish
+- **Przyczyna 3:** Brak kredytów na koncie TinyFish (błąd 403 FORBIDDEN)
+- **Rozwiązanie:** Doładuj konto na agent.tinyfish.ai
 
-### Enrichment trwa bardzo długo (>30s)
-- AgentQL musi załadować stronę w przeglądarce headless — LinkedIn jest wolny
-- Timeout jest ustawiony na 30 sekund per zapytanie
-- Jeśli LinkedIn blokuje — spróbuj ponownie za kilka minut
+### Enrichment trwa bardzo długo
+- **Website:** ~30-40 sekund (normalne)
+- **LinkedIn:** ~3-10 minut (normalne — tryb stealth, LinkedIn jest trudny do scrape'owania)
+- TinyFish uruchamia prawdziwą przeglądarkę headless, to nie jest zwykłe HTTP request
+- LinkedIn i website research uruchamiają się równolegle
+- Frontend automatycznie polluje status — nie trzeba odświeżać strony
 
-### Backend nie startuje po zmianach
-- Upewnij się, że plik `.env` istnieje w katalogu głównym projektu
-- Jeśli używasz tylko `.env.local`, skopiuj go:
-  ```bash
-  cp .env.local .env
-  ```
-  i dodaj zmienne TinyFish do `.env`
+### Enrichment "running" ale nigdy się nie kończy
+- **Przyczyna:** TinyFish run mógł się zawiesić
+- **Rozwiązanie:** Kliknij "Refresh" na karcie Prospect Intelligence żeby uruchomić nowy enrichment
+- Stary job pozostanie w statusie "running" ale nie blokuje nowych
 
 ### Schemat bazy danych
-Migracje uruchamiają się automatycznie przy starcie backendu. Nowe kolumny i tabela `enrichment_jobs` zostaną dodane bez interwencji.
+Migracje uruchamiają się automatycznie przy starcie backendu — zarówno dla SQLite (dev) jak i PostgreSQL/Neon (Vercel). Nowe kolumny i tabela `enrichment_jobs` zostaną dodane bez interwencji.
+
+### Kody błędów TinyFish API
+
+| Kod | Znaczenie |
+|-----|-----------|
+| 401 | Nieprawidłowy lub brakujący klucz API |
+| 403 | Brak kredytów lub nieaktywna subskrypcja |
+| 429 | Rate limit — zbyt wiele zapytań, poczekaj chwilę |
+| 500 | Błąd po stronie TinyFish — spróbuj ponownie |
