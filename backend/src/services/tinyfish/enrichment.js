@@ -1,4 +1,6 @@
 // Enrichment pipeline orchestrator
+// Note: On Vercel serverless, enrichment runs synchronously within the request
+// (no fire-and-forget — the function would be killed after response).
 
 import { v4 as uuidv4 } from 'uuid';
 import { run, get } from '../../db/database.js';
@@ -26,7 +28,7 @@ export async function enrichEntity(jobId, entityType, entityId, userId) {
         `UPDATE enrichment_jobs SET status = 'failed', error_log = ?, updated_at = datetime('now') WHERE id = ?`,
         [JSON.stringify({ error: `${entityType} not found` }), jobId]
       );
-      return;
+      return { status: 'failed', error: `${entityType} not found` };
     }
 
     const errors = [];
@@ -108,12 +110,14 @@ export async function enrichEntity(jobId, entityType, entityId, userId) {
     }
 
     console.log(`Enrichment ${jobId} completed with status: ${status}`);
+    return { status, linkedinData, websiteData, errors };
   } catch (err) {
     console.error(`Enrichment ${jobId} failed:`, err);
     await run(
       `UPDATE enrichment_jobs SET status = 'failed', error_log = ?, updated_at = datetime('now') WHERE id = ?`,
       [JSON.stringify({ error: err.message }), jobId]
     ).catch(() => {});
+    return { status: 'failed', error: err.message };
   }
 }
 
@@ -129,15 +133,9 @@ export async function enrichBulk(jobs, userId) {
       [jobId, job.entityType, job.entityId, userId]
     );
 
-    results.push({ jobId, entityType: job.entityType, entityId: job.entityId });
-
-    // Run enrichment async (fire-and-forget)
-    enrichEntity(jobId, job.entityType, job.entityId, userId);
-
-    // Rate limit protection: 500ms delay between jobs
-    if (jobs.indexOf(job) < jobs.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
+    // Run enrichment synchronously (Vercel kills after response)
+    const result = await enrichEntity(jobId, job.entityType, job.entityId, userId);
+    results.push({ jobId, entityType: job.entityType, entityId: job.entityId, status: result.status });
   }
 
   return results;

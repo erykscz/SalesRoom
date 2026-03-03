@@ -49,13 +49,14 @@ router.post('/enrich', async (req, res) => {
       [jobId, entityType, entityId, userId]
     );
 
-    // Fire-and-forget enrichment
-    enrichEntity(jobId, entityType, entityId, userId);
+    // Run enrichment synchronously (Vercel serverless kills process after response)
+    const result = await enrichEntity(jobId, entityType, entityId, userId);
 
-    res.status(202).json({
+    res.json({
       jobId,
-      status: 'pending',
-      message: 'Enrichment started. Poll /api/enrichment/jobs/:jobId/status for progress.',
+      status: result.status,
+      message: result.status === 'completed' ? 'Enrichment completed.' : `Enrichment finished with status: ${result.status}`,
+      errors: result.errors?.length > 0 ? result.errors : undefined,
     });
   } catch (error) {
     console.error('Error starting enrichment:', error);
