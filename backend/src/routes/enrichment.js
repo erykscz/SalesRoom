@@ -76,15 +76,9 @@ router.get('/jobs/:jobId/status', async (req, res) => {
     }
 
     const job = await get(
-      'SELECT id, entity_type, entity_id, status, linkedin_data, error_log, created_at, updated_at, completed_at FROM enrichment_jobs WHERE id = ?',
+      'SELECT id, entity_type, entity_id, status, error_log, created_at, updated_at, completed_at FROM enrichment_jobs WHERE id = ?',
       [jobId]
     );
-
-    // Debug: include raw linkedin_data to see stored run IDs
-    let debugMeta = null;
-    if (job.linkedin_data) {
-      try { debugMeta = JSON.parse(job.linkedin_data); } catch {}
-    }
 
     res.json({
       id: job.id,
@@ -95,7 +89,6 @@ router.get('/jobs/:jobId/status', async (req, res) => {
       created_at: job.created_at,
       updated_at: job.updated_at,
       completed_at: job.completed_at,
-      _debug: { checkResult, meta: debugMeta },
     });
   } catch (error) {
     console.error('Error fetching enrichment job status:', error);
