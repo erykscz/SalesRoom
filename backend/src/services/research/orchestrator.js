@@ -7,13 +7,28 @@ import { research as redditResearch } from './reddit.js';
 import { research as facebookResearch } from './facebook.js';
 import { research as websiteResearch } from './website.js';
 
+// Conditionally load TinyFish adapters when configured
+let tinyfishLinkedIn = null;
+let tinyfishWebsite = null;
+if (process.env.RESEARCH_PROVIDER === 'tinyfish' && process.env.TINYFISH_API_KEY) {
+  try {
+    const tfLi = await import('../tinyfish/linkedin.js');
+    const tfWs = await import('../tinyfish/website.js');
+    tinyfishLinkedIn = tfLi.research;
+    tinyfishWebsite = tfWs.research;
+    console.log('TinyFish adapters loaded for LinkedIn and website research');
+  } catch (err) {
+    console.error('Failed to load TinyFish adapters:', err.message);
+  }
+}
+
 const platformAdapters = {
-  linkedin: linkedinResearch,
+  linkedin: tinyfishLinkedIn || linkedinResearch,
   github: githubResearch,
   twitter: twitterResearch,
   reddit: redditResearch,
   facebook: facebookResearch,
-  website: websiteResearch,
+  website: tinyfishWebsite || websiteResearch,
 };
 
 // Determine which platforms have API keys configured

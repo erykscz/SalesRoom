@@ -247,6 +247,49 @@ function runSQLiteMigrations(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_sales_room_messages_room ON sales_room_messages(sales_room_id)', () => {});
 
   // Deal Lists tables
+  // Enrichment columns on leads
+  ['enrichment_data', 'enriched_at', 'enrichment_status', 'company_website'].forEach(col => {
+    db.run(`ALTER TABLE leads ADD COLUMN ${col} TEXT`, (err) => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error(`Migration error (leads.${col}):`, err.message);
+      }
+    });
+  });
+
+  // TinyFish columns on deals
+  ['tinyfish_research', 'last_enriched'].forEach(col => {
+    db.run(`ALTER TABLE deals ADD COLUMN ${col} TEXT`, (err) => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error(`Migration error (deals.${col}):`, err.message);
+      }
+    });
+  });
+
+  // Enrichment Jobs table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS enrichment_jobs (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      provider TEXT DEFAULT 'tinyfish',
+      linkedin_data TEXT,
+      website_data TEXT,
+      error_log TEXT,
+      requested_by TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      completed_at TEXT,
+      FOREIGN KEY (requested_by) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_entity ON enrichment_jobs(entity_type, entity_id);
+    CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_status ON enrichment_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_requested_by ON enrichment_jobs(requested_by);
+  `, (err) => {
+    if (err) console.error('Enrichment jobs migration error:', err.message);
+  });
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS deal_lists (
       id TEXT PRIMARY KEY,

@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Plus, Search, Trash2, Edit2, ArrowRight, X, Filter, Building2, Target, Zap, RotateCcw, Settings, ChevronDown, ChevronUp, FileText, Sparkles, Loader2, Clock, CheckCircle, XCircle, History, MessageSquare, Copy, Shield, Microscope, User } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import DeepResearchTab from './components/DeepResearchTab';
+import EnrichmentPanel from './components/EnrichmentPanel';
 
 interface IntentSearch {
   id: string;
@@ -47,6 +48,10 @@ interface Lead {
   created_at: string;
   hook_suggestions: string[];
   competitor_info: CompetitorInfo | null;
+  enrichment_data: string | null;
+  enriched_at: string | null;
+  enrichment_status: string | null;
+  company_website: string | null;
 }
 
 interface ICPTemplate {
@@ -134,6 +139,8 @@ export default function IntentScraperPage() {
   const [activeSearchId, setActiveSearchId] = useState<string | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const [tinyfishConfigured, setTinyfishConfigured] = useState(false);
 
   const fetchLeads = async () => {
     try {
@@ -165,6 +172,33 @@ export default function IntentScraperPage() {
   useEffect(() => {
     fetchLeads();
   }, [searchQuery, statusFilter, confidenceFilter]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    fetch(`${API_URL}/enrichment/status`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setTinyfishConfigured(data.configured); })
+      .catch(() => {});
+  }, []);
+
+  const toggleLeadSelection = (leadId: string) => {
+    setSelectedLeads(prev => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedLeads.size === leads.length) {
+      setSelectedLeads(new Set());
+    } else {
+      setSelectedLeads(new Set(leads.map(l => l.id)));
+    }
+  };
 
   const resetFormFields = () => {
     setFormData({
@@ -1301,12 +1335,34 @@ export default function IntentScraperPage() {
           </Card>
         ) : (
           <div className="grid gap-4">
+            {/* Select All checkbox */}
+            {tinyfishConfigured && leads.length > 0 && (
+              <div className="flex items-center gap-2 px-1">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300"
+                  checked={selectedLeads.size === leads.length && leads.length > 0}
+                  onChange={toggleSelectAll}
+                />
+                <span className="text-sm text-muted-foreground">
+                  Select all ({leads.length})
+                </span>
+              </div>
+            )}
             {leads.map((lead) => (
               <Card key={lead.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between">
                     <div className="space-y-2 flex-1">
                       <div className="flex items-center gap-3">
+                        {tinyfishConfigured && (
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-gray-300 shrink-0"
+                            checked={selectedLeads.has(lead.id)}
+                            onChange={() => toggleLeadSelection(lead.id)}
+                          />
+                        )}
                         <User className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <h3 className="font-semibold text-lg">{lead.name}</h3>
@@ -1320,6 +1376,19 @@ export default function IntentScraperPage() {
                         {lead.deal_id && (
                           <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                             Converted to Deal
+                          </span>
+                        )}
+                        {lead.enrichment_status && (
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            lead.enrichment_status === 'completed' ? 'bg-purple-100 text-purple-800' :
+                            lead.enrichment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                            lead.enrichment_status === 'failed' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {lead.enrichment_status === 'completed' ? 'Enriched' :
+                             lead.enrichment_status === 'partial' ? 'Partially Enriched' :
+                             lead.enrichment_status === 'failed' ? 'Enrichment Failed' :
+                             'Enriching...'}
                           </span>
                         )}
                       </div>
@@ -1520,6 +1589,18 @@ export default function IntentScraperPage() {
       )}
         </TabsContent>
       </Tabs>
+
+      {/* Bulk Enrichment Panel */}
+      {tinyfishConfigured && selectedLeads.size > 0 && (
+        <EnrichmentPanel
+          selectedLeads={selectedLeads}
+          onClear={() => setSelectedLeads(new Set())}
+          onComplete={() => {
+            setSelectedLeads(new Set());
+            fetchLeads();
+          }}
+        />
+      )}
     </div>
   );
 }

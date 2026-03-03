@@ -200,6 +200,8 @@ async function initDatabase() {
         linkedin_url TEXT,
         company_name TEXT,
         company_url TEXT,
+        tinyfish_research TEXT,
+        last_enriched TEXT,
         industry TEXT,
         stage TEXT CHECK(stage IN ('new_signal', 'qualified', 'discovery', 'solution_design', 'negotiation', 'closed_won', 'closed_lost')) DEFAULT 'new_signal',
         estimated_value REAL,
@@ -241,6 +243,10 @@ async function initDatabase() {
         hook_suggestions TEXT,
         competitor_info TEXT,
         trigger_events TEXT,
+        enrichment_data TEXT,
+        enriched_at TEXT,
+        enrichment_status TEXT,
+        company_website TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (search_id) REFERENCES intent_searches(id),
@@ -519,6 +525,26 @@ async function initDatabase() {
       );
     `);
 
+    // ── Enrichment Jobs ──────────────────────────────────────────
+
+    await execMulti(`
+      CREATE TABLE IF NOT EXISTS enrichment_jobs (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        provider TEXT DEFAULT 'tinyfish',
+        linkedin_data TEXT,
+        website_data TEXT,
+        error_log TEXT,
+        requested_by TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        completed_at TEXT,
+        FOREIGN KEY (requested_by) REFERENCES users(id)
+      );
+    `);
+
     // ── Sales Room Messages (user ↔ client communication) ──────────
 
     await execMulti(`
@@ -577,6 +603,9 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_deal_list_items_list ON deal_list_items(deal_list_id);
       CREATE INDEX IF NOT EXISTS idx_deal_list_items_deal ON deal_list_items(deal_id);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_deal_list_items_unique ON deal_list_items(deal_list_id, deal_id);
+      CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_entity ON enrichment_jobs(entity_type, entity_id);
+      CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_status ON enrichment_jobs(status);
+      CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_requested_by ON enrichment_jobs(requested_by);
     `);
 
     console.log('Indexes created successfully');
