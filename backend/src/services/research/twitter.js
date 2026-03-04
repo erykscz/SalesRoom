@@ -46,6 +46,28 @@ async function getRecentTweets(userId, token) {
   return json.data || [];
 }
 
+/**
+ * Check if a candidate name plausibly matches the target person.
+ * Rejects partial matches like "Maciej W" when target is "Maciej Wierzbicki".
+ */
+function isPersonNameMatch(targetName, candidateName) {
+  if (!targetName || !candidateName) return false;
+  const normalize = s => s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const target = normalize(targetName);
+  const candidate = normalize(candidateName);
+  if (target === candidate) return true;
+
+  const targetParts = target.split(' ').filter(p => p.length >= 3);
+  if (targetParts.length < 2) return false;
+
+  return targetParts.every(part => candidate.includes(part));
+}
+
 export async function research(companyName, hints = {}) {
   const token = getBearerToken();
   if (!token) {
@@ -66,12 +88,12 @@ export async function research(companyName, hints = {}) {
       user = await searchUser(companyName, token);
     }
 
-    // Try person search if name provided
+    // Try person search if name provided — only accept if display name matches
     let personUser = null;
     if (hints.name) {
       const personHandle = hints.name.toLowerCase().replace(/[^a-z0-9]/g, '');
       const personResult = await lookupByUsername(personHandle, token);
-      if (personResult.ok && personResult.data) {
+      if (personResult.ok && personResult.data && isPersonNameMatch(hints.name, personResult.data.name)) {
         personUser = personResult.data;
       }
     }

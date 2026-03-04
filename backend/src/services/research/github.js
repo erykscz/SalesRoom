@@ -68,6 +68,30 @@ function aggregateLanguages(repos) {
     .map(([lang, count]) => ({ language: lang, repo_count: count }));
 }
 
+/**
+ * Check if a candidate name plausibly matches the target person.
+ * Rejects partial matches like "Maciej W" when target is "Maciej Wierzbicki".
+ */
+function isPersonNameMatch(targetName, candidateName) {
+  if (!targetName || !candidateName) return false;
+  const normalize = s => s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const target = normalize(targetName);
+  const candidate = normalize(candidateName);
+  if (target === candidate) return true;
+
+  // Need at least first + last name parts (length >= 3 to skip initials)
+  const targetParts = target.split(' ').filter(p => p.length >= 3);
+  if (targetParts.length < 2) return false;
+
+  // All significant target parts must appear in the candidate
+  return targetParts.every(part => candidate.includes(part));
+}
+
 export async function research(companyName, hints = {}) {
   try {
     let login = hints.github_username;
@@ -133,21 +157,29 @@ export async function research(companyName, hints = {}) {
     // Try person GitHub search if name provided
     if (hints.name) {
       const personQuery = hints.name;
-      const searchResult = await fetchJson(`${GITHUB_BASE}/search/users?q=${encodeURIComponent(personQuery)}+type:user&per_page=3`);
+      const searchResult = await fetchJson(`${GITHUB_BASE}/search/users?q=${encodeURIComponent(personQuery)}+type:user&per_page=5`);
       if (searchResult.ok && searchResult.data.total_count > 0) {
-        const personLogin = searchResult.data.items[0].login;
-        const personProfile = await getUserProfile(personLogin);
-        if (personProfile) {
-          data.person = {
-            login: personProfile.login,
-            name: personProfile.name,
-            bio: personProfile.bio,
-            company: personProfile.company,
-            location: personProfile.location,
-            public_repos: personProfile.public_repos,
-            followers: personProfile.followers,
-            html_url: personProfile.html_url,
-          };
+        // Check each candidate — only use one whose name actually matches the target
+        for (const candidate of searchResult.data.items) {
+          const personProfile = await getUserProfile(candidate.login);
+          if (!personProfile) continue;
+
+          const nameMatches = isPersonNameMatch(hints.name, personProfile.name);
+          const loginMatches = isPersonNameMatch(hints.name, (personProfile.login || '').replace(/[-_.]/g, ' '));
+
+          if (nameMatches || loginMatches) {
+            data.person = {
+              login: personProfile.login,
+              name: personProfile.name,
+              bio: personProfile.bio,
+              company: personProfile.company,
+              location: personProfile.location,
+              public_repos: personProfile.public_repos,
+              followers: personProfile.followers,
+              html_url: personProfile.html_url,
+            };
+            break;
+          }
         }
       }
     }

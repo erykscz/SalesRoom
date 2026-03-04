@@ -102,6 +102,28 @@ export async function research(companyName, hints = {}) {
 }
 
 /**
+ * Check if a candidate name plausibly matches the target person.
+ * Rejects partial matches like "Maciej W" when target is "Maciej Wierzbicki".
+ */
+function isPersonNameMatch(targetName, candidateName) {
+  if (!targetName || !candidateName) return false;
+  const normalize = s => s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const target = normalize(targetName);
+  const candidate = normalize(candidateName);
+  if (target === candidate) return true;
+
+  const targetParts = target.split(' ').filter(p => p.length >= 3);
+  if (targetParts.length < 2) return false;
+
+  return targetParts.every(part => candidate.includes(part));
+}
+
+/**
  * Extract primary user info from tweet results.
  * Apify tweet scraper includes user data in each tweet item.
  */
@@ -118,7 +140,7 @@ function extractUserInfo(items, hints) {
     }
   }
 
-  // Fall back to the most common author in the results
+  // Build list of unique authors
   const authorCounts = {};
   for (const item of items) {
     const user = item.author || item.user || {};
@@ -131,7 +153,22 @@ function extractUserInfo(items, hints) {
     }
   }
 
-  const topAuthor = Object.values(authorCounts).sort((a, b) => b.count - a.count)[0];
+  const sortedAuthors = Object.values(authorCounts).sort((a, b) => b.count - a.count);
+
+  // If searching by person name, only accept an author whose display name matches
+  if (hints.name && !targetHandle) {
+    for (const entry of sortedAuthors) {
+      const displayName = entry.user.name || entry.user.screen_name || '';
+      if (isPersonNameMatch(hints.name, displayName)) {
+        return mapUser(entry.user);
+      }
+    }
+    // No author name matches the target person — return empty rather than wrong person
+    return { username: null, name: null, description: null, followers_count: null };
+  }
+
+  // Fallback (company-name search) — use most common author
+  const topAuthor = sortedAuthors[0];
   if (topAuthor) {
     return mapUser(topAuthor.user);
   }
