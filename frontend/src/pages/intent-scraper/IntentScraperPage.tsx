@@ -9,7 +9,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Plus, Search, Trash2, Edit2, ArrowRight, X, Filter, Building2, Target, Zap, RotateCcw, Settings, ChevronDown, ChevronUp, FileText, Sparkles, Loader2, Clock, CheckCircle, XCircle, History, MessageSquare, Copy, Shield, Microscope, User } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import DeepResearchTab from './components/DeepResearchTab';
-import EnrichmentPanel from './components/EnrichmentPanel';
 
 interface IntentSearch {
   id: string;
@@ -140,7 +139,7 @@ export default function IntentScraperPage() {
   const pollIntervalRef = useRef<number | null>(null);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
-  const [tinyfishConfigured, setTinyfishConfigured] = useState(false);
+  const [enrichmentConfigured, setEnrichmentConfigured] = useState(false);
 
   const fetchLeads = async () => {
     try {
@@ -179,7 +178,7 @@ export default function IntentScraperPage() {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setTinyfishConfigured(data.configured); })
+      .then(data => { if (data) setEnrichmentConfigured(data.configured); })
       .catch(() => {});
   }, []);
 
@@ -1336,7 +1335,7 @@ export default function IntentScraperPage() {
         ) : (
           <div className="grid gap-4">
             {/* Select All checkbox */}
-            {tinyfishConfigured && leads.length > 0 && (
+            {enrichmentConfigured && leads.length > 0 && (
               <div className="flex items-center gap-2 px-1">
                 <input
                   type="checkbox"
@@ -1355,7 +1354,7 @@ export default function IntentScraperPage() {
                   <div className="flex items-start justify-between">
                     <div className="space-y-2 flex-1">
                       <div className="flex items-center gap-3">
-                        {tinyfishConfigured && (
+                        {enrichmentConfigured && (
                           <input
                             type="checkbox"
                             className="h-4 w-4 rounded border-gray-300 shrink-0"
@@ -1590,17 +1589,6 @@ export default function IntentScraperPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Bulk Enrichment Panel */}
-      {tinyfishConfigured && selectedLeads.size > 0 && (
-        <EnrichmentPanel
-          selectedLeads={selectedLeads}
-          onClear={() => setSelectedLeads(new Set())}
-          onComplete={() => {
-            setSelectedLeads(new Set());
-            fetchLeads();
-          }}
-        />
-      )}
     </div>
   );
 }

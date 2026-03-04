@@ -131,7 +131,6 @@ The following major areas have no test coverage yet:
 | src/routes/users.js | 5.35% | User management |
 | src/services/ai/claude.js | 5.47% | Claude AI integration |
 | src/services/research/*.js | 0.91-7.14% | Research platform adapters (LinkedIn, Twitter, GitHub, Reddit, Facebook, website) |
-| src/services/tinyfish/*.js | 0-2.02% | TinyFish enrichment client |
 | src/utils/slack.js | 0% | Slack notification utility |
 | src/utils/storage.js | 25.64% | File storage utility |
 
@@ -206,6 +205,5 @@ The following major areas have no test coverage yet:
 ### Low Priority
 
 8. **Add integration tests** for research service adapters (LinkedIn, Twitter, GitHub, etc.) -- currently 0-7% coverage.
-9. **Add tests for TinyFish enrichment client** -- currently 0-2% coverage.
-10. **Add tests for Slack notification utility** -- currently 0% coverage.
-11. **Upgrade vite to v7+** to resolve esbuild development server vulnerability (breaking change required).
+9. **Add tests for Slack notification utility** -- currently 0% coverage.
+10. **Upgrade vite to v7+** to resolve esbuild development server vulnerability (breaking change required).

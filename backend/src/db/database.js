@@ -256,7 +256,7 @@ function runSQLiteMigrations(db) {
     });
   });
 
-  // TinyFish columns on deals
+  // Legacy enrichment columns on deals
   ['tinyfish_research', 'last_enriched'].forEach(col => {
     db.run(`ALTER TABLE deals ADD COLUMN ${col} TEXT`, (err) => {
       if (err && !err.message.includes('duplicate column')) {
@@ -272,7 +272,7 @@ function runSQLiteMigrations(db) {
       entity_type TEXT NOT NULL,
       entity_id TEXT NOT NULL,
       status TEXT DEFAULT 'pending',
-      provider TEXT DEFAULT 'tinyfish',
+      provider TEXT DEFAULT 'apify',
       linkedin_data TEXT,
       website_data TEXT,
       error_log TEXT,
@@ -341,7 +341,7 @@ async function runPostgresMigrations() {
       try { await neonSql.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${col} TEXT`); } catch {}
     }
 
-    // TinyFish columns on deals
+    // Legacy enrichment columns on deals
     for (const col of ['tinyfish_research', 'last_enriched']) {
       try { await neonSql.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS ${col} TEXT`); } catch {}
     }
@@ -353,7 +353,7 @@ async function runPostgresMigrations() {
         entity_type TEXT NOT NULL,
         entity_id TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
-        provider TEXT DEFAULT 'tinyfish',
+        provider TEXT DEFAULT 'apify',
         linkedin_data TEXT,
         website_data TEXT,
         error_log TEXT,

@@ -295,6 +295,7 @@ router.post('/:leadId/start', async (req, res) => {
     // Add person hints from lead (form hints take priority)
     if (lead.name) hints.name = lead.name;
     if (lead.linkedin_url && !hints.linkedin_person_url) hints.linkedin_person_url = lead.linkedin_url;
+    if (lead.company_website && !hints.company_url) hints.company_url = lead.company_website;
 
     executeResearch(researchId, leadId, selectedPlatforms, hints, userId);
 

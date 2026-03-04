@@ -533,7 +533,7 @@ async function initDatabase() {
         entity_type TEXT NOT NULL,
         entity_id TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
-        provider TEXT DEFAULT 'tinyfish',
+        provider TEXT DEFAULT 'apify',
         linkedin_data TEXT,
         website_data TEXT,
         error_log TEXT,

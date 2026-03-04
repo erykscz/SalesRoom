@@ -7,21 +7,6 @@ import { research as redditResearch } from './reddit.js';
 import { research as facebookResearch } from './facebook.js';
 import { research as websiteResearch } from './website.js';
 
-// Conditionally load TinyFish adapters when configured
-let tinyfishLinkedIn = null;
-let tinyfishWebsite = null;
-if (process.env.RESEARCH_PROVIDER === 'tinyfish' && process.env.TINYFISH_API_KEY) {
-  try {
-    const tfLi = await import('../tinyfish/linkedin.js');
-    const tfWs = await import('../tinyfish/website.js');
-    tinyfishLinkedIn = tfLi.research;
-    tinyfishWebsite = tfWs.research;
-    console.log('TinyFish adapters loaded for LinkedIn and website research');
-  } catch (err) {
-    console.error('Failed to load TinyFish adapters:', err.message);
-  }
-}
-
 // Conditionally load Apify adapters when configured (replaces Twitter/Reddit/Facebook official APIs)
 let apifyTwitter = null;
 let apifyReddit = null;
@@ -41,12 +26,12 @@ if (process.env.APIFY_API_TOKEN) {
 }
 
 const platformAdapters = {
-  linkedin: tinyfishLinkedIn || linkedinResearch,
+  linkedin: linkedinResearch,
   github: githubResearch,
   twitter: apifyTwitter || twitterResearch,
   reddit: apifyReddit || redditResearch,
   facebook: apifyFacebook || facebookResearch,
-  website: tinyfishWebsite || websiteResearch,
+  website: websiteResearch,
 };
 
 // Determine which platforms have API keys configured
@@ -106,6 +91,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         name: lead.name || null,
         job_title: lead.job_title || null,
         linkedin_url: lead.linkedin_url || null,
+        company_url: lead.company_website || null,
       };
     }
 
