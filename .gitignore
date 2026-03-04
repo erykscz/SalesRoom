@@ -75,3 +75,7 @@ temp/
 features.db
 .vercel
 .env*.local
+
+# Test artifacts
+test-results/
+playwright-report/
