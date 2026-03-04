@@ -356,7 +356,21 @@ async function generateResearchSummary(companyName, platformData, personContext 
     ? `${personName}${jobTitle ? ` (${jobTitle})` : ''} at ${companyName}`
     : companyName;
 
-  const prompt = `Summarize the following research data about ${subjectDesc} in 3-5 sentences. Focus on what would be useful for a sales representative crafting personalized outreach${personName ? `, specifically targeting ${personName}` : ''}. Highlight personal interests, professional background, and any hooks for conversation. Write in Polish.\n\n${sections.join('\n\n')}`;
+  const prompt = `Na podstawie poniższych danych o ${subjectDesc}, przygotuj rozbudowane podsumowanie dla handlowca. Podziel je na sekcje tematyczne, używając nagłówków w formacie **Nagłówek**.
+
+Wymagane sekcje (pomiń sekcję jeśli brak danych):
+- **Osoba** — kim jest ta osoba, stanowisko, doświadczenie, umiejętności
+- **Firma** — czym zajmuje się firma, branża, wielkość, lokalizacja
+- **Aktywność online** — obecność w social media, aktywność, zainteresowania
+- **Hooki sprzedażowe** — potencjalne tematy do rozmowy, wspólne zainteresowania, okazje do nawiązania kontaktu
+
+Każdą informację otaguj źródłem w nawiasie kwadratowym, np. [LinkedIn], [Twitter], [GitHub], [Reddit], [Facebook], [Website].
+Tag umieść bezpośrednio po informacji, której dotyczy.
+
+Pisz po polsku. Bądź konkretny i szczegółowy — każda sekcja powinna mieć 2-4 zdania.
+
+Dane z researchu:
+${sections.join('\n\n')}`;
 
   // Try with primary model first, then fallback model if primary is unavailable
   const models = [
@@ -378,7 +392,7 @@ async function generateResearchSummary(companyName, platformData, personContext 
           },
           body: JSON.stringify({
             model,
-            max_tokens: 512,
+            max_tokens: 1024,
             messages: [{ role: 'user', content: prompt }],
           }),
         });

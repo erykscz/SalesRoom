@@ -114,7 +114,38 @@ export default function ResearchPanel({ leadId, research, socialProfiles, messag
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{research.research_summary}</p>
+            <div className="text-sm text-muted-foreground leading-relaxed space-y-2">
+              {research.research_summary.split('\n').map((line: string, i: number) => {
+                const trimmed = line.trim();
+                if (!trimmed) return null;
+                const boldMatch = trimmed.match(/^\*\*(.+?)\*\*(.*)$/);
+                const renderWithBadges = (text: string) => {
+                  const parts = text.split(/(\[(?:LinkedIn|Twitter|GitHub|Reddit|Facebook|Website)\])/g);
+                  const badgeColors: Record<string, string> = {
+                    '[LinkedIn]': 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+                    '[Twitter]': 'bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300',
+                    '[GitHub]': 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+                    '[Reddit]': 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
+                    '[Facebook]': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
+                    '[Website]': 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+                  };
+                  return parts.map((part, j) =>
+                    badgeColors[part]
+                      ? <span key={j} className={`${badgeColors[part]} text-xs font-medium px-1.5 py-0.5 rounded-full mx-0.5 inline-block`}>{part.slice(1, -1)}</span>
+                      : <span key={j}>{part}</span>
+                  );
+                };
+                if (boldMatch) {
+                  return (
+                    <div key={i}>
+                      <p className="font-semibold text-foreground mt-2 mb-0.5">{boldMatch[1]}</p>
+                      {boldMatch[2] && <p>{renderWithBadges(boldMatch[2])}</p>}
+                    </div>
+                  );
+                }
+                return <p key={i}>{renderWithBadges(trimmed)}</p>;
+              })}
+            </div>
           </CardContent>
         </Card>
       )}
