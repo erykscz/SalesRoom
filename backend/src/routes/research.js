@@ -239,6 +239,9 @@ router.post('/deal/:dealId/generate-message', async (req, res) => {
       [userId]
     );
 
+    // Fetch user's AI Master Prompt
+    const userRecord = await get('SELECT master_prompt FROM users WHERE id = ?', [userId]);
+
     const result = await generateMessage({
       leadData,
       researchData: research,
@@ -247,6 +250,7 @@ router.post('/deal/:dealId/generate-message', async (req, res) => {
       tone,
       additionalContext: additional_context,
       knowledgeBase: kbItems,
+      masterPrompt: userRecord?.master_prompt || null,
     });
 
     const messageId = uuidv4();
@@ -464,6 +468,9 @@ router.post('/:leadId/generate-message', async (req, res) => {
       [userId]
     );
 
+    // Fetch user's AI Master Prompt
+    const userRecord = await get('SELECT master_prompt FROM users WHERE id = ?', [userId]);
+
     const result = await generateMessage({
       leadData,
       researchData: research,
@@ -472,6 +479,7 @@ router.post('/:leadId/generate-message', async (req, res) => {
       tone,
       additionalContext: additional_context,
       knowledgeBase: kbItems,
+      masterPrompt: userRecord?.master_prompt || null,
     });
 
     const messageId = uuidv4();

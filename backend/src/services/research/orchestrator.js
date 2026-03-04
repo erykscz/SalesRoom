@@ -146,23 +146,93 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
       }
     }
 
-    // Execute all platform adapters in parallel, with per-adapter timeout
+    // ── Phase 1: Scrape company website first to discover social links ──
+    // The website often contains links to LinkedIn, Twitter, GitHub, Facebook
+    // that we can use as hints for the other adapters.
     const adapters = getPlatformAdapters();
+    let websiteResult = null;
+    const otherPlatforms = platforms.filter(p => p !== 'website');
+
+    if (platforms.includes('website') && enrichedHints.company_url && adapters.website) {
+      try {
+        const WEBSITE_TIMEOUT_MS = Math.min(isVercel ? 10000 : 15000, remainingMs() - 5000);
+        if (WEBSITE_TIMEOUT_MS > 3000) {
+          websiteResult = await Promise.race([
+            adapters.website(companyName, enrichedHints),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error(`Website timed out after ${WEBSITE_TIMEOUT_MS / 1000}s`)), WEBSITE_TIMEOUT_MS)
+            ),
+          ]);
+
+          // Extract social links from website and merge into hints (only fill gaps)
+          if (websiteResult?.success && websiteResult.data?.social_links) {
+            const links = websiteResult.data.social_links;
+            if (links.twitter && !enrichedHints.twitter_handle) {
+              // Extract handle from URL: https://twitter.com/handle or https://x.com/handle
+              const twitterMatch = links.twitter.match(/(?:twitter\.com|x\.com)\/([^/?#]+)/i);
+              if (twitterMatch && twitterMatch[1] !== 'intent' && twitterMatch[1] !== 'share') {
+                enrichedHints.twitter_handle = twitterMatch[1];
+                console.log(`Auto-discovered Twitter handle from website: @${twitterMatch[1]}`);
+              }
+            }
+            if (links.linkedin && !enrichedHints.linkedin_person_url && !enrichedHints.linkedin_company_url) {
+              if (links.linkedin.includes('/company/')) {
+                enrichedHints.linkedin_company_url = links.linkedin;
+                console.log(`Auto-discovered LinkedIn company URL from website: ${links.linkedin}`);
+              } else if (links.linkedin.includes('/in/')) {
+                enrichedHints.linkedin_person_url = links.linkedin;
+                console.log(`Auto-discovered LinkedIn person URL from website: ${links.linkedin}`);
+              }
+            }
+            if (links.github && !enrichedHints.github_username) {
+              const ghMatch = links.github.match(/github\.com\/([^/?#]+)/i);
+              if (ghMatch) {
+                enrichedHints.github_username = ghMatch[1];
+                console.log(`Auto-discovered GitHub username from website: ${ghMatch[1]}`);
+              }
+            }
+            if (links.facebook && !enrichedHints.facebook_page_url) {
+              enrichedHints.facebook_page_url = links.facebook;
+              console.log(`Auto-discovered Facebook page from website: ${links.facebook}`);
+            }
+          }
+        } else {
+          console.log('Skipping website-first phase — not enough time remaining');
+        }
+      } catch (err) {
+        console.log(`Website pre-scrape failed (will retry in main phase): ${err.message}`);
+        websiteResult = null; // will re-run in parallel phase
+      }
+    }
+
+    // ── Phase 2: Run remaining adapters in parallel with enriched hints ──
+    // If website already succeeded in phase 1, skip it here
+    const phase2Platforms = websiteResult?.success ? otherPlatforms : platforms;
+
     const results = await Promise.allSettled(
-      platforms.map(async (platform) => {
+      phase2Platforms.map(async (platform) => {
         const adapter = adapters[platform];
         if (!adapter) {
           return { platform, success: false, error: `Unknown platform: ${platform}`, data: null, profile: null };
         }
+        const adapterTimeout = Math.min(ADAPTER_TIMEOUT_MS, remainingMs() - 3000);
+        if (adapterTimeout < 3000) {
+          return { platform, success: false, error: 'Not enough time remaining', data: null, profile: null };
+        }
         const result = await Promise.race([
           adapter(companyName, enrichedHints),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timed out after ${ADAPTER_TIMEOUT_MS / 1000}s`)), ADAPTER_TIMEOUT_MS)
+            setTimeout(() => reject(new Error(`Timed out after ${adapterTimeout / 1000}s`)), adapterTimeout)
           ),
         ]);
         return { platform, ...result };
       })
     );
+
+    // Merge website phase-1 result into results array
+    if (websiteResult) {
+      results.push({ status: 'fulfilled', value: { platform: 'website', ...websiteResult } });
+    }
 
     // Process results
     const succeeded = [];

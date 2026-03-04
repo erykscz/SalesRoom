@@ -19,8 +19,11 @@ const TONE_DESCRIPTIONS = {
   consultative: 'Helpful, insight-driven, advisory tone. Lead with industry knowledge and observations.',
 };
 
-function buildSystemPrompt(channel, tone) {
+function buildSystemPrompt(channel, tone, masterPrompt) {
   const channelConf = CHANNEL_CONFIG[channel];
+  const masterInstructions = masterPrompt
+    ? `\n\nAdditional instructions from the sales rep (ALWAYS follow these):\n${masterPrompt}`
+    : '';
   return `You are an expert sales development representative crafting personalized outreach messages.
 You write messages that are authentic, specific, and demonstrate genuine research about the prospect.
 Your messages are directed to a SPECIFIC PERSON - always address them by name and reference their role, background, or interests when available.
@@ -35,7 +38,7 @@ ${channelConf.hasSubject ? '- Include a compelling subject line (max 80 characte
 - Include a clear, non-pushy call to action.
 - Do NOT use salesy cliches, buzzwords, or generic phrases like "I hope this finds you well".
 - Write in Polish.
-- Output ONLY valid JSON, nothing else.`;
+- Output ONLY valid JSON, nothing else.${masterInstructions}`;
 }
 
 function buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase) {
@@ -149,13 +152,13 @@ The message_body must be under ${channelConf.maxLength} characters.`);
   return `Generate a ${channelConf.label} message with a ${tone} tone for the following prospect:\n\n${sections.join('\n\n')}`;
 }
 
-export async function generateMessage({ leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase }) {
+export async function generateMessage({ leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase, masterPrompt }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === 'your_anthropic_api_key_here') {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  const systemPrompt = buildSystemPrompt(channel, tone);
+  const systemPrompt = buildSystemPrompt(channel, tone, masterPrompt);
   const userPrompt = buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase);
 
   const response = await fetch(ANTHROPIC_API_URL, {
