@@ -124,6 +124,20 @@ router.get('/deal/:dealId/status', async (req, res) => {
       return res.json({ status: 'none', message: 'No research found for this deal' });
     }
 
+    // Stale detection: if running for more than 90s, auto-fail
+    if (profile.status === 'running' || profile.status === 'pending') {
+      const createdAt = new Date(profile.created_at).getTime();
+      const elapsed = Date.now() - createdAt;
+      if (elapsed > 90000) {
+        await run(
+          `UPDATE research_profiles SET status = 'failed', error_log = ?, updated_at = datetime('now'), completed_at = datetime('now') WHERE id = ?`,
+          [JSON.stringify([{ platform: 'system', error: 'Research timed out (exceeded 90s)' }]), profile.id]
+        );
+        profile.status = 'failed';
+        profile.error_log = JSON.stringify([{ platform: 'system', error: 'Research timed out (exceeded 90s)' }]);
+      }
+    }
+
     res.json({
       id: profile.id,
       status: profile.status,
@@ -338,6 +352,20 @@ router.get('/:leadId/status', async (req, res) => {
 
     if (!profile) {
       return res.json({ status: 'none', message: 'No research found for this lead' });
+    }
+
+    // Stale detection: if running for more than 90s, auto-fail
+    if (profile.status === 'running' || profile.status === 'pending') {
+      const createdAt = new Date(profile.created_at).getTime();
+      const elapsed = Date.now() - createdAt;
+      if (elapsed > 90000) {
+        await run(
+          `UPDATE research_profiles SET status = 'failed', error_log = ?, updated_at = datetime('now'), completed_at = datetime('now') WHERE id = ?`,
+          [JSON.stringify([{ platform: 'system', error: 'Research timed out (exceeded 90s)' }]), profile.id]
+        );
+        profile.status = 'failed';
+        profile.error_log = JSON.stringify([{ platform: 'system', error: 'Research timed out (exceeded 90s)' }]);
+      }
     }
 
     res.json({

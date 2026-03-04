@@ -697,30 +697,27 @@ export async function lookupPerson(name, companyName, linkedinUrl = null) {
 export async function research(companyName, hints = {}) {
   const results = { company: null, person: null };
 
-  const companyResult = await lookupCompany(companyName, hints.linkedin_company_url);
-  if (companyResult.success) {
-    results.company = companyResult.data;
-  }
-
   // Use company domain from hints for better person resolution
   const companyDomain = hints.company_url
     ? hints.company_url.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '')
     : companyName;
 
-  // Look up person if we have a direct URL or a name to resolve
-  // Sales Navigator URLs are detected and nullified inside lookupPerson(),
-  // but we also need to ensure we attempt lookup even if the only hint is a Sales Nav URL + name
   const personUrl = hints.linkedin_person_url || null;
   const hasPersonHint = personUrl || hints.name;
-  if (hasPersonHint) {
-    const personResult = await lookupPerson(
-      hints.name || null,
-      companyDomain,
-      personUrl
-    );
-    if (personResult.success) {
-      results.person = personResult.data;
-    }
+
+  // Run company and person lookups in PARALLEL (they're independent)
+  const [companyResult, personResult] = await Promise.allSettled([
+    lookupCompany(companyName, hints.linkedin_company_url),
+    hasPersonHint
+      ? lookupPerson(hints.name || null, companyDomain, personUrl)
+      : Promise.resolve({ success: false }),
+  ]);
+
+  if (companyResult.status === 'fulfilled' && companyResult.value.success) {
+    results.company = companyResult.value.data;
+  }
+  if (personResult.status === 'fulfilled' && personResult.value.success) {
+    results.person = personResult.value.data;
   }
 
   const hasData = results.company || results.person;
@@ -730,7 +727,7 @@ export async function research(companyName, hints = {}) {
   return {
     success: hasData ? true : false,
     data: hasData ? results : null,
-    error: hasData ? null : (companyResult.error || 'No LinkedIn data found'),
+    error: hasData ? null : (companyResult.status === 'fulfilled' ? companyResult.value.error : companyResult.reason?.message) || 'No LinkedIn data found',
     profile: {
       platform: 'linkedin',
       profile_url: hasPerson ? results.person.linkedin_url : (results.company?.linkedin_url || hints.linkedin_company_url || null),

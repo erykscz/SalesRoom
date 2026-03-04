@@ -369,6 +369,9 @@ async function runPostgresMigrations() {
     try { await neonSql.query(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_status ON enrichment_jobs(status)`); } catch {}
     try { await neonSql.query(`CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_requested_by ON enrichment_jobs(requested_by)`); } catch {}
 
+    // Ensure research_profiles has suggested_next_steps column
+    try { await neonSql.query('ALTER TABLE research_profiles ADD COLUMN IF NOT EXISTS suggested_next_steps TEXT'); } catch {}
+
     console.log('PostgreSQL enrichment migrations completed');
   } catch (err) {
     console.error('PostgreSQL migration error:', err.message);

@@ -59,6 +59,13 @@ export function getAvailablePlatforms() {
 }
 
 export async function executeResearch(researchProfileId, leadId, platforms, hints, userId, dealId = null) {
+  const isVercel = !!process.env.VERCEL;
+  // Time budget: leave 8s buffer for Vercel's maxDuration (60s)
+  const MAX_EXECUTION_MS = isVercel ? 50000 : 300000;
+  const ADAPTER_TIMEOUT_MS = isVercel ? 25000 : 120000;
+  const executionStart = Date.now();
+  const remainingMs = () => MAX_EXECUTION_MS - (Date.now() - executionStart);
+
   try {
     // Ensure Apify adapters are loaded (lazy init — env vars available after dotenv.config())
     await ensureApifyAdapters();
@@ -139,7 +146,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
       }
     }
 
-    // Execute all platform adapters in parallel
+    // Execute all platform adapters in parallel, with per-adapter timeout
     const adapters = getPlatformAdapters();
     const results = await Promise.allSettled(
       platforms.map(async (platform) => {
@@ -147,7 +154,12 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         if (!adapter) {
           return { platform, success: false, error: `Unknown platform: ${platform}`, data: null, profile: null };
         }
-        const result = await adapter(companyName, enrichedHints);
+        const result = await Promise.race([
+          adapter(companyName, enrichedHints),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Timed out after ${ADAPTER_TIMEOUT_MS / 1000}s`)), ADAPTER_TIMEOUT_MS)
+          ),
+        ]);
         return { platform, ...result };
       })
     );
@@ -227,7 +239,10 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
     // so the frontend gets them immediately when it sees 'completed'
     let researchSummary = null;
     let suggestedNextSteps = null;
-    if (succeeded.length > 0 && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your_anthropic_api_key_here') {
+    const timeLeftForAI = remainingMs();
+    const hasAnthropicKey = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your_anthropic_api_key_here';
+
+    if (succeeded.length > 0 && hasAnthropicKey && timeLeftForAI > 8000) {
       // Fetch deal stage for next step suggestions
       let dealStage = 'new_signal';
       if (dealId) {
@@ -235,11 +250,18 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         if (dealForStage) dealStage = dealForStage.stage;
       }
 
-      // Run summary and next step suggestions in parallel
+      // Run summary and next step suggestions in parallel, with time limit
+      const aiTimeout = Math.min(timeLeftForAI - 3000, 20000); // leave 3s for DB write, cap at 20s
       const [summaryResult, suggestionsResult] = await Promise.allSettled([
-        generateResearchSummary(companyName, platformData, personContext),
+        Promise.race([
+          generateResearchSummary(companyName, platformData, personContext),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('AI summary timed out')), aiTimeout)),
+        ]),
         dealId
-          ? generateNextStepSuggestions(companyName, platformData, personContext, dealStage)
+          ? Promise.race([
+              generateNextStepSuggestions(companyName, platformData, personContext, dealStage),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('AI suggestions timed out')), aiTimeout)),
+            ])
           : Promise.resolve(null),
       ]);
 
@@ -254,6 +276,8 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
       } else {
         console.error('Failed to generate next step suggestions:', suggestionsResult.reason?.message);
       }
+    } else if (succeeded.length > 0 && hasAnthropicKey) {
+      console.log(`Skipping AI summary — only ${timeLeftForAI}ms remaining (need 8000ms minimum)`);
     }
 
     // Update research profile with results + summary + suggestions in one go
