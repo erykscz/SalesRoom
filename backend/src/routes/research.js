@@ -4,6 +4,16 @@ import { run, get, all } from '../db/database.js';
 import { executeResearch, getAvailablePlatforms } from '../services/research/orchestrator.js';
 import { generateMessage } from '../services/ai/claude.js';
 
+// On Vercel serverless, waitUntil() keeps the function alive after sending the response.
+// Without it, fire-and-forget background tasks (like executeResearch) are killed immediately.
+let waitUntil = null;
+if (process.env.VERCEL) {
+  try {
+    const mod = await import('@vercel/functions');
+    waitUntil = mod.waitUntil;
+  } catch { /* not on Vercel or package not available */ }
+}
+
 const router = express.Router();
 
 // Helper: parse research profile JSON fields
@@ -84,7 +94,10 @@ router.post('/deal/:dealId/start', async (req, res) => {
     if (deal.linkedin_url && !hints.linkedin_person_url) hints.linkedin_person_url = deal.linkedin_url;
     if (deal.company_url && !hints.company_url) hints.company_url = deal.company_url;
 
-    executeResearch(researchId, null, selectedPlatforms, hints, userId, dealId);
+    // Fire-and-forget: start research in background.
+    // On Vercel, waitUntil() keeps the function alive until the promise resolves.
+    const researchPromise = executeResearch(researchId, null, selectedPlatforms, hints, userId, dealId);
+    if (waitUntil) waitUntil(researchPromise);
 
     res.json({
       id: researchId,
@@ -297,7 +310,10 @@ router.post('/:leadId/start', async (req, res) => {
     if (lead.linkedin_url && !hints.linkedin_person_url) hints.linkedin_person_url = lead.linkedin_url;
     if (lead.company_website && !hints.company_url) hints.company_url = lead.company_website;
 
-    executeResearch(researchId, leadId, selectedPlatforms, hints, userId);
+    // Fire-and-forget: start research in background.
+    // On Vercel, waitUntil() keeps the function alive until the promise resolves.
+    const researchPromise = executeResearch(researchId, leadId, selectedPlatforms, hints, userId);
+    if (waitUntil) waitUntil(researchPromise);
 
     res.json({
       id: researchId,

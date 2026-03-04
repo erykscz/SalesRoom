@@ -26,8 +26,8 @@ export async function research(companyName, hints = {}) {
     };
 
     const result = await runActorAndWaitForResults(ACTOR_ID, input, {
-      timeoutMs: 120000,
-      pollIntervalMs: 4000,
+      timeoutMs: 45000,
+      pollIntervalMs: 3000,
       maxItems: 5,
     });
 
