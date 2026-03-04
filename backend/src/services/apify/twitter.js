@@ -29,7 +29,6 @@ export async function research(companyName, hints = {}) {
       searchTerms,
       maxItems: 20,
       sort: 'Latest',
-      tweetLanguage: '',
       addUserInfo: true,
       startDate: startDate.toISOString().split('T')[0],
     };

@@ -7,32 +7,43 @@ import { research as redditResearch } from './reddit.js';
 import { research as facebookResearch } from './facebook.js';
 import { research as websiteResearch } from './website.js';
 
-// Conditionally load Apify adapters when configured (replaces Twitter/Reddit/Facebook official APIs)
+// Lazy-load Apify adapters on first use (must be lazy because dotenv.config()
+// in index.js runs AFTER ES module imports are evaluated, so process.env.APIFY_API_TOKEN
+// is not yet available at module-level)
+let apifyAdaptersLoaded = false;
 let apifyTwitter = null;
 let apifyReddit = null;
 let apifyFacebook = null;
-if (process.env.APIFY_API_TOKEN) {
-  try {
-    const apTw = await import('../apify/twitter.js');
-    const apRd = await import('../apify/reddit.js');
-    const apFb = await import('../apify/facebook.js');
-    apifyTwitter = apTw.research;
-    apifyReddit = apRd.research;
-    apifyFacebook = apFb.research;
-    console.log('Apify adapters loaded for Twitter, Reddit, Facebook research');
-  } catch (err) {
-    console.error('Failed to load Apify adapters:', err.message);
+
+async function ensureApifyAdapters() {
+  if (apifyAdaptersLoaded) return;
+  apifyAdaptersLoaded = true;
+
+  if (process.env.APIFY_API_TOKEN) {
+    try {
+      const apTw = await import('../apify/twitter.js');
+      const apRd = await import('../apify/reddit.js');
+      const apFb = await import('../apify/facebook.js');
+      apifyTwitter = apTw.research;
+      apifyReddit = apRd.research;
+      apifyFacebook = apFb.research;
+      console.log('Apify adapters loaded for Twitter, Reddit, Facebook research');
+    } catch (err) {
+      console.error('Failed to load Apify adapters:', err.message);
+    }
   }
 }
 
-const platformAdapters = {
-  linkedin: linkedinResearch,
-  github: githubResearch,
-  twitter: apifyTwitter || twitterResearch,
-  reddit: apifyReddit || redditResearch,
-  facebook: apifyFacebook || facebookResearch,
-  website: websiteResearch,
-};
+function getPlatformAdapters() {
+  return {
+    linkedin: linkedinResearch,
+    github: githubResearch,
+    twitter: apifyTwitter || twitterResearch,
+    reddit: apifyReddit || redditResearch,
+    facebook: apifyFacebook || facebookResearch,
+    website: websiteResearch,
+  };
+}
 
 // Determine which platforms have API keys configured
 export function getAvailablePlatforms() {
@@ -49,6 +60,9 @@ export function getAvailablePlatforms() {
 
 export async function executeResearch(researchProfileId, leadId, platforms, hints, userId, dealId = null) {
   try {
+    // Ensure Apify adapters are loaded (lazy init — env vars available after dotenv.config())
+    await ensureApifyAdapters();
+
     // Update status to running
     await run(
       `UPDATE research_profiles SET status = 'running', platforms_searched = ?, updated_at = datetime('now') WHERE id = ?`,
@@ -126,9 +140,10 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
     }
 
     // Execute all platform adapters in parallel
+    const adapters = getPlatformAdapters();
     const results = await Promise.allSettled(
       platforms.map(async (platform) => {
-        const adapter = platformAdapters[platform];
+        const adapter = adapters[platform];
         if (!adapter) {
           return { platform, success: false, error: `Unknown platform: ${platform}`, data: null, profile: null };
         }
