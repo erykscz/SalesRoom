@@ -19,6 +19,7 @@ interface DealResearchSectionProps {
   companyUrl?: string;
   personName?: string;
   linkedinUrl?: string;
+  onResearchComplete?: () => void;
 }
 
 interface SocialProfile {
@@ -74,7 +75,7 @@ function formatFollowers(count: number | null): string {
   return count.toString();
 }
 
-export default function DealResearchSection({ dealId, companyName, companyUrl, personName, linkedinUrl }: DealResearchSectionProps) {
+export default function DealResearchSection({ dealId, companyName, companyUrl, personName, linkedinUrl, onResearchComplete }: DealResearchSectionProps) {
   const [availablePlatforms, setAvailablePlatforms] = useState<string[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [researchStatus, setResearchStatus] = useState<string>('none');
@@ -181,6 +182,7 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
             pollingRef.current = null;
             setResearching(false);
             fetchResearchResults();
+            onResearchComplete?.();
             toast({
               title: statusData.status === 'failed' ? 'Research failed' : 'Research complete',
               description: statusData.status === 'failed'

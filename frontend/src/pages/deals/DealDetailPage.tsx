@@ -156,6 +156,22 @@ export default function DealDetailPage() {
   // Store the referrer URL (deals list with filters) from location state
   const backUrl = (location.state as { from?: string })?.from || '/deals';
 
+  const fetchSuggestions = async () => {
+    try {
+      const researchRes = await fetch(`${API_URL}/research/deal/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (researchRes.ok) {
+        const researchData = await researchRes.json();
+        if (researchData.research?.suggested_next_steps) {
+          setSuggestions(researchData.research.suggested_next_steps);
+        }
+      }
+    } catch {
+      // Non-critical — ignore
+    }
+  };
+
   // Check if current user can edit this deal
   // Admin can edit all, owner can edit their own, manager cannot edit other's deals (coaching mode)
   const canEdit = user && deal && (
@@ -191,19 +207,7 @@ export default function DealDetailPage() {
         setActivities(data.activities || []);
 
         // Fetch AI-suggested next steps from research data
-        try {
-          const researchRes = await fetch(`${API_URL}/research/deal/${id}`, {
-            headers: { 'Authorization': `Bearer ${token}` },
-          });
-          if (researchRes.ok) {
-            const researchData = await researchRes.json();
-            if (researchData.research?.suggested_next_steps) {
-              setSuggestions(researchData.research.suggested_next_steps);
-            }
-          }
-        } catch {
-          // Non-critical — ignore
-        }
+        fetchSuggestions();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
@@ -749,7 +753,7 @@ export default function DealDetailPage() {
         <div className="space-y-6">
           {/* Deep Research */}
           {id && (
-            <DealResearchSection dealId={id} companyName={deal.company_name || ''} companyUrl={deal.company_url || ''} personName={deal.name} linkedinUrl={deal.linkedin_url || ''} />
+            <DealResearchSection dealId={id} companyName={deal.company_name || ''} companyUrl={deal.company_url || ''} personName={deal.name} linkedinUrl={deal.linkedin_url || ''} onResearchComplete={fetchSuggestions} />
           )}
 
           {/* Next Steps Card */}
