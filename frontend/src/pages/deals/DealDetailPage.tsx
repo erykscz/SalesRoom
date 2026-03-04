@@ -34,7 +34,6 @@ import {
 } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 import DealResearchSection from './components/DealResearchSection';
-import ProspectIntelCard from './components/ProspectIntelCard';
 
 interface Deal {
   id: string;
@@ -774,15 +773,6 @@ export default function DealDetailPage() {
 
         {/* Right Column - Proces Intelligence Panel (300px) */}
         <div className="space-y-6">
-          {/* Prospect Intelligence (TinyFish enrichment) */}
-          <ProspectIntelCard
-            dealId={id!}
-            companyName={deal?.company_name}
-            personName={deal?.name}
-            linkedinUrl={deal?.linkedin_url}
-            companyUrl={deal?.company_url}
-          />
-
           {/* Pain Points */}
           <Card>
             <CardHeader className="pb-3">

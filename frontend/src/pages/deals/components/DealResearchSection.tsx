@@ -260,18 +260,13 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            {hasResults && (
-              <Button size="sm" variant="outline" onClick={startResearch} disabled={researching}>
-                <RefreshCw className={`h-4 w-4 mr-1 ${researching ? 'animate-spin' : ''}`} />
-                Re-run
-              </Button>
-            )}
-            {!hasResults && !researching && (
-              <Button size="sm" onClick={startResearch} disabled={researching || selectedPlatforms.length === 0}>
-                <Play className="h-4 w-4 mr-1" />
-                RESEARCH
-              </Button>
-            )}
+            <Button size="sm" onClick={startResearch} disabled={researching || selectedPlatforms.length === 0}>
+              {researching ? (
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Researching...</>
+              ) : (
+                <><Play className="h-4 w-4 mr-1" />RESEARCH</>
+              )}
+            </Button>
           </div>
         </div>
       </CardHeader>

@@ -222,7 +222,18 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         ? 'partial'
         : 'failed';
 
-    // Update research profile with results
+    // Generate AI research summary BEFORE setting status to completed,
+    // so the frontend gets the summary immediately when it sees 'completed'
+    let researchSummary = null;
+    if (succeeded.length > 0 && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your_anthropic_api_key_here') {
+      try {
+        researchSummary = await generateResearchSummary(companyName, platformData, personContext);
+      } catch (err) {
+        console.error('Failed to generate research summary:', err.message);
+      }
+    }
+
+    // Update research profile with results + summary in one go
     // Note: website data is stored in tavily_data column (repurposed — tavily is unused)
     await run(
       `UPDATE research_profiles SET
@@ -235,6 +246,7 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         tavily_data = ?,
         platforms_succeeded = ?,
         error_log = ?,
+        research_summary = ?,
         updated_at = datetime('now'),
         completed_at = datetime('now')
       WHERE id = ?`,
@@ -248,24 +260,10 @@ export async function executeResearch(researchProfileId, leadId, platforms, hint
         platformData.website ? JSON.stringify(platformData.website) : null,
         JSON.stringify(succeeded),
         errors.length > 0 ? JSON.stringify(errors) : null,
+        researchSummary,
         researchProfileId,
       ]
     );
-
-    // Generate AI research summary if we have data and Claude is configured
-    if (succeeded.length > 0 && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your_anthropic_api_key_here') {
-      try {
-        const summary = await generateResearchSummary(companyName, platformData, personContext);
-        if (summary) {
-          await run(
-            `UPDATE research_profiles SET research_summary = ?, updated_at = datetime('now') WHERE id = ?`,
-            [summary, researchProfileId]
-          );
-        }
-      } catch (err) {
-        console.error('Failed to generate research summary:', err.message);
-      }
-    }
 
   } catch (err) {
     console.error('Research execution error:', err);
