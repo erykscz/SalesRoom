@@ -58,7 +58,8 @@ export default function DeepResearchTab({ leads }: DeepResearchTabProps) {
         if (res.ok) {
           const data = await res.json();
           setAvailablePlatforms(data.platforms);
-          setSelectedPlatforms(data.platforms);
+          const defaultOn = ['linkedin', 'website'];
+          setSelectedPlatforms(data.platforms.filter((p: string) => defaultOn.includes(p)));
         }
       } catch { /* ignore */ }
     }

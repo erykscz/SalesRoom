@@ -123,7 +123,8 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
       if (res.ok) {
         const data = await res.json();
         setAvailablePlatforms(data.platforms);
-        setSelectedPlatforms(data.platforms);
+        const defaultOn = ['linkedin', 'website'];
+        setSelectedPlatforms(data.platforms.filter((p: string) => defaultOn.includes(p)));
       }
     } catch { /* ignore */ }
   }
