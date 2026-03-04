@@ -30,7 +30,8 @@ import {
   Phone,
   Linkedin,
   ExternalLink,
-  Globe
+  Globe,
+  Sparkles
 } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 import DealResearchSection from './components/DealResearchSection';
@@ -149,6 +150,8 @@ export default function DealDetailPage() {
   const [runningAutopsy, setRunningAutopsy] = useState(false);
   const [autopsyResult, setAutopsyResult] = useState<AutopsyResult | null>(null);
   const [showAutopsyModal, setShowAutopsyModal] = useState(false);
+  const [suggestions, setSuggestions] = useState<Array<{text: string; reasoning: string}> | null>(null);
+  const [applyingSuggestion, setApplyingSuggestion] = useState<number | null>(null);
 
   // Store the referrer URL (deals list with filters) from location state
   const backUrl = (location.state as { from?: string })?.from || '/deals';
@@ -186,6 +189,21 @@ export default function DealDetailPage() {
         const data = await response.json();
         setDeal(data.deal);
         setActivities(data.activities || []);
+
+        // Fetch AI-suggested next steps from research data
+        try {
+          const researchRes = await fetch(`${API_URL}/research/deal/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (researchRes.ok) {
+            const researchData = await researchRes.json();
+            if (researchData.research?.suggested_next_steps) {
+              setSuggestions(researchData.research.suggested_next_steps);
+            }
+          }
+        } catch {
+          // Non-critical — ignore
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
@@ -366,6 +384,45 @@ export default function DealDetailPage() {
       setDeal(data.deal);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update health attribute');
+    }
+  };
+
+  const handleAcceptSuggestion = async (text: string, index: number) => {
+    if (!deal) return;
+
+    try {
+      setApplyingSuggestion(index);
+
+      // If next_step_date is in the past or not set, default to +7 days from now
+      let nextStepDate = deal.next_step_date;
+      if (!nextStepDate || new Date(nextStepDate) < new Date()) {
+        const d = new Date();
+        d.setDate(d.getDate() + 7);
+        nextStepDate = d.toISOString().split('T')[0];
+      }
+
+      const response = await fetch(`${API_URL}/deals/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          next_step_description: text,
+          next_step_date: nextStepDate,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update deal');
+      }
+
+      const data = await response.json();
+      setDeal(data.deal);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to apply suggestion');
+    } finally {
+      setApplyingSuggestion(null);
     }
   };
 
@@ -716,6 +773,34 @@ export default function DealDetailPage() {
                   <div>
                     <p className="text-sm text-muted-foreground">Compelling Event</p>
                     <p className="font-semibold">{formatDate(deal.compelling_event_date)}</p>
+                  </div>
+                </div>
+              )}
+              {suggestions && suggestions.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <p className="text-sm font-medium mb-3 flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-purple-500" />
+                    Sugestie AI
+                  </p>
+                  <div className="space-y-2">
+                    {suggestions.map((s, i) => (
+                      <div key={i} className="p-3 rounded-lg border bg-muted/30 group">
+                        <p className="text-sm">{s.text}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{s.reasoning}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2"
+                          onClick={() => handleAcceptSuggestion(s.text, i)}
+                          disabled={applyingSuggestion === i}
+                        >
+                          {applyingSuggestion === i ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : null}
+                          Zastosuj
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

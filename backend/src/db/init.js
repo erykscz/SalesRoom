@@ -613,6 +613,14 @@ async function initDatabase() {
     // ── Migrations for existing tables ───────────────────────────────
     if (isPostgres) {
       await runStmt('ALTER TABLE users ADD COLUMN IF NOT EXISTS master_prompt TEXT');
+      await runStmt('ALTER TABLE research_profiles ADD COLUMN IF NOT EXISTS suggested_next_steps TEXT');
+    } else {
+      // SQLite: try adding column, ignore if already exists
+      try {
+        await runStmt('ALTER TABLE research_profiles ADD COLUMN suggested_next_steps TEXT');
+      } catch (e) {
+        // Column already exists — ignore
+      }
     }
     console.log('Migrations applied successfully');
 
