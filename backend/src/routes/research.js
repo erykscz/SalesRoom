@@ -233,9 +233,10 @@ router.post('/deal/:dealId/generate-message', async (req, res) => {
       notes: deal.next_step_description,
     };
 
-    // Fetch Knowledge Base materials for context
+    // Fetch Knowledge Base materials for context (only current user's items)
     const kbItems = await all(
-      `SELECT title, content, type FROM knowledge_base WHERE is_shared = 1 ORDER BY created_at DESC LIMIT 10`
+      `SELECT title, content, type FROM knowledge_base WHERE created_by = ? ORDER BY created_at DESC LIMIT 10`,
+      [userId]
     );
 
     const result = await generateMessage({
@@ -457,9 +458,10 @@ router.post('/:leadId/generate-message', async (req, res) => {
       notes: lead.notes,
     };
 
-    // Fetch Knowledge Base materials for context
+    // Fetch Knowledge Base materials for context (only current user's items)
     const kbItems = await all(
-      `SELECT title, content, type FROM knowledge_base WHERE is_shared = 1 ORDER BY created_at DESC LIMIT 10`
+      `SELECT title, content, type FROM knowledge_base WHERE created_by = ? ORDER BY created_at DESC LIMIT 10`,
+      [userId]
     );
 
     const result = await generateMessage({

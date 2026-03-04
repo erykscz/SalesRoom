@@ -86,8 +86,8 @@ router.get('/', async (req, res) => {
       params.push(searchTerm, searchTerm, searchTerm);
     }
 
-    // Show shared items or user's own items
-    sql += ` AND (kb.is_shared = 1 OR kb.created_by = ?)`;
+    // Show only current user's items
+    sql += ` AND kb.created_by = ?`;
     params.push(userId);
 
     sql += ` ORDER BY kb.created_at DESC`;
@@ -263,7 +263,7 @@ router.get('/search', async (req, res) => {
       FROM knowledge_base kb
       LEFT JOIN users u ON kb.created_by = u.id
       WHERE (kb.title LIKE ? OR kb.content LIKE ? OR kb.tags LIKE ?)
-        AND (kb.is_shared = 1 OR kb.created_by = ?)
+        AND kb.created_by = ?
       ORDER BY
         CASE
           WHEN kb.title LIKE ? THEN 1
@@ -297,7 +297,7 @@ router.get('/:id', async (req, res) => {
       `SELECT kb.*, u.name as created_by_name
        FROM knowledge_base kb
        LEFT JOIN users u ON kb.created_by = u.id
-       WHERE kb.id = ? AND (kb.is_shared = 1 OR kb.created_by = ?)`,
+       WHERE kb.id = ? AND kb.created_by = ?`,
       [id, userId]
     );
 
