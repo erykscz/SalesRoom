@@ -229,8 +229,14 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
   }
 
   async function handleDelete(id: string) {
-    await fetch(`${API_URL}/research/messages/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-    fetchResearchResults();
+    try {
+      const res = await fetch(`${API_URL}/research/messages/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+      if (!res.ok) throw new Error('Failed to delete message');
+      toast({ title: 'Message deleted' });
+      fetchResearchResults();
+    } catch {
+      toast({ title: 'Failed to delete message', variant: 'destructive' });
+    }
   }
 
   async function handleDeleteProfile(id: string) {

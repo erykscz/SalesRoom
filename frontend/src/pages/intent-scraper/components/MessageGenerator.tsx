@@ -100,12 +100,16 @@ export default function MessageGenerator({ leadId, messages, onMessagesChange }:
 
   async function handleDelete(messageId: string) {
     try {
-      await fetch(`${API_URL}/research/messages/${messageId}`, {
+      const res = await fetch(`${API_URL}/research/messages/${messageId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });
+      if (!res.ok) throw new Error('Failed to delete message');
+      toast({ title: 'Message deleted' });
       onMessagesChange();
-    } catch { /* ignore */ }
+    } catch {
+      toast({ title: 'Failed to delete message', variant: 'destructive' });
+    }
   }
 
   const channelIcon = (ch: string) => {
