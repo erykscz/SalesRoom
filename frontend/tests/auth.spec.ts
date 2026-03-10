@@ -25,7 +25,7 @@ test.describe('Authentication flow', () => {
 
     // The toast notification with "Login failed" should appear
     // The app uses a Toaster component from shadcn/ui
-    await expect(page.locator('text=Login failed')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('div.text-sm:has-text("Login failed")')).toBeVisible({ timeout: 5_000 });
   });
 
   test('should show error when fields are empty', async ({ page }) => {
@@ -37,7 +37,7 @@ test.describe('Authentication flow', () => {
     // Should stay on login and see an error toast
     await expect(page).toHaveURL(/\/login/);
     await expect(
-      page.locator('text=Please enter both email and password'),
+      page.locator('div.text-sm:has-text("Please enter both email and password")'),
     ).toBeVisible({ timeout: 5_000 });
   });
 
