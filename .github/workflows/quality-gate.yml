@@ -78,6 +78,16 @@ jobs:
       - name: Install backend dependencies
         run: cd backend && npm ci
 
+      - name: Initialize backend database
+        run: cd backend && node src/db/init.js
+
+      - name: Verify backend starts
+        run: |
+          cd backend && timeout 15 node src/index.js &
+          sleep 5
+          curl -f http://localhost:3001/api/health || (echo "Backend failed to start" && exit 1)
+          kill %1 2>/dev/null || true
+
       - name: Install Playwright browsers
         run: cd frontend && npx playwright install --with-deps chromium
 

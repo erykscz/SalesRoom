@@ -34,12 +34,16 @@ export default defineConfig({
       port: 3001,
       reuseExistingServer: !process.env.CI,
       timeout: process.env.CI ? 60_000 : 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
     },
     {
       command: 'npm run dev',
       port: 5173,
       reuseExistingServer: !process.env.CI,
       timeout: process.env.CI ? 60_000 : 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
     },
   ],
 });
