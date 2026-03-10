@@ -48,8 +48,8 @@ test.describe('Leads / Intent Scraper', () => {
     if (await addButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
       await addButton.click();
 
-      // The form should appear with a name field
-      await expect(page.locator('input#name, input[name="name"]').first()).toBeVisible({
+      // The form should appear with the lead name field
+      await expect(page.locator('input#lead_name')).toBeVisible({
         timeout: 5_000,
       });
     }
