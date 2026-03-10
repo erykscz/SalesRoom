@@ -38,7 +38,7 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: 'npm run dev',
+      command: 'npx vite --port 5173 --strictPort',
       port: 5173,
       reuseExistingServer: !process.env.CI,
       timeout: process.env.CI ? 60_000 : 30_000,
