@@ -47,12 +47,12 @@ interface PredictedObjection {
 }
 
 const CATEGORIES = [
-  { value: 'price', label: 'Price', icon: <DollarSign className="h-4 w-4" />, color: 'bg-green-100 text-green-800' },
-  { value: 'technology', label: 'Technology', icon: <Cpu className="h-4 w-4" />, color: 'bg-blue-100 text-blue-800' },
-  { value: 'trust', label: 'Trust', icon: <Shield className="h-4 w-4" />, color: 'bg-purple-100 text-purple-800' },
-  { value: 'competition', label: 'Competition', icon: <Users className="h-4 w-4" />, color: 'bg-orange-100 text-orange-800' },
-  { value: 'timing', label: 'Timing', icon: <Clock className="h-4 w-4" />, color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'features', label: 'Features', icon: <Layers className="h-4 w-4" />, color: 'bg-pink-100 text-pink-800' },
+  { value: 'price', label: 'Price', icon: <DollarSign className="h-4 w-4" />, color: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
+  { value: 'technology', label: 'Technology', icon: <Cpu className="h-4 w-4" />, color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
+  { value: 'trust', label: 'Trust', icon: <Shield className="h-4 w-4" />, color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
+  { value: 'competition', label: 'Competition', icon: <Users className="h-4 w-4" />, color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' },
+  { value: 'timing', label: 'Timing', icon: <Clock className="h-4 w-4" />, color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' },
+  { value: 'features', label: 'Features', icon: <Layers className="h-4 w-4" />, color: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300' },
 ];
 
 // Generate predicted objections based on deal profile
@@ -671,9 +671,9 @@ Best regards`;
 
       {/* Email Mode */}
       {showEmailMode && (
-        <Card className="border-blue-200 bg-blue-50/50">
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-blue-800">
+            <CardTitle className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
               <Mail className="h-5 w-5" />
               Email Response Generator
             </CardTitle>
@@ -691,7 +691,6 @@ Best regards`;
 
 Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing. It seems expensive compared to other solutions we've looked at. Can you help us understand the value better?'"
                 rows={5}
-                className="bg-white"
               />
             </div>
             <Button
@@ -713,7 +712,7 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
             </Button>
 
             {emailResponse && (
-              <div className="space-y-4 pt-4 border-t border-blue-200">
+              <div className="space-y-4 pt-4 border-t border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getCategoryInfo(emailResponse.detectedCategory).color}`}>
                     {getCategoryInfo(emailResponse.detectedCategory).icon}
@@ -722,21 +721,21 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
                 </div>
 
                 <div className="space-y-3">
-                  <div className="p-3 bg-white rounded-lg border-l-4 border-blue-500">
-                    <p className="text-xs font-semibold text-blue-600 mb-1">ACKNOWLEDGE</p>
+                  <div className="p-3 bg-background rounded-lg border-l-4 border-blue-500">
+                    <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">ACKNOWLEDGE</p>
                     <p className="text-sm">{emailResponse.acknowledgeText}</p>
                   </div>
-                  <div className="p-3 bg-white rounded-lg border-l-4 border-green-500">
-                    <p className="text-xs font-semibold text-green-600 mb-1">REFRAME</p>
+                  <div className="p-3 bg-background rounded-lg border-l-4 border-green-500">
+                    <p className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1">REFRAME</p>
                     <p className="text-sm">{emailResponse.reframeText}</p>
                   </div>
-                  <div className="p-3 bg-white rounded-lg border-l-4 border-purple-500">
-                    <p className="text-xs font-semibold text-purple-600 mb-1">COUNTER</p>
+                  <div className="p-3 bg-background rounded-lg border-l-4 border-purple-500">
+                    <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1">COUNTER</p>
                     <p className="text-sm">{emailResponse.counterText}</p>
                   </div>
-                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                    <p className="text-xs font-semibold text-amber-700 mb-1">CASE STUDY</p>
-                    <p className="text-sm text-amber-800">{emailResponse.caseStudy}</p>
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 mb-1">CASE STUDY</p>
+                    <p className="text-sm text-amber-800 dark:text-amber-200">{emailResponse.caseStudy}</p>
                   </div>
                 </div>
 
@@ -753,7 +752,7 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
                       {responseCopied ? 'Copied!' : 'Copy'}
                     </Button>
                   </div>
-                  <div className="p-4 bg-white rounded-lg border text-sm whitespace-pre-wrap font-mono">
+                  <div className="p-4 bg-background rounded-lg border text-sm whitespace-pre-wrap font-mono">
                     {emailResponse.fullResponse}
                   </div>
                 </div>
@@ -765,9 +764,9 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
 
       {/* Strategic Mode - Predicted Objections */}
       {dealContext && (
-        <Card className="border-amber-200 bg-amber-50/50">
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-amber-800">
+            <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
               <Lightbulb className="h-5 w-5" />
               Pre-Meeting Prep: {dealContext.company_name}
             </CardTitle>
@@ -793,9 +792,9 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
                     bc.objection_text.toLowerCase().includes(prediction.objection.toLowerCase().split(' ').slice(0, 3).join(' '))
                   );
                   return (
-                    <div key={index} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-100">
+                    <div key={index} className="flex items-start gap-3 p-3 bg-background rounded-lg border border-amber-100 dark:border-amber-800/50">
                       <div className="flex-shrink-0">
-                        <AlertTriangle className="h-5 w-5 text-amber-600" />
+                        <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -807,9 +806,9 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
                         <p className="font-medium text-sm">{prediction.objection}</p>
                         <p className="text-xs text-muted-foreground mt-1">{prediction.reason}</p>
                         {relevantCard && (
-                          <div className="mt-2 p-2 bg-green-50 rounded text-xs">
-                            <p className="font-medium text-green-700">You have a battlecard for this!</p>
-                            <p className="text-green-600 mt-1">
+                          <div className="mt-2 p-2 bg-green-50 dark:bg-green-950/30 rounded text-xs">
+                            <p className="font-medium text-green-700 dark:text-green-300">You have a battlecard for this!</p>
+                            <p className="text-green-600 dark:text-green-400 mt-1">
                               <span className="font-medium">A:</span> {relevantCard.arc_response?.acknowledge?.substring(0, 80)}...
                             </p>
                           </div>
