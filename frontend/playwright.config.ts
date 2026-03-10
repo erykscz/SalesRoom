@@ -33,13 +33,13 @@ export default defineConfig({
       command: 'cd ../backend && npm start',
       port: 3001,
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
+      timeout: process.env.CI ? 60_000 : 30_000,
     },
     {
       command: 'npm run dev',
       port: 5173,
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
+      timeout: process.env.CI ? 60_000 : 30_000,
     },
   ],
 });
