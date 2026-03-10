@@ -43,8 +43,8 @@ test.describe('Leads / Intent Scraper', () => {
     const discoveryTab = page.locator('button[role="tab"]', { hasText: /Discovery/i });
     await discoveryTab.click();
 
-    // Look for the "Add Lead" or "+" button to open the create form
-    const addButton = page.locator('button:has-text("Add Lead")');
+    // Look for the "Add Lead Manually" button to open the create form
+    const addButton = page.locator('button:has-text("Add Lead Manually")');
     if (await addButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
       await addButton.click();
 

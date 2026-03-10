@@ -8,9 +8,8 @@ test.describe('Authentication flow', () => {
     // Should be on the dashboard now
     await expect(page).toHaveURL(/\/dashboard/);
 
-    // Dashboard should show some recognisable content
-    // The MainLayout renders the user name somewhere in the sidebar
-    await expect(page.locator('text=Dashboard')).toBeVisible();
+    // Dashboard should show the welcome heading
+    await expect(page.locator('h2:has-text("Welcome back")')).toBeVisible();
   });
 
   test('should show error for invalid credentials', async ({ page }) => {

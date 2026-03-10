@@ -46,8 +46,8 @@ test.describe('Deals CRUD', () => {
     // Should be redirected to the deal detail page
     await page.waitForURL(/\/deals\/[a-f0-9-]+/, { timeout: 10_000 });
 
-    // The deal name should appear on the detail page
-    await expect(page.locator(`text=${dealName}`)).toBeVisible();
+    // The deal name should appear as the page heading
+    await expect(page.locator(`h2:has-text("${dealName}")`)).toBeVisible();
   });
 
   // ── View deal detail ────────────────────────────────────────────────
@@ -79,7 +79,7 @@ test.describe('Deals CRUD', () => {
 
     // Should navigate to the deal detail page
     await page.waitForURL(/\/deals\/[a-f0-9-]+/, { timeout: 10_000 });
-    await expect(page.locator(`text=${dealName}`)).toBeVisible();
+    await expect(page.locator(`h2:has-text("${dealName}")`)).toBeVisible();
   });
 
   // ── Edit a deal ─────────────────────────────────────────────────────
@@ -115,8 +115,8 @@ test.describe('Deals CRUD', () => {
     // Should redirect back to the deal detail page
     await page.waitForURL(/\/deals\/[a-f0-9-]+/, { timeout: 10_000 });
 
-    // Verify the updated name is shown
-    await expect(page.locator(`text=${updatedName}`)).toBeVisible();
+    // Verify the updated name is shown as the page heading
+    await expect(page.locator(`h2:has-text("${updatedName}")`)).toBeVisible();
   });
 
   // ── Navigate between pages ──────────────────────────────────────────
