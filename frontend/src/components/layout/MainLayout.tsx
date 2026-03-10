@@ -134,8 +134,8 @@ export default function MainLayout() {
             results.push({
               type: 'deal',
               id: deal.id,
-              title: deal.company_name,
-              subtitle: deal.industry || deal.stage,
+              title: deal.name || deal.company_name,
+              subtitle: deal.company_name || deal.industry || deal.stage,
               url: `/deals/${deal.id}`
             });
           });
@@ -151,8 +151,8 @@ export default function MainLayout() {
             results.push({
               type: 'lead',
               id: lead.id,
-              title: lead.company_name,
-              subtitle: lead.industry || 'Lead',
+              title: lead.name || lead.company_name,
+              subtitle: lead.company_name || lead.industry || 'Lead',
               url: `/intent-scraper`
             });
           });
