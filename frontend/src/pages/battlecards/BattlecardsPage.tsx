@@ -765,9 +765,9 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
 
       {/* Strategic Mode - Predicted Objections */}
       {dealContext && (
-        <Card className="border-amber-200 bg-amber-50/50">
+        <Card className="border-amber-500/30 bg-amber-950/30">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-amber-800">
+            <CardTitle className="flex items-center gap-2 text-amber-400">
               <Lightbulb className="h-5 w-5" />
               Pre-Meeting Prep: {dealContext.company_name}
             </CardTitle>
@@ -778,7 +778,7 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
           <CardContent>
             {loadingDeal ? (
               <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-6 w-6 animate-spin text-amber-600" />
+                <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
               </div>
             ) : predictedObjections.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -793,9 +793,9 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
                     bc.objection_text.toLowerCase().includes(prediction.objection.toLowerCase().split(' ').slice(0, 3).join(' '))
                   );
                   return (
-                    <div key={index} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-100">
+                    <div key={index} className="flex items-start gap-3 p-3 bg-card rounded-lg border border-amber-500/20">
                       <div className="flex-shrink-0">
-                        <AlertTriangle className="h-5 w-5 text-amber-600" />
+                        <AlertTriangle className="h-5 w-5 text-amber-500" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -807,9 +807,9 @@ Example: 'Hi, we've reviewed your proposal but we're concerned about the pricing
                         <p className="font-medium text-sm">{prediction.objection}</p>
                         <p className="text-xs text-muted-foreground mt-1">{prediction.reason}</p>
                         {relevantCard && (
-                          <div className="mt-2 p-2 bg-green-50 rounded text-xs">
-                            <p className="font-medium text-green-700">You have a battlecard for this!</p>
-                            <p className="text-green-600 mt-1">
+                          <div className="mt-2 p-2 bg-green-950/30 rounded text-xs border border-green-500/20">
+                            <p className="font-medium text-green-400">You have a battlecard for this!</p>
+                            <p className="text-green-300 mt-1">
                               <span className="font-medium">A:</span> {relevantCard.arc_response?.acknowledge?.substring(0, 80)}...
                             </p>
                           </div>

@@ -22,22 +22,23 @@ export async function loginAs(
   email: string = TEST_USER.email,
   password: string = TEST_USER.password,
 ): Promise<void> {
-  await page.goto('/login');
+  // Retry login up to 3 times to handle backend DB cold-start in CI
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await page.goto('/login');
+    await page.waitForSelector('form');
+    await page.fill('input#email', email);
+    await page.fill('input#password', password);
+    await page.click('button[type="submit"]');
 
-  // Wait for the login form to be visible
-  await page.waitForSelector('form');
-
-  // Fill in the email field
-  await page.fill('input#email', email);
-
-  // Fill in the password field
-  await page.fill('input#password', password);
-
-  // Submit the form
-  await page.click('button[type="submit"]');
-
-  // Wait for navigation away from /login — successful login redirects to /dashboard
-  await page.waitForURL('**/dashboard', { timeout: 15_000 });
+    try {
+      await page.waitForURL('**/dashboard', { timeout: 10_000 });
+      return; // success
+    } catch {
+      if (attempt === 3) throw new Error('Login failed after 3 attempts');
+      // Wait before retrying — gives backend DB time to initialize
+      await page.waitForTimeout(2_000);
+    }
+  }
 }
 
 /**
