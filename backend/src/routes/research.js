@@ -242,6 +242,15 @@ router.post('/deal/:dealId/generate-message', async (req, res) => {
     // Fetch user's AI Master Prompt
     const userRecord = await get('SELECT master_prompt FROM users WHERE id = ?', [userId]);
 
+    // Fetch style examples from edited/favorited messages
+    const styleExamples = await all(
+      `SELECT channel, tone, subject_line, message_body, original_subject_line, original_message_body, is_edited
+       FROM generated_messages
+       WHERE generated_by = ? AND (is_edited = 1 OR is_favorite = 1)
+       ORDER BY created_at DESC LIMIT 5`,
+      [userId]
+    );
+
     const result = await generateMessage({
       leadData,
       researchData: research,
@@ -251,6 +260,7 @@ router.post('/deal/:dealId/generate-message', async (req, res) => {
       additionalContext: additional_context,
       knowledgeBase: kbItems,
       masterPrompt: userRecord?.master_prompt || null,
+      styleExamples,
     });
 
     const messageId = uuidv4();
@@ -471,6 +481,15 @@ router.post('/:leadId/generate-message', async (req, res) => {
     // Fetch user's AI Master Prompt
     const userRecord = await get('SELECT master_prompt FROM users WHERE id = ?', [userId]);
 
+    // Fetch style examples from edited/favorited messages
+    const styleExamples = await all(
+      `SELECT channel, tone, subject_line, message_body, original_subject_line, original_message_body, is_edited
+       FROM generated_messages
+       WHERE generated_by = ? AND (is_edited = 1 OR is_favorite = 1)
+       ORDER BY created_at DESC LIMIT 5`,
+      [userId]
+    );
+
     const result = await generateMessage({
       leadData,
       researchData: research,
@@ -480,6 +499,7 @@ router.post('/:leadId/generate-message', async (req, res) => {
       additionalContext: additional_context,
       knowledgeBase: kbItems,
       masterPrompt: userRecord?.master_prompt || null,
+      styleExamples,
     });
 
     const messageId = uuidv4();
@@ -591,6 +611,52 @@ router.post('/messages/:messageId/favorite', async (req, res) => {
   } catch (error) {
     console.error('Error toggling favorite:', error);
     res.status(500).json({ error: 'Failed to toggle favorite' });
+  }
+});
+
+// PUT /api/research/messages/:messageId - Edit a message
+router.put('/messages/:messageId', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+    const { subject_line, message_body } = req.body;
+
+    if (!message_body || !message_body.trim()) {
+      return res.status(400).json({ error: 'Message body cannot be empty' });
+    }
+
+    const message = await get('SELECT * FROM generated_messages WHERE id = ?', [messageId]);
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    if (message.generated_by !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized to edit this message' });
+    }
+
+    // First edit: save the original AI-generated content
+    if (!message.is_edited) {
+      await run(
+        `UPDATE generated_messages SET subject_line = ?, message_body = ?, message_length = ?, is_edited = 1, original_subject_line = ?, original_message_body = ? WHERE id = ?`,
+        [subject_line ?? null, message_body, message_body.length, message.subject_line, message.message_body, messageId]
+      );
+    } else {
+      // Subsequent edits: only update current content
+      await run(
+        `UPDATE generated_messages SET subject_line = ?, message_body = ?, message_length = ? WHERE id = ?`,
+        [subject_line ?? null, message_body, message_body.length, messageId]
+      );
+    }
+
+    res.json({
+      id: messageId,
+      subject_line: subject_line ?? null,
+      message_body,
+      message_length: message_body.length,
+      is_edited: 1,
+    });
+  } catch (error) {
+    console.error('Error editing message:', error);
+    res.status(500).json({ error: 'Failed to edit message' });
   }
 });
 

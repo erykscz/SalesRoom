@@ -41,7 +41,7 @@ ${channelConf.hasSubject ? '- Include a compelling subject line (max 80 characte
 - Output ONLY valid JSON, nothing else.${masterInstructions}`;
 }
 
-function buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase) {
+function buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase, styleExamples) {
   const sections = [];
 
   sections.push(`## Prospect Information
@@ -134,6 +134,25 @@ function buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, 
     sections.push(`## Company Knowledge Base (use these materials to enrich the message)\n${kbEntries}`);
   }
 
+  if (styleExamples && styleExamples.length > 0) {
+    const examples = styleExamples.map((ex, i) => {
+      if (ex.is_edited && ex.original_message_body) {
+        return `### Example ${i + 1} (User-edited — learn from the corrections)
+**AI draft:**
+${ex.original_subject_line ? `Subject: ${ex.original_subject_line}\n` : ''}${ex.original_message_body}
+
+**User's preferred version:**
+${ex.subject_line ? `Subject: ${ex.subject_line}\n` : ''}${ex.message_body}`;
+      }
+      return `### Example ${i + 1} (Favorited — user liked this style)
+${ex.subject_line ? `Subject: ${ex.subject_line}\n` : ''}${ex.message_body}`;
+    }).join('\n\n');
+    sections.push(`## User's Preferred Writing Style
+The user has provided examples of messages they prefer. Study these carefully and match the style, tone, structure, and phrasing patterns in your output.
+
+${examples}`);
+  }
+
   if (additionalContext) {
     sections.push(`## Additional Context from Sales Rep\n${additionalContext}`);
   }
@@ -152,14 +171,14 @@ The message_body must be under ${channelConf.maxLength} characters.`);
   return `Generate a ${channelConf.label} message with a ${tone} tone for the following prospect:\n\n${sections.join('\n\n')}`;
 }
 
-export async function generateMessage({ leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase, masterPrompt }) {
+export async function generateMessage({ leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase, masterPrompt, styleExamples }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === 'your_anthropic_api_key_here') {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
   const systemPrompt = buildSystemPrompt(channel, tone, masterPrompt);
-  const userPrompt = buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase);
+  const userPrompt = buildUserPrompt(leadData, researchData, socialProfiles, channel, tone, additionalContext, knowledgeBase, styleExamples);
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',

@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Microscope, Play, Loader2, Linkedin, Twitter, Github, MessageCircle, Facebook,
   ChevronDown, ChevronUp, ExternalLink, Users, FileText, Sparkles, Copy, Star,
-  Trash2, Mail, Check, RefreshCw, Globe
+  Trash2, Mail, Check, RefreshCw, Globe, Pencil, X, Save
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,6 +41,7 @@ interface GeneratedMessage {
   message_body: string;
   message_length: number;
   is_favorite: number;
+  is_edited: number;
   created_at: string;
 }
 
@@ -92,6 +93,10 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
   const [context, setContext] = useState('');
   const [generating, setGenerating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editSubject, setEditSubject] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [saving, setSaving] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
 
@@ -209,13 +214,50 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
         body: JSON.stringify({ channel, tone, additional_context: context || undefined }),
       });
       if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+      const newMsg = await res.json();
       toast({ title: 'Message generated' });
       fetchResearchResults();
       setShowMessages(true);
+      // Auto-enter edit mode for the newly generated message
+      setEditingId(newMsg.id);
+      setEditSubject(newMsg.subject_line || '');
+      setEditBody(newMsg.message_body || '');
     } catch (err: any) {
       toast({ title: 'Generation failed', description: err.message, variant: 'destructive' });
     } finally {
       setGenerating(false);
+    }
+  }
+
+  function startEdit(msg: GeneratedMessage) {
+    setEditingId(msg.id);
+    setEditSubject(msg.subject_line || '');
+    setEditBody(msg.message_body || '');
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditSubject('');
+    setEditBody('');
+  }
+
+  async function handleSaveEdit(msgId: string) {
+    if (!editBody.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/research/messages/${msgId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject_line: editSubject || null, message_body: editBody }),
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+      toast({ title: 'Message saved' });
+      setEditingId(null);
+      fetchResearchResults();
+    } catch (err: any) {
+      toast({ title: 'Save failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -630,31 +672,74 @@ export default function DealResearchSection({ dealId, companyName, companyUrl, p
                 </div>
                 {showMessages && (
                   <div className="space-y-3">
-                    {messages.map(msg => (
-                      <div key={msg.id} className={`p-4 border rounded-lg ${msg.is_favorite ? 'border-yellow-300 bg-yellow-50/30 dark:bg-yellow-950/20' : 'bg-background'}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs capitalize">{msg.channel.replace(/_/g, ' ')}</Badge>
-                            <Badge variant="secondary" className="text-xs capitalize">{msg.tone}</Badge>
+                    {messages.map(msg => {
+                      const isEditing = editingId === msg.id;
+                      return (
+                        <div key={msg.id} className={`p-4 border rounded-lg ${msg.is_favorite ? 'border-yellow-300 bg-yellow-50/30 dark:bg-yellow-950/20' : 'bg-background'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs capitalize">{msg.channel.replace(/_/g, ' ')}</Badge>
+                              <Badge variant="secondary" className="text-xs capitalize">{msg.tone}</Badge>
+                              {msg.is_edited === 1 && (
+                                <Badge variant="outline" className="text-xs text-blue-600 border-blue-300 dark:text-blue-400 dark:border-blue-700">Edited</Badge>
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              {isEditing ? (
+                                <>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleSaveEdit(msg.id)} disabled={saving}>
+                                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 text-green-600" />}
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={cancelEdit}>
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => startEdit(msg)} title="Edit">
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleCopy(msg)}>
+                                    {copiedId === msg.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleFavorite(msg.id)}>
+                                    <Star className={`h-3.5 w-3.5 ${msg.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDelete(msg.id)}>
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleCopy(msg)}>
-                              {copiedId === msg.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleFavorite(msg.id)}>
-                              <Star className={`h-3.5 w-3.5 ${msg.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDelete(msg.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              {msg.subject_line !== null && (
+                                <Input
+                                  value={editSubject}
+                                  onChange={e => setEditSubject(e.target.value)}
+                                  placeholder="Subject line..."
+                                  className="text-sm font-medium"
+                                />
+                              )}
+                              <Textarea
+                                value={editBody}
+                                onChange={e => setEditBody(e.target.value)}
+                                rows={6}
+                                className="text-sm leading-relaxed"
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              {msg.subject_line && (
+                                <p className="text-sm font-medium mb-1">Subject: {msg.subject_line}</p>
+                              )}
+                              <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.message_body}</p>
+                            </>
+                          )}
                         </div>
-                        {msg.subject_line && (
-                          <p className="text-sm font-medium mb-1">Subject: {msg.subject_line}</p>
-                        )}
-                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.message_body}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

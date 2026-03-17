@@ -223,6 +223,16 @@ function runSQLiteMigrations(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_social_profiles_deal ON social_profiles(deal_id)', () => {});
   db.run('CREATE INDEX IF NOT EXISTS idx_generated_messages_deal ON generated_messages(deal_id)', () => {});
 
+  // Editable messages + style learning columns
+  ['is_edited', 'original_subject_line', 'original_message_body'].forEach(col => {
+    const type = col === 'is_edited' ? 'INTEGER DEFAULT 0' : 'TEXT';
+    db.run(`ALTER TABLE generated_messages ADD COLUMN ${col} ${type}`, (err) => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error(`Migration error (generated_messages.${col}):`, err.message);
+      }
+    });
+  });
+
   // Sales Room Messages table
   db.run(`CREATE TABLE IF NOT EXISTS sales_room_messages (
     id TEXT PRIMARY KEY,
@@ -371,6 +381,11 @@ async function runPostgresMigrations() {
 
     // Ensure research_profiles has suggested_next_steps column
     try { await neonSql.query('ALTER TABLE research_profiles ADD COLUMN IF NOT EXISTS suggested_next_steps TEXT'); } catch {}
+
+    // Editable messages + style learning columns
+    for (const col of ['is_edited INTEGER DEFAULT 0', 'original_subject_line TEXT', 'original_message_body TEXT']) {
+      try { await neonSql.query(`ALTER TABLE generated_messages ADD COLUMN IF NOT EXISTS ${col}`); } catch {}
+    }
 
     console.log('PostgreSQL enrichment migrations completed');
   } catch (err) {
