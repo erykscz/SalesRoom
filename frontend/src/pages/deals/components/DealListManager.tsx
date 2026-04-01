@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { API_URL } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import { Plus, X, List, Pencil, Trash2, Check } from 'lucide-react';
 
 interface DealList {
@@ -31,6 +32,7 @@ const COLOR_PRESETS = [
 ];
 
 export default function DealListManager({ selectedListId, onSelectList, token, refreshKey }: DealListManagerProps) {
+  const { toast } = useToast();
   const [lists, setLists] = useState<DealList[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newListName, setNewListName] = useState('');
@@ -75,9 +77,13 @@ export default function DealListManager({ selectedListId, onSelectList, token, r
         setNewListColor(COLOR_PRESETS[0]);
         setShowCreate(false);
         fetchLists();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast({ variant: 'destructive', title: 'Failed to create list', description: data.error || 'Something went wrong' });
       }
     } catch (err) {
       console.error('Failed to create list:', err);
+      toast({ variant: 'destructive', title: 'Failed to create list', description: 'Network error — check your connection' });
     }
   };
 
@@ -97,9 +103,13 @@ export default function DealListManager({ selectedListId, onSelectList, token, r
       if (response.ok) {
         setEditingId(null);
         fetchLists();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast({ variant: 'destructive', title: 'Failed to update list', description: data.error || 'Something went wrong' });
       }
     } catch (err) {
       console.error('Failed to update list:', err);
+      toast({ variant: 'destructive', title: 'Failed to update list', description: 'Network error — check your connection' });
     }
   };
 
@@ -115,9 +125,13 @@ export default function DealListManager({ selectedListId, onSelectList, token, r
       if (response.ok) {
         if (selectedListId === id) onSelectList(null);
         fetchLists();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast({ variant: 'destructive', title: 'Failed to delete list', description: data.error || 'Something went wrong' });
       }
     } catch (err) {
       console.error('Failed to delete list:', err);
+      toast({ variant: 'destructive', title: 'Failed to delete list', description: 'Network error — check your connection' });
     }
   };
 
@@ -150,6 +164,7 @@ export default function DealListManager({ selectedListId, onSelectList, token, r
             <div className="flex gap-0.5">
               {COLOR_PRESETS.map((c) => (
                 <button
+                  type="button"
                   key={c}
                   className={`w-4 h-4 rounded-full border-2 ${editColor === c ? 'border-foreground' : 'border-transparent'}`}
                   style={{ backgroundColor: c }}
@@ -210,6 +225,7 @@ export default function DealListManager({ selectedListId, onSelectList, token, r
           <div className="flex gap-0.5">
             {COLOR_PRESETS.map((c) => (
               <button
+                type="button"
                 key={c}
                 className={`w-4 h-4 rounded-full border-2 ${newListColor === c ? 'border-foreground' : 'border-transparent'}`}
                 style={{ backgroundColor: c }}
