@@ -1406,27 +1406,6 @@ router.post('/import/lix', async (req, res) => {
   }
 });
 
-// POST /api/deals/import/xlsx-to-csv - Convert any xlsx to CSV for flexible mapping
-router.post('/import/xlsx-to-csv', async (req, res) => {
-  try {
-    const { xlsxBase64 } = req.body;
-    if (!xlsxBase64) {
-      return res.status(400).json({ error: 'Missing xlsxBase64 field' });
-    }
-    if (xlsxBase64.length > 10 * 1024 * 1024) {
-      return res.status(413).json({ error: 'File too large. Maximum 10MB.' });
-    }
-    const buffer = Buffer.from(xlsxBase64, 'base64');
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const csvContent = XLSX.utils.sheet_to_csv(sheet);
-    res.json({ csvContent });
-  } catch (error) {
-    console.error('Error converting xlsx to CSV:', error);
-    res.status(500).json({ error: 'Failed to convert Excel file: ' + error.message });
-  }
-});
-
 // GET /api/deals/export/csv - Export deals to CSV
 router.get('/export/csv', async (req, res) => {
   try {

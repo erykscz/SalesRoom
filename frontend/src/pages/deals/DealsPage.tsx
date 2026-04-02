@@ -175,30 +175,12 @@ export default function DealsPage() {
       const isXlsx = file.name.toLowerCase().endsWith('.xlsx');
 
       if (isXlsx) {
-        // Convert xlsx to CSV on backend, then open mapping dialog
+        // Convert xlsx to CSV client-side, then open mapping dialog
+        const XLSX = await import('xlsx');
         const arrayBuffer = await file.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const base64 = btoa(binary);
-
-        const response = await fetch(`${API_URL}/deals/import/xlsx-to-csv`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ xlsxBase64: base64 }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to convert Excel file');
-        }
-
-        const { csvContent } = await response.json();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const csvContent = XLSX.utils.sheet_to_csv(sheet);
         setPendingCsvContent(csvContent);
         setPendingFileName(file.name);
         setCsvMappingOpen(true);
