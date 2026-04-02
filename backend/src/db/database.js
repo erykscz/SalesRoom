@@ -387,6 +387,34 @@ async function runPostgresMigrations() {
       try { await neonSql.query(`ALTER TABLE generated_messages ADD COLUMN IF NOT EXISTS ${col}`); } catch {}
     }
 
+    // Deal Lists tables
+    await neonSql.query(`
+      CREATE TABLE IF NOT EXISTS deal_lists (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        color TEXT DEFAULT '#3b82f6',
+        owner_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+    await neonSql.query(`
+      CREATE TABLE IF NOT EXISTS deal_list_items (
+        id TEXT PRIMARY KEY,
+        deal_list_id TEXT NOT NULL,
+        deal_id TEXT NOT NULL,
+        added_at TIMESTAMPTZ DEFAULT NOW(),
+        FOREIGN KEY (deal_list_id) REFERENCES deal_lists(id) ON DELETE CASCADE,
+        FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE
+      )
+    `);
+    try { await neonSql.query('CREATE INDEX IF NOT EXISTS idx_deal_lists_owner ON deal_lists(owner_id)'); } catch {}
+    try { await neonSql.query('CREATE INDEX IF NOT EXISTS idx_deal_list_items_list ON deal_list_items(deal_list_id)'); } catch {}
+    try { await neonSql.query('CREATE INDEX IF NOT EXISTS idx_deal_list_items_deal ON deal_list_items(deal_id)'); } catch {}
+    try { await neonSql.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_deal_list_items_unique ON deal_list_items(deal_list_id, deal_id)'); } catch {}
+
     console.log('PostgreSQL enrichment migrations completed');
   } catch (err) {
     console.error('PostgreSQL migration error:', err.message);
