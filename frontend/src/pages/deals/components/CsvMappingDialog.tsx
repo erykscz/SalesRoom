@@ -46,6 +46,87 @@ const FIELD_LABELS: Record<string, string> = {
   priority: 'Priority',
 };
 
+const COLUMN_PATTERNS: Record<string, string[]> = {
+  name: ['name', 'contact name', 'full name', 'person', 'lead name', 'prospect', 'display name', 'linkedin name'],
+  first_name: ['first name', 'firstname', 'given name', 'fname'],
+  last_name: ['last name', 'lastname', 'surname', 'lname'],
+  email: ['email', 'email address', 'e-mail', 'mail', 'work email'],
+  phone: ['phone', 'telephone', 'mobile', 'cell'],
+  job_title: ['job title', 'title', 'position', 'role', 'current role(s)'],
+  company_name: ['company name', 'company', 'organization', 'organisation', 'account', 'employer', 'firm'],
+  company_url: ['company url', 'website', 'company website', 'organisation website', 'domain'],
+  industry: ['industry', 'sector', 'vertical'],
+  linkedin_url: ['linkedin url', 'linkedin', 'profile link', 'linkedin profile', 'sales navigator profile link', 'person linkedin url', 'linkedin profile url'],
+  stage: ['stage', 'deal stage', 'pipeline stage'],
+  estimated_value: ['estimated value', 'value', 'deal value', 'amount', 'revenue'],
+  close_date: ['close date', 'expected close', 'closing date'],
+  next_step_date: ['next step date', 'next step', 'follow up date', 'follow-up date'],
+  next_step_description: ['next step description', 'next step desc', 'next action'],
+  priority: ['priority', 'urgency', 'importance'],
+};
+
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function buildPreview(csvContent: string): PreviewData {
+  const lines = csvContent.trim().split('\n');
+  const headerLine = lines[0] || '';
+  const headers = parseCSVLine(headerLine).map(h => h.replace(/^"|"$/g, '').trim());
+
+  const normalizedHeaders = headers.map(h => h.toLowerCase().replace(/['"]/g, ''));
+  const detectedMappings: Record<string, number> = {};
+  for (const [field, patterns] of Object.entries(COLUMN_PATTERNS)) {
+    const index = normalizedHeaders.findIndex(h => patterns.includes(h));
+    if (index >= 0) {
+      detectedMappings[field] = index;
+    }
+  }
+
+  const linkedInSignatures = ['linkedin name', 'sales navigator profile link', 'organisation'];
+  const isLinkedIn = linkedInSignatures.some(sig => normalizedHeaders.includes(sig));
+  const format = isLinkedIn ? 'linkedin' : 'standard';
+
+  const sampleRows: string[][] = [];
+  for (let i = 1; i < Math.min(lines.length, 4); i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    sampleRows.push(parseCSVLine(line).map(v => v.replace(/^"|"$/g, '').trim()));
+  }
+
+  const totalRows = lines.filter((l, i) => i > 0 && l.trim()).length;
+
+  return {
+    headers,
+    detectedMappings,
+    sampleRows,
+    totalRows,
+    format,
+    availableFields: Object.keys(COLUMN_PATTERNS),
+  };
+}
+
 const NOT_MAPPED = '__none__';
 
 export default function CsvMappingDialog({
@@ -66,48 +147,29 @@ export default function CsvMappingDialog({
 
   useEffect(() => {
     if (open && csvContent) {
-      fetchPreview();
+      setLoading(true);
+      setError(null);
+      try {
+        const data = buildPreview(csvContent);
+        setPreview(data);
+
+        const initialMappings: Record<string, string> = {};
+        for (const field of data.availableFields) {
+          if (data.detectedMappings[field] !== undefined) {
+            initialMappings[field] = data.detectedMappings[field].toString();
+          } else {
+            initialMappings[field] = NOT_MAPPED;
+          }
+        }
+        setMappings(initialMappings);
+        setListName(`Import - ${new Date().toISOString().split('T')[0]}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to preview CSV');
+      } finally {
+        setLoading(false);
+      }
     }
   }, [open, csvContent]);
-
-  const fetchPreview = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`${API_URL}/deals/import/csv/preview`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ csvContent }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to preview CSV');
-      }
-
-      const data: PreviewData = await response.json();
-      setPreview(data);
-
-      // Initialize mappings from detected
-      const initialMappings: Record<string, string> = {};
-      for (const field of data.availableFields) {
-        if (data.detectedMappings[field] !== undefined) {
-          initialMappings[field] = data.detectedMappings[field].toString();
-        } else {
-          initialMappings[field] = NOT_MAPPED;
-        }
-      }
-      setMappings(initialMappings);
-      setListName(`Import - ${new Date().toISOString().split('T')[0]}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to preview CSV');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleImport = async () => {
     if (!preview) return;
@@ -138,8 +200,15 @@ export default function CsvMappingDialog({
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to import CSV');
+        let message = 'Failed to import CSV';
+        try {
+          const err = await response.json();
+          message = err.error || message;
+        } catch {
+          const text = await response.text();
+          if (text) message = text;
+        }
+        throw new Error(message);
       }
 
       const result = await response.json();
