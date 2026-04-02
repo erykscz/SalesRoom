@@ -175,7 +175,7 @@ export default function DealsPage() {
       const isXlsx = file.name.toLowerCase().endsWith('.xlsx');
 
       if (isXlsx) {
-        // Lix IT Excel import — read as binary, send as base64
+        // Convert xlsx to CSV on backend, then open mapping dialog
         const arrayBuffer = await file.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
         let binary = '';
@@ -184,7 +184,7 @@ export default function DealsPage() {
         }
         const base64 = btoa(binary);
 
-        const response = await fetch(`${API_URL}/deals/import/lix`, {
+        const response = await fetch(`${API_URL}/deals/import/xlsx-to-csv`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -195,12 +195,13 @@ export default function DealsPage() {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to import Lix IT Excel');
+          throw new Error(errorData.error || 'Failed to convert Excel file');
         }
 
-        const result = await response.json();
-        alert(`Successfully imported ${result.imported} deal(s) from Lix IT Excel with pre-populated research data`);
-        fetchDeals();
+        const { csvContent } = await response.json();
+        setPendingCsvContent(csvContent);
+        setPendingFileName(file.name);
+        setCsvMappingOpen(true);
       } else {
         // CSV import — open mapping dialog instead of direct import
         const csvContent = await file.text();
