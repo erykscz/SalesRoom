@@ -34,6 +34,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { API_URL } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import DealResearchSection from './components/DealResearchSection';
 
 interface Deal {
@@ -135,6 +136,7 @@ export default function DealDetailPage() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const [deal, setDeal] = useState<Deal | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -430,6 +432,35 @@ export default function DealDetailPage() {
     }
   };
 
+  const handleStageChange = async (newStage: string) => {
+    if (!deal || deal.stage === newStage) return;
+
+    try {
+      const response = await fetch(`${API_URL}/deals/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ stage: newStage }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update stage');
+
+      const data = await response.json();
+      setDeal(data.deal);
+      toast({
+        title: 'Stage updated',
+        description: `${deal.name} → ${stageLabels[newStage]}`,
+      });
+    } catch {
+      toast({
+        title: 'Failed to update stage',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -621,7 +652,19 @@ export default function DealDetailPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Stage</p>
-                <p className="font-medium">{stageLabels[deal.stage] || deal.stage}</p>
+                {canEdit ? (
+                  <select
+                    value={deal.stage}
+                    onChange={(e) => handleStageChange(e.target.value)}
+                    className="font-medium border rounded-md px-2 py-1 text-sm cursor-pointer bg-background focus:outline-none focus:ring-2 focus:ring-ring w-full"
+                  >
+                    {Object.entries(stageLabels).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="font-medium">{stageLabels[deal.stage] || deal.stage}</p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Company</p>

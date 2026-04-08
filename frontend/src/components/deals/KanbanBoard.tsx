@@ -13,6 +13,7 @@ import {
   useSensors,
   useDroppable,
   useDraggable,
+  closestCorners,
   type DragStartEvent,
   type DragEndEvent,
 } from '@dnd-kit/core';
@@ -292,14 +293,15 @@ export default function KanbanBoard() {
 
     if (!oldStage || oldStage === newStage) return;
 
-    // Optimistic update
+    // Optimistic update (immutable)
     const prevData = structuredClone(kanbanData);
-    const dealIndex = kanbanData.stages[oldStage].findIndex(d => d.id === dealId);
-    const [movedDeal] = kanbanData.stages[oldStage].splice(dealIndex, 1);
-    movedDeal.stage = newStage;
-    if (!kanbanData.stages[newStage]) kanbanData.stages[newStage] = [];
-    kanbanData.stages[newStage].push(movedDeal);
-    setKanbanData({ ...kanbanData });
+    const movedDeal = { ...kanbanData.stages[oldStage].find(d => d.id === dealId)!, stage: newStage };
+    const updatedStages = {
+      ...kanbanData.stages,
+      [oldStage]: kanbanData.stages[oldStage].filter(d => d.id !== dealId),
+      [newStage]: [...(kanbanData.stages[newStage] || []), movedDeal],
+    };
+    setKanbanData({ stages: updatedStages, total: kanbanData.total });
 
     try {
       const res = await fetch(`${API_URL}/deals/${dealId}`, {
@@ -351,7 +353,7 @@ export default function KanbanBoard() {
   const closedStages = ['closed_won', 'closed_lost'];
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="space-y-6">
         {/* Stagnation Legend */}
         <div className="flex items-center gap-6 text-sm text-muted-foreground">

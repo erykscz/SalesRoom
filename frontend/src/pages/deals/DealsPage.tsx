@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban, Linkedin } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import KanbanBoard from '@/components/deals/KanbanBoard';
 import CsvMappingDialog from './components/CsvMappingDialog';
 import DealListManager from './components/DealListManager';
@@ -67,6 +68,7 @@ const priorityColors: Record<string, string> = {
 
 export default function DealsPage() {
   const { token } = useAuth();
+  const { toast } = useToast();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -341,6 +343,32 @@ export default function DealsPage() {
     }
   };
 
+  const handleStageChange = async (dealId: string, newStage: string, dealName: string) => {
+    try {
+      const response = await fetch(`${API_URL}/deals/${dealId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ stage: newStage }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update stage');
+
+      toast({
+        title: 'Stage updated',
+        description: `${dealName} → ${stageLabels[newStage]}`,
+      });
+      fetchDeals();
+    } catch {
+      toast({
+        title: 'Failed to update stage',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const formatDate = (date: string | null) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('en-US', {
@@ -605,9 +633,15 @@ export default function DealsPage() {
                         )}
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stageColors[deal.stage]}`}>
-                          {stageLabels[deal.stage]}
-                        </span>
+                        <select
+                          value={deal.stage}
+                          onChange={(e) => handleStageChange(deal.id, e.target.value, deal.name)}
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring ${stageColors[deal.stage]}`}
+                        >
+                          {Object.entries(stageLabels).map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
