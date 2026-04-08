@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useSearchParams, useLocation } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,7 +69,6 @@ const priorityColors: Record<string, string> = {
 export default function DealsPage() {
   const { token } = useAuth();
   const { toast } = useToast();
-  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -89,9 +88,6 @@ export default function DealsPage() {
   const [selectedListId, setSelectedListId] = useState<string | null>(searchParams.get('list'));
   const [listRefreshKey, setListRefreshKey] = useState(0);
 
-  // Get current URL with search params for passing to detail pages
-  const currentUrl = location.pathname + location.search;
-
   // Initialize state from URL params
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedStage, setSelectedStage] = useState<string | null>(searchParams.get('stage'));
@@ -102,6 +98,24 @@ export default function DealsPage() {
   const [showArchived, setShowArchived] = useState(searchParams.get('archived') === 'true');
   const [dateFilter, setDateFilter] = useState<string>(searchParams.get('date_filter') || 'all');
   const pageSize = 20;
+
+  // Build return URL from state (not location) so it's always in sync,
+  // even before the useEffect updates the URL search params.
+  const currentUrl = (() => {
+    const params = new URLSearchParams();
+    if (searchTerm) params.set('search', searchTerm);
+    if (selectedStage) params.set('stage', selectedStage);
+    if (healthScoreFilter && healthScoreFilter !== 'all') params.set('health', healthScoreFilter);
+    if (sortBy && sortBy !== 'name') params.set('sort_by', sortBy);
+    if (sortOrder && sortOrder !== 'asc') params.set('sort_order', sortOrder);
+    if (currentPage > 1) params.set('page', currentPage.toString());
+    if (showArchived) params.set('archived', 'true');
+    if (dateFilter && dateFilter !== 'all') params.set('date_filter', dateFilter);
+    if (viewMode && viewMode !== 'table') params.set('view', viewMode);
+    if (selectedListId) params.set('list', selectedListId);
+    const qs = params.toString();
+    return '/deals' + (qs ? '?' + qs : '');
+  })();
 
   // Sync state changes to URL
   useEffect(() => {
@@ -536,7 +550,7 @@ export default function DealsPage() {
 
       {/* Kanban View */}
       {viewMode === 'kanban' ? (
-        <KanbanBoard />
+        <KanbanBoard returnUrl={currentUrl} />
       ) : (
         /* Deals Table */
         <Card>

@@ -231,7 +231,7 @@ function StageColumn({
 }
 
 // ── Main board ──────────────────────────────────────────────────────
-export default function KanbanBoard() {
+export default function KanbanBoard({ returnUrl }: { returnUrl?: string }) {
   const { token } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -390,7 +390,7 @@ export default function KanbanBoard() {
                   <DealCard
                     key={deal.id}
                     deal={deal}
-                    onClick={() => navigate(`/deals/${deal.id}`)}
+                    onClick={() => navigate(`/deals/${deal.id}`, { state: { from: returnUrl || '/deals' } })}
                   />
                 ))
               )}
@@ -424,7 +424,7 @@ export default function KanbanBoard() {
                       <DealCard
                         key={deal.id}
                         deal={deal}
-                        onClick={() => navigate(`/deals/${deal.id}`)}
+                        onClick={() => navigate(`/deals/${deal.id}`, { state: { from: returnUrl || '/deals' } })}
                       />
                     ))
                   )}
