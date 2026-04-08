@@ -211,11 +211,22 @@ router.get('/', async (req, res) => {
 // GET /api/deals/kanban - Get deals grouped by stage for Kanban view with stagnation info
 router.get('/kanban', async (req, res) => {
   try {
-    // Get all active (non-archived) deals
+    // Single query with LEFT JOIN - fetches all deals + last stage change in one go
+    // (Previously this was N+1: one query per deal for stagnation, causing Neon timeouts)
     let sql = `
-      SELECT d.*, u.name as owner_name, u.email as owner_email
+      SELECT d.id, d.name, d.company_name, d.stage, d.estimated_value,
+        d.health_score, d.priority, d.next_step_date, d.created_at,
+        d.owner_id, d.job_title,
+        u.name as owner_name,
+        lsc.last_change as last_stage_change_date
       FROM deals d
       LEFT JOIN users u ON d.owner_id = u.id
+      LEFT JOIN (
+        SELECT deal_id, MAX(created_at) as last_change
+        FROM activities
+        WHERE activity_type = 'stage_changed'
+        GROUP BY deal_id
+      ) lsc ON lsc.deal_id = d.id
       WHERE d.is_archived = 0
     `;
     const params = [];
@@ -230,48 +241,52 @@ router.get('/kanban', async (req, res) => {
 
     const deals = await all(sql, params);
 
-    // For each deal, calculate days since last stage change
-    const dealsWithStagnation = await Promise.all(deals.map(async (deal) => {
-      // Find the last stage_changed activity for this deal
-      const lastStageChange = await get(
-        `SELECT created_at FROM activities
-         WHERE deal_id = ? AND activity_type = 'stage_changed'
-         ORDER BY created_at DESC LIMIT 1`,
-        [deal.id]
-      );
+    // Calculate stagnation in-memory (no extra queries)
+    const stages = ['new_signal', 'qualified', 'discovery', 'solution_design', 'negotiation', 'closed_won', 'closed_lost'];
+    const closedStages = new Set(['closed_won', 'closed_lost']);
+    const CLOSED_LIMIT = 10;
+    const kanbanData = {};
+    const closedCounts = {};
 
-      // If no stage change found, use the deal creation date
-      const lastChangeDate = lastStageChange ? lastStageChange.created_at : deal.created_at;
+    stages.forEach(stage => { kanbanData[stage] = []; });
+
+    for (const deal of deals) {
+      const lastChangeDate = deal.last_stage_change_date || deal.created_at;
       const daysSinceChange = Math.floor(
         (Date.now() - new Date(lastChangeDate).getTime()) / (1000 * 60 * 60 * 24)
       );
 
-      // Determine stagnation status
-      let stagnationStatus = 'normal'; // green/normal
+      let stagnationStatus = 'normal';
       if (daysSinceChange >= 20) {
-        stagnationStatus = 'critical'; // red
+        stagnationStatus = 'critical';
       } else if (daysSinceChange >= 10) {
-        stagnationStatus = 'warning'; // yellow
+        stagnationStatus = 'warning';
       }
 
-      return {
+      const enrichedDeal = {
         ...deal,
         days_in_stage: daysSinceChange,
         stagnation_status: stagnationStatus,
         last_stage_change: lastChangeDate
       };
-    }));
 
-    // Group deals by stage
-    const stages = ['new_signal', 'qualified', 'discovery', 'solution_design', 'negotiation', 'closed_won', 'closed_lost'];
-    const kanbanData = {};
-
-    stages.forEach(stage => {
-      kanbanData[stage] = dealsWithStagnation.filter(d => d.stage === stage);
-    });
+      const stage = deal.stage;
+      if (kanbanData[stage]) {
+        // For closed stages, only keep first CLOSED_LIMIT deals (already sorted by health/date)
+        if (closedStages.has(stage)) {
+          closedCounts[stage] = (closedCounts[stage] || 0) + 1;
+          if (kanbanData[stage].length < CLOSED_LIMIT) {
+            kanbanData[stage].push(enrichedDeal);
+          }
+        } else {
+          kanbanData[stage].push(enrichedDeal);
+        }
+      }
+    }
 
     res.json({
       stages: kanbanData,
+      closedCounts,
       total: deals.length
     });
   } catch (error) {

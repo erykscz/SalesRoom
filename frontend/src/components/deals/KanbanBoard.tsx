@@ -41,6 +41,7 @@ interface Deal {
 
 interface KanbanData {
   stages: Record<string, Deal[]>;
+  closedCounts?: Record<string, number>;
   total: number;
 }
 
@@ -185,15 +186,18 @@ function DealCardContent({ deal }: { deal: Deal }) {
 function StageColumn({
   stage,
   deals,
+  totalCount,
   onColumnClick,
   children,
 }: {
   stage: string;
   deals: Deal[];
+  totalCount?: number;
   onColumnClick: (stage: string) => void;
   children: React.ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
+  const displayCount = totalCount ?? deals.length;
 
   return (
     <div className="flex-shrink-0 w-72">
@@ -211,7 +215,7 @@ function StageColumn({
               </CardTitle>
             </div>
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
-              {deals.length}
+              {displayCount}
             </span>
           </div>
         </CardHeader>
@@ -398,33 +402,43 @@ export default function KanbanBoard() {
         <div className="mt-8">
           <h3 className="text-lg font-semibold mb-4">Closed Deals</h3>
           <div className="flex gap-4">
-            {closedStages.map((stage) => (
-              <StageColumn
-                key={stage}
-                stage={stage}
-                deals={kanbanData.stages[stage] || []}
-                onColumnClick={handleColumnClick}
-              >
-                {(kanbanData.stages[stage]?.length || 0) === 0 ? (
-                  <div className="text-center py-4 text-muted-foreground text-sm">
-                    No deals
-                  </div>
-                ) : (
-                  kanbanData.stages[stage]?.slice(0, 5).map((deal) => (
-                    <DealCard
-                      key={deal.id}
-                      deal={deal}
-                      onClick={() => navigate(`/deals/${deal.id}`)}
-                    />
-                  ))
-                )}
-                {(kanbanData.stages[stage]?.length || 0) > 5 && (
-                  <div className="text-center text-xs text-muted-foreground">
-                    +{(kanbanData.stages[stage]?.length || 0) - 5} more
-                  </div>
-                )}
-              </StageColumn>
-            ))}
+            {closedStages.map((stage) => {
+              const deals = kanbanData.stages[stage] || [];
+              const totalCount = kanbanData.closedCounts?.[stage] ?? deals.length;
+              const shown = deals.slice(0, 5);
+              const remaining = totalCount - shown.length;
+              return (
+                <StageColumn
+                  key={stage}
+                  stage={stage}
+                  deals={deals}
+                  totalCount={totalCount}
+                  onColumnClick={handleColumnClick}
+                >
+                  {shown.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground text-sm">
+                      No deals
+                    </div>
+                  ) : (
+                    shown.map((deal) => (
+                      <DealCard
+                        key={deal.id}
+                        deal={deal}
+                        onClick={() => navigate(`/deals/${deal.id}`)}
+                      />
+                    ))
+                  )}
+                  {remaining > 0 && (
+                    <div
+                      className="text-center text-xs text-muted-foreground cursor-pointer hover:text-foreground"
+                      onClick={() => handleColumnClick(stage)}
+                    >
+                      +{remaining} more
+                    </div>
+                  )}
+                </StageColumn>
+              );
+            })}
           </div>
         </div>
       </div>
