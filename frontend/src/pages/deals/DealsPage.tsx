@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban, Linkedin } from 'lucide-react';
+import { Plus, Search, Building2, Calendar, TrendingUp, MoreVertical, Eye, Pencil, Trash2, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Archive, ArchiveRestore, LayoutList, Kanban, Linkedin, ListPlus, X, MinusCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import KanbanBoard from '@/components/deals/KanbanBoard';
 import CsvMappingDialog from './components/CsvMappingDialog';
@@ -87,6 +87,79 @@ export default function DealsPage() {
   // Deal Lists state
   const [selectedListId, setSelectedListId] = useState<string | null>(searchParams.get('list'));
   const [listRefreshKey, setListRefreshKey] = useState(0);
+  const [dealLists, setDealLists] = useState<Array<{ id: string; name: string }>>([]);
+  const selectedListName = dealLists.find(l => l.id === selectedListId)?.name || null;
+
+  // Bulk selection state
+  const [selectedDealIds, setSelectedDealIds] = useState<Set<string>>(new Set());
+  const [showListDropdown, setShowListDropdown] = useState(false);
+
+  const handleListsLoaded = useCallback((lists: Array<{ id: string; name: string }>) => {
+    setDealLists(lists);
+  }, []);
+
+  // Clear selection when deals change
+  useEffect(() => {
+    setSelectedDealIds(new Set());
+  }, [deals]);
+
+  const toggleDealSelection = (dealId: string) => {
+    setSelectedDealIds(prev => {
+      const next = new Set(prev);
+      if (next.has(dealId)) next.delete(dealId);
+      else next.add(dealId);
+      return next;
+    });
+  };
+
+  const toggleAllDeals = () => {
+    if (selectedDealIds.size === deals.length) {
+      setSelectedDealIds(new Set());
+    } else {
+      setSelectedDealIds(new Set(deals.map(d => d.id)));
+    }
+  };
+
+  const addDealsToList = async (listId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/deal-lists/${listId}/deals`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ dealIds: Array.from(selectedDealIds) }),
+      });
+      if (!response.ok) throw new Error('Failed to add deals to list');
+      const listName = dealLists.find(l => l.id === listId)?.name || 'list';
+      toast({ title: `Added ${selectedDealIds.size} deal(s) to "${listName}"` });
+      setSelectedDealIds(new Set());
+      setShowListDropdown(false);
+      setListRefreshKey(prev => prev + 1);
+      fetchDeals();
+    } catch {
+      toast({ title: 'Failed to add deals to list', variant: 'destructive' });
+    }
+  };
+
+  const removeDealsFromList = async () => {
+    if (!selectedListId) return;
+    try {
+      const ids = Array.from(selectedDealIds);
+      await Promise.all(ids.map(dealId =>
+        fetch(`${API_URL}/deal-lists/${selectedListId}/deals/${dealId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        })
+      ));
+      toast({ title: `Removed ${ids.length} deal(s) from "${selectedListName}"` });
+      setSelectedDealIds(new Set());
+      setListRefreshKey(prev => prev + 1);
+      fetchDeals();
+    } catch {
+      toast({ title: 'Failed to remove deals from list', variant: 'destructive' });
+    }
+  };
 
   // Initialize state from URL params
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
@@ -460,7 +533,7 @@ export default function DealsPage() {
               className="sr-only"
             />
           </label>
-          <Link to="/deals/new">
+          <Link to={selectedListId ? `/deals/new?list=${selectedListId}` : '/deals/new'}>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
               Create Deal
@@ -476,6 +549,7 @@ export default function DealsPage() {
           onSelectList={setSelectedListId}
           token={token}
           refreshKey={listRefreshKey}
+          onListsLoaded={handleListsLoaded}
         />
       )}
 
@@ -587,7 +661,7 @@ export default function DealsPage() {
               ) : (
                 <>
                   <p className="text-muted-foreground mb-4">No deals yet</p>
-                  <Link to="/deals/new">
+                  <Link to={selectedListId ? `/deals/new?list=${selectedListId}` : '/deals/new'}>
                     <Button>
                       <Plus className="w-4 h-4 mr-2" />
                       Create Your First Deal
@@ -602,6 +676,14 @@ export default function DealsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
+                    <th className="py-3 px-2 w-10">
+                      <input
+                        type="checkbox"
+                        checked={deals.length > 0 && selectedDealIds.size === deals.length}
+                        onChange={toggleAllDeals}
+                        className="rounded border-gray-300 cursor-pointer"
+                      />
+                    </th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>
                       <div className="flex items-center">Contact<SortIcon column="name" /></div>
                     </th>
@@ -623,7 +705,15 @@ export default function DealsPage() {
                 </thead>
                 <tbody>
                   {deals.map((deal) => (
-                    <tr key={deal.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                    <tr key={deal.id} className={`border-b border-border hover:bg-muted/50 transition-colors ${selectedDealIds.has(deal.id) ? 'bg-muted/30' : ''}`}>
+                      <td className="py-3 px-2 w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedDealIds.has(deal.id)}
+                          onChange={() => toggleDealSelection(deal.id)}
+                          className="rounded border-gray-300 cursor-pointer"
+                        />
+                      </td>
                       <td className="py-3 px-4 max-w-xs">
                         <div className="truncate">
                           <Link to={`/deals/${deal.id}`} state={{ from: currentUrl }} className="font-medium hover:text-primary truncate block" title={deal.name}>
@@ -721,6 +811,58 @@ export default function DealsPage() {
               </table>
             </div>
 
+            {/* Floating Action Bar for bulk selection */}
+            {selectedDealIds.size > 0 && (
+              <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border border-primary/20 rounded-md mt-4">
+                <span className="text-sm font-medium">{selectedDealIds.size} deal(s) selected</span>
+                <div className="flex-1" />
+                <div className="relative">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowListDropdown(!showListDropdown)}
+                  >
+                    <ListPlus className="w-4 h-4 mr-1.5" />
+                    Add to list...
+                  </Button>
+                  {showListDropdown && (
+                    <div className="absolute top-full right-0 mt-1 w-56 bg-background border rounded-md shadow-lg z-50 py-1">
+                      {dealLists.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">No lists yet</div>
+                      ) : (
+                        dealLists.map(list => (
+                          <button
+                            key={list.id}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
+                            onClick={() => addDealsToList(list.id)}
+                          >
+                            {list.name}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                {selectedListId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={removeDealsFromList}
+                  >
+                    <MinusCircle className="w-4 h-4 mr-1.5" />
+                    Remove from list
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setSelectedDealIds(new Set()); setShowListDropdown(false); }}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+
             {/* Pagination Controls */}
             {pagination && pagination.totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-4 border-t border-border">
@@ -812,6 +954,8 @@ export default function DealsPage() {
           fileName={pendingFileName}
           token={token}
           onImportComplete={handleImportComplete}
+          selectedListId={selectedListId}
+          selectedListName={selectedListName}
         />
       )}
     </div>

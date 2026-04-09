@@ -16,6 +16,8 @@ interface CsvMappingDialogProps {
   fileName: string;
   token: string;
   onImportComplete: (result: { imported: number; listId?: string }) => void;
+  selectedListId?: string | null;
+  selectedListName?: string | null;
 }
 
 interface PreviewData {
@@ -136,6 +138,8 @@ export default function CsvMappingDialog({
   fileName,
   token,
   onImportComplete,
+  selectedListId,
+  selectedListName,
 }: CsvMappingDialogProps) {
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [mappings, setMappings] = useState<Record<string, string>>({});
@@ -143,12 +147,14 @@ export default function CsvMappingDialog({
   const [importing, setImporting] = useState(false);
   const [createList, setCreateList] = useState(false);
   const [listName, setListName] = useState('');
+  const [useSelectedList, setUseSelectedList] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && csvContent) {
       setLoading(true);
       setError(null);
+      setUseSelectedList(!!selectedListId);
       try {
         const data = buildPreview(csvContent);
         setPreview(data);
@@ -185,6 +191,9 @@ export default function CsvMappingDialog({
         }
       }
 
+      // Determine list assignment: active list wins, otherwise fall back to create-new-list toggle
+      const effectiveListId = (selectedListId && useSelectedList) ? selectedListId : undefined;
+
       const response = await fetch(`${API_URL}/deals/import/csv`, {
         method: 'POST',
         headers: {
@@ -194,8 +203,9 @@ export default function CsvMappingDialog({
         body: JSON.stringify({
           csvContent,
           columnMappings,
-          createList,
-          listName: createList ? listName : undefined,
+          listId: effectiveListId,
+          createList: effectiveListId ? false : createList,
+          listName: (!effectiveListId && createList) ? listName : undefined,
         }),
       });
 
@@ -309,26 +319,48 @@ export default function CsvMappingDialog({
               </div>
             )}
 
-            {/* Create List Option */}
+            {/* List Assignment */}
             <div className="space-y-3 border-t pt-4">
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="create-list"
-                  checked={createList}
-                  onCheckedChange={setCreateList}
-                />
-                <Label htmlFor="create-list" className="text-sm">Create a list from this import</Label>
-              </div>
-              {createList && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">List name</Label>
-                  <Input
-                    value={listName}
-                    onChange={(e) => setListName(e.target.value)}
-                    placeholder="Enter list name..."
-                    className="mt-1"
-                  />
-                </div>
+              {selectedListId && selectedListName ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm">
+                      Deals will be added to: <strong>{selectedListName}</strong>
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setUseSelectedList(!useSelectedList)}
+                    >
+                      {useSelectedList ? 'Import without list' : `Add to "${selectedListName}"`}
+                    </Button>
+                  </div>
+                  {!useSelectedList && (
+                    <p className="text-xs text-muted-foreground">Deals will be imported to All Deals only.</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      id="create-list"
+                      checked={createList}
+                      onCheckedChange={setCreateList}
+                    />
+                    <Label htmlFor="create-list" className="text-sm">Create a list from this import</Label>
+                  </div>
+                  {createList && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">List name</Label>
+                      <Input
+                        value={listName}
+                        onChange={(e) => setListName(e.target.value)}
+                        placeholder="Enter list name..."
+                        className="mt-1"
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

@@ -18,6 +18,7 @@ interface DealListManagerProps {
   onSelectList: (listId: string | null) => void;
   token: string;
   refreshKey?: number;
+  onListsLoaded?: (lists: Array<{ id: string; name: string }>) => void;
 }
 
 const COLOR_PRESETS = [
@@ -31,7 +32,7 @@ const COLOR_PRESETS = [
   '#f97316', // orange
 ];
 
-export default function DealListManager({ selectedListId, onSelectList, token, refreshKey }: DealListManagerProps) {
+export default function DealListManager({ selectedListId, onSelectList, token, refreshKey, onListsLoaded }: DealListManagerProps) {
   const { toast } = useToast();
   const [lists, setLists] = useState<DealList[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -52,7 +53,9 @@ export default function DealListManager({ selectedListId, onSelectList, token, r
       });
       if (response.ok) {
         const data = await response.json();
-        setLists(data.lists || []);
+        const fetched = data.lists || [];
+        setLists(fetched);
+        onListsLoaded?.(fetched.map((l: DealList) => ({ id: l.id, name: l.name })));
       }
     } catch (err) {
       console.error('Failed to fetch deal lists:', err);

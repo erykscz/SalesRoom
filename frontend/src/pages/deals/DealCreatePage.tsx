@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,8 +57,26 @@ export default function DealCreatePage() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const listId = searchParams.get('list');
+  const [listName, setListName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch list name if listId is present
+  useEffect(() => {
+    if (listId && token) {
+      fetch(`${API_URL}/deal-lists`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          const list = data?.lists?.find((l: { id: string; name: string }) => l.id === listId);
+          if (list) setListName(list.name);
+        })
+        .catch(() => {});
+    }
+  }, [listId, token]);
   const [form, setForm] = useState<DealForm>({
     name: '',
     job_title: '',
@@ -227,10 +245,27 @@ export default function DealCreatePage() {
       }
 
       const data = await response.json();
+
+      // Add deal to list if listId is present
+      if (listId) {
+        try {
+          await fetch(`${API_URL}/deal-lists/${listId}/deals`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ dealIds: [data.deal.id] }),
+          });
+        } catch {
+          // Non-blocking: deal is created even if list assignment fails
+        }
+      }
+
       setIsSubmitting(true);
       toast({
         title: 'Success',
-        description: 'Deal created successfully',
+        description: listName ? `Deal created and added to "${listName}"` : 'Deal created successfully',
       });
       navigate(`/deals/${data.deal.id}`);
     } catch (err) {
@@ -264,7 +299,7 @@ export default function DealCreatePage() {
 
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link to="/deals">
+        <Link to={listId ? `/deals?list=${listId}` : '/deals'}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
@@ -275,6 +310,13 @@ export default function DealCreatePage() {
           <p className="text-muted-foreground">Add a new deal to your pipeline</p>
         </div>
       </div>
+
+      {/* List assignment banner */}
+      {listId && listName && (
+        <div className="bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 px-4 py-3 rounded-lg text-sm">
+          This deal will be added to list: <strong>{listName}</strong>
+        </div>
+      )}
 
       {/* Form */}
       <Card>
@@ -499,7 +541,7 @@ export default function DealCreatePage() {
 
             {/* Actions */}
             <div className="flex items-center justify-end gap-4">
-              <Link to="/deals">
+              <Link to={listId ? `/deals?list=${listId}` : '/deals'}>
                 <Button type="button" variant="outline">
                   Cancel
                 </Button>
